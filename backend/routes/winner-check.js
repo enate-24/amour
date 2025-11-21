@@ -1,6 +1,6 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
-const { cartelas, games } = require('../data/database-postgres');
+const { cartelas, games } = require('../data/database.js');
 const { checkWinningPatterns, validateCartela } = require('../utils/patternDetection');
 
 const router = express.Router();

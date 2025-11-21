@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { body, validationResult, param } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
-const { users, adminLogs, cartelas } = require('../data/database-postgres');
+const { users, adminLogs, cartelas } = require('../data/database.js');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();

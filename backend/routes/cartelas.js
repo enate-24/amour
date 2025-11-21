@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
-const { users, games, cartelas } = require('../data/database-postgres');
+const { users, games, cartelas } = require('../data/database.js');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
@@ -246,7 +246,7 @@ router.get('/all-cartelas', async (req, res) => {
     console.log('Fetched cartelas from database, total:', activeCartelas.length);
 
     // Get all active games to exclude cartelas that are selected in active games
-    const { games: gamesDb } = require('../data/database-postgres');
+    const { games: gamesDb } = require('../data/database.js');
     const activeGames = await gamesDb.findByStatus('started');
     const activeGamesWithSessions = await gamesDb.findByStatus('active');
 
@@ -430,7 +430,7 @@ router.get('/:id', async (req, res) => {
     // If no called numbers from query, check if cartela has an associated game
     if (gameCalledNumbers.length === 0 && cartela.game_id) {
       try {
-        const { games } = require('../data/database-postgres');
+        const { games } = require('../data/database.js');
         const game = await games.findById(cartela.game_id);
 
         if (game && (game.status === 'started' || game.status === 'active')) {
@@ -625,7 +625,7 @@ router.get('/available', async (req, res) => {
 router.get('/status/active-games', async (req, res) => {
   try {
     // Get all active games
-    const { games: gamesDb } = require('../data/database-postgres');
+    const { games: gamesDb } = require('../data/database.js');
     const activeGames = await gamesDb.findByStatus('started');
     const activeGamesWithSessions = await gamesDb.findByStatus('active');
 
@@ -1055,7 +1055,7 @@ router.post('/:id/register-winner', authenticateToken, [
     // If gameId is provided and winAmount > 0, update game win money
     if (gameId && winAmount > 0) {
       try {
-        const { games } = require('./database-postgres');
+        const { games } = require('../data/database.js');
         const game = await games.findById(gameId);
         if (game) {
           // Update game win money (add to existing win money)
@@ -1076,7 +1076,7 @@ router.post('/:id/register-winner', authenticateToken, [
     // Update user statistics if cartela has a user_id and winAmount > 0
     if (cartela.user_id && winAmount > 0) {
       try {
-        const { users } = require('./database-postgres');
+        const { users } = require('../data/database.js');
         const user = await users.findById(cartela.user_id);
         if (user) {
           const currentWinnings = parseFloat(user.total_winnings) || 0;
