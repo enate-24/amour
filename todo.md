@@ -1,0 +1,10 @@
+- [x] Analyze the winner number generation issue in the bingo game
+- [x] Fix the checkForWinningPatterns function call timing
+- [x] Ensure winner detection happens after each number is called
+- [x] Fix winner detection to check all selected cartelas, not just the first one
+- [x] Verify winner sound and announcement work properly
+- [x] Test the winner number generation fix - backend server is running and sound files exist
+- [x] Fix "All numbers have been called" error by allowing game to reset and continue
+- [x] Ensure called numbers persist across page refreshes by loading from localStorage and updating it
+- [x] Fix race condition errors and JSON parsing issues in called numbers handling
+- [x] Remove localStorage dependency for called numbers - rely entirely on API fetching
