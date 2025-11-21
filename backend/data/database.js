@@ -15,11 +15,19 @@ types.setTypeParser(types.builtins.FLOAT4, parseFloat);
 types.setTypeParser(types.builtins.FLOAT8, parseFloat);
 
 // PostgreSQL connection configuration
-// Use local PostgreSQL for development
-const dbConfig = {
+// Support both DATABASE_URL (Render/production) and individual params (local development)
+const dbConfig = process.env.DATABASE_URL ? {
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  },
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+} : {
   user: process.env.DB_USER || 'postgres',
   host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'bingo_db',
+  database: process.env.DB_NAME || 'amour_bingo',
   password: process.env.DB_PASSWORD || 'postgres',
   port: parseInt(process.env.DB_PORT) || 5432,
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,

@@ -2,6 +2,8 @@
 import { Plus, Trash2, Users, Search, Lock, Ban, CheckCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
 interface User {
   id: string;
   username: string;
@@ -58,7 +60,7 @@ const AdminUserManagement: React.FC = () => {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch('http://localhost:3003/api/admin/users', {
+      const response = await fetch(`${API_BASE_URL}/admin/users`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -140,7 +142,7 @@ const AdminUserManagement: React.FC = () => {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch('http://localhost:3003/api/admin/users', {
+      const response = await fetch(`${API_BASE_URL}/admin/users`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -196,7 +198,7 @@ const AdminUserManagement: React.FC = () => {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`http://localhost:3003/api/admin/users/${userId}?hardDelete=true`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${userId}?hardDelete=true`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -238,7 +240,7 @@ const AdminUserManagement: React.FC = () => {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`http://localhost:3003/api/admin/users/${passwordUserId}/password`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${passwordUserId}/password`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -277,7 +279,7 @@ const AdminUserManagement: React.FC = () => {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`http://localhost:3003/api/admin/users/${userId}/ban`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/ban`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,

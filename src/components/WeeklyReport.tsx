@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Download, TrendingUp, DollarSign, Users, BarChart3, Loader, CalendarDays } from 'lucide-react';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
 interface UserStats {
   id: string;
   username: string;
@@ -46,7 +48,7 @@ const WeeklyReport: React.FC = () => {
           throw new Error('No authentication token found');
         }
 
-        const response = await fetch(`http://localhost:3003/api/admin/weekly-report?period=${period}`, {
+        const response = await fetch(`${API_BASE_URL}/admin/weekly-report?period=${period}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
