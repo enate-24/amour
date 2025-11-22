@@ -232,7 +232,7 @@ router.post('/', [
 
     res.status(201).json(newCartela);
   } catch (error) {
-    console.error('Create cartela error:', error);
+    console.error('Create cartela error:', error.message, error.stack);
     res.status(500).json({ error: 'Failed to create cartela' });
   }
 });
