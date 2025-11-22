@@ -451,14 +451,12 @@ router.put('/:id/call-number', authenticateToken, [
       const numberToCall = numberSequence[nextNumberIndex];
       const updatedCalledNumbers = [...currentCalledNumbers, numberToCall];
 
-      // DON'T UPDATE called_numbers in database - they should only be stored in localStorage
-      // called_numbers in database should remain empty array for user_session games
-      // Only update the timestamp to indicate activity
+      // Update called_numbers in database so winner-check can access them
       await client.query(`
         UPDATE games
-        SET updated_at = $1
-        WHERE id = $2
-      `, [new Date().toISOString(), gameId]);
+        SET called_numbers = $1, updated_at = $2
+        WHERE id = $3
+      `, [JSON.stringify(updatedCalledNumbers), new Date().toISOString(), gameId]);
 
       await client.query('COMMIT');
 
@@ -1477,7 +1475,8 @@ router.post('/session', authenticateToken, [
     console.log('✅ Game session created successfully');
 
     res.status(201).json({
-      gameId: gameNumber,
+      gameId: gameId, // Return UUID instead of game number for API calls
+      gameNumber: gameNumber, // Also return game number for display
       lastGame: {
         _id: gameId,
         gameId: gameNumber,
