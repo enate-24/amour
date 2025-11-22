@@ -565,7 +565,7 @@ router.put('/:id/finish-session', authenticateToken, [
       for (const cartelaId of winnerCartelaIds) {
         await db.run(`
           UPDATE cartelas
-          SET is_winner = true, pattern = $1
+          SET is_winner = 1, pattern = $1
           WHERE id = $2
         `, [gameResult.winner_pattern, cartelaId]);
       }
@@ -697,7 +697,7 @@ router.put('/:id/finish', requireAdmin, [
       for (const cartelaId of winnerCartelaIds) {
         await db.run(`
           UPDATE cartelas
-          SET is_winner = true, pattern = $1
+          SET is_winner = 1, pattern = $1
           WHERE id = $2
         `, [gameResult.winner_pattern, cartelaId]);
       }
@@ -902,7 +902,7 @@ router.get('/analysis', authenticateToken, async (req, res) => {
           (g.bet_money - COALESCE(g.win_money, 0)) as profit,
           0 as houseBonus,
           0 as playersBonus,
-          (SELECT wc.card_id FROM cartelas wc WHERE wc.game_id = g.id AND wc.is_winner = true LIMIT 1) as winnerInfo,
+          (SELECT wc.card_id FROM cartelas wc WHERE wc.game_id = g.id AND wc.is_winner = 1 LIMIT 1) as winnerInfo,
           g.status
         FROM games g
         ORDER BY g.created_at DESC
@@ -927,7 +927,7 @@ router.get('/analysis', authenticateToken, async (req, res) => {
           (g.bet_money - COALESCE(g.win_money, 0)) as profit,
           0 as houseBonus,
           0 as playersBonus,
-          (SELECT wc.card_id FROM cartelas wc WHERE wc.game_id = g.id AND wc.is_winner = true LIMIT 1) as winnerInfo,
+          (SELECT wc.card_id FROM cartelas wc WHERE wc.game_id = g.id AND wc.is_winner = 1 LIMIT 1) as winnerInfo,
           g.status
         FROM games g
         WHERE g.user_id = $1
@@ -959,7 +959,7 @@ router.get('/analysis', authenticateToken, async (req, res) => {
         const winnerCartelasQuery = `
           SELECT card_id 
           FROM cartelas 
-          WHERE game_id = $1 AND is_winner = true
+          WHERE game_id = $1 AND is_winner = 1
         `;
         const winnerCartelas = await db.all(winnerCartelasQuery, [game.gameId]);
         game.winnerCartelaIds = winnerCartelas.map(c => c.card_id);
@@ -1426,7 +1426,7 @@ router.post('/session', authenticateToken, [
       for (const cartelaId of selectedCartelas) {
         // Just validate that the cartela exists - do not create new cartela records
         const existingCartelaQuery = 'SELECT * FROM cartelas WHERE card_id = $1 AND is_active = $2 LIMIT 1';
-        const existingCartela = await db.get(existingCartelaQuery, [cartelaId, true]);
+        const existingCartela = await db.get(existingCartelaQuery, [cartelaId, 1]);
 
         if (!existingCartela) {
           console.warn(`⚠️ Selected cartela ${cartelaId} not found in database`);

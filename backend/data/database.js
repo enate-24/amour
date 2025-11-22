@@ -21,9 +21,15 @@ const dbConfig = process.env.DATABASE_URL ? {
   ssl: {
     rejectUnauthorized: false
   },
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  max: 10, // Reduced pool size for better connection management
+  min: 2, // Minimum connections to keep alive
+  idleTimeoutMillis: 60000, // 60 seconds
+  connectionTimeoutMillis: 30000, // 30 seconds - increased from 2 seconds
+  acquireTimeoutMillis: 60000, // 60 seconds to acquire connection
+  createTimeoutMillis: 30000, // 30 seconds to create connection
+  destroyTimeoutMillis: 5000, // 5 seconds to destroy connection
+  reapIntervalMillis: 1000, // Check for idle connections every second
+  createRetryIntervalMillis: 200, // Retry connection creation every 200ms
 } : {
   user: process.env.DB_USER || 'postgres',
   host: process.env.DB_HOST || 'localhost',
@@ -31,9 +37,15 @@ const dbConfig = process.env.DATABASE_URL ? {
   password: process.env.DB_PASSWORD || 'postgres',
   port: parseInt(process.env.DB_PORT) || 5432,
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-  max: 20, // maximum number of clients in the pool
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  max: 10, // Reduced pool size for better connection management
+  min: 2, // Minimum connections to keep alive
+  idleTimeoutMillis: 60000, // 60 seconds
+  connectionTimeoutMillis: 30000, // 30 seconds - increased from 2 seconds
+  acquireTimeoutMillis: 60000, // 60 seconds to acquire connection
+  createTimeoutMillis: 30000, // 30 seconds to create connection
+  destroyTimeoutMillis: 5000, // 5 seconds to destroy connection
+  reapIntervalMillis: 1000, // Check for idle connections every second
+  createRetryIntervalMillis: 200, // Retry connection creation every 200ms
 };
 
 // Create connection pool
@@ -54,176 +66,227 @@ pool.on('error', (err) => {
   process.exit(-1);
 });
 
-// Promisify database operations for async/await support
-const run = async (sql, params = []) => {
-  const client = await pool.connect();
-  try {
-    const result = await client.query(sql, params);
-    return {
-      id: result.rows[0]?.id,
-      changes: result.rowCount,
-      rows: result.rows
-    };
-  } finally {
-    client.release();
+// Helper function to retry database operations
+const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      console.log(`Database operation attempt ${attempt} failed:`, error.message);
+      
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, delay * attempt));
+    }
   }
+};
+
+// Promisify database operations for async/await support with retry logic
+const run = async (sql, params = []) => {
+  return retryOperation(async () => {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(sql, params);
+      return {
+        id: result.rows[0]?.id,
+        changes: result.rowCount,
+        rows: result.rows
+      };
+    } finally {
+      client.release();
+    }
+  });
 };
 
 const get = async (sql, params = []) => {
-  const client = await pool.connect();
-  try {
-    const result = await client.query(sql, params);
-    return result.rows[0] || null;
-  } finally {
-    client.release();
-  }
+  return retryOperation(async () => {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(sql, params);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  });
 };
 
 const all = async (sql, params = []) => {
-  const client = await pool.connect();
-  try {
-    const result = await client.query(sql, params);
-    return result.rows;
-  } finally {
-    client.release();
-  }
+  return retryOperation(async () => {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(sql, params);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  });
 };
 
-// Initialize database schema
+// Initialize database schema with better error handling
 const createTables = async () => {
-  try {
-    console.log('Initializing database...');
+  const maxRetries = 5;
+  let attempt = 0;
+  
+  while (attempt < maxRetries) {
+    try {
+      attempt++;
+      console.log(`Initializing database... (attempt ${attempt}/${maxRetries})`);
 
-    // Users table
-    await run(`
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        username VARCHAR(255) UNIQUE NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        shopname VARCHAR(255),
-        password TEXT NOT NULL,
-        role VARCHAR(50) NOT NULL DEFAULT 'user',
-        user_type VARCHAR(20) NOT NULL DEFAULT 'prepaid',
-        balance DECIMAL(10,2) DEFAULT 0,
-        balance_limit DECIMAL(10,2),
-        total_games_played INTEGER DEFAULT 0,
-        total_winnings DECIMAL(10,2) DEFAULT 0,
-        is_active BOOLEAN DEFAULT true,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+      // Test connection first
+      await pool.query('SELECT 1');
+      console.log('✅ Database connection established');
 
-    // Games table
-    await run(`
-      CREATE TABLE IF NOT EXISTS games (
-        id TEXT PRIMARY KEY,
-        game_number INTEGER NOT NULL,
-        status VARCHAR(50) NOT NULL,
-        bet_money DECIMAL(10,2) NOT NULL,
-        win_money DECIMAL(10,2) NOT NULL,
-        cartelas_selected INTEGER NOT NULL,
-        selected_cartelas TEXT, -- JSON string for selected cartela IDs
-        called_numbers TEXT, -- JSON string
-        number_sequence TEXT, -- JSON string for number sequence
-        total_numbers INTEGER NOT NULL,
-        winner_pattern TEXT,
-        house_cut_percentage DECIMAL(5,2) DEFAULT 10.0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+      // Users table
+      await run(`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          username VARCHAR(255) UNIQUE NOT NULL,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          shopname VARCHAR(255),
+          password TEXT NOT NULL,
+          role VARCHAR(50) NOT NULL DEFAULT 'user',
+          user_type VARCHAR(20) NOT NULL DEFAULT 'prepaid',
+          balance DECIMAL(10,2) DEFAULT 0,
+          balance_limit DECIMAL(10,2),
+          total_games_played INTEGER DEFAULT 0,
+          total_winnings DECIMAL(10,2) DEFAULT 0,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
 
-    // Add missing columns to existing tables if missing
-    await run(`ALTER TABLE games ADD COLUMN IF NOT EXISTS number_sequence TEXT`);
-    await run(`ALTER TABLE games ADD COLUMN IF NOT EXISTS selected_cartelas TEXT`);
+      // Games table
+      await run(`
+        CREATE TABLE IF NOT EXISTS games (
+          id TEXT PRIMARY KEY,
+          game_number INTEGER NOT NULL,
+          status VARCHAR(50) NOT NULL,
+          bet_money DECIMAL(10,2) NOT NULL,
+          win_money DECIMAL(10,2) NOT NULL,
+          cartelas_selected INTEGER NOT NULL,
+          selected_cartelas TEXT, -- JSON string for selected cartela IDs
+          called_numbers TEXT, -- JSON string
+          number_sequence TEXT, -- JSON string for number sequence
+          total_numbers INTEGER NOT NULL,
+          winner_pattern TEXT,
+          house_cut_percentage DECIMAL(5,2) DEFAULT 10.0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
 
-    // Cartelas table
-    await run(`
-      CREATE TABLE IF NOT EXISTS cartelas (
-        id TEXT PRIMARY KEY,
-        card_id TEXT NOT NULL,
-        game_id TEXT,
-        user_id TEXT,
-        numbers TEXT NOT NULL, -- JSON string
-        pattern TEXT,
-        is_active INTEGER DEFAULT 1,
-        is_winner INTEGER DEFAULT 0,
-        purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (game_id) REFERENCES games (id),
-        FOREIGN KEY (user_id) REFERENCES users (id)
-      )
-    `);
+      // Add missing columns to existing tables if missing
+      try {
+        await run(`ALTER TABLE games ADD COLUMN IF NOT EXISTS number_sequence TEXT`);
+        await run(`ALTER TABLE games ADD COLUMN IF NOT EXISTS selected_cartelas TEXT`);
+      } catch (alterError) {
+        // Ignore errors if columns already exist
+        console.log('Note: Some ALTER TABLE operations may have been skipped (columns might already exist)');
+      }
 
-    // Admin logs table
-    await run(`
-      CREATE TABLE IF NOT EXISTS admin_logs (
-        id TEXT PRIMARY KEY,
-        admin_id TEXT NOT NULL,
-        action VARCHAR(255) NOT NULL,
-        target_type VARCHAR(100) NOT NULL,
-        target_id TEXT NOT NULL,
-        details TEXT, -- JSON string
-        ip_address INET,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (admin_id) REFERENCES users (id)
-      )
-    `);
+      // Cartelas table
+      await run(`
+        CREATE TABLE IF NOT EXISTS cartelas (
+          id TEXT PRIMARY KEY,
+          card_id TEXT NOT NULL,
+          game_id TEXT,
+          user_id TEXT,
+          numbers TEXT NOT NULL, -- JSON string
+          pattern TEXT,
+          is_active INTEGER DEFAULT 1,
+          is_winner INTEGER DEFAULT 0,
+          purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (game_id) REFERENCES games (id),
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+      `);
 
-    // Game analysis table
-    await run(`
-      CREATE TABLE IF NOT EXISTS game_analysis (
-        id TEXT PRIMARY KEY,
-        game_id TEXT NOT NULL,
-        game_number INTEGER NOT NULL,
-        players INTEGER NOT NULL,
-        bet DECIMAL(10,2) NOT NULL,
-        total_bet DECIMAL(10,2) NOT NULL,
-        cut_percentage DECIMAL(5,2) NOT NULL,
-        profit DECIMAL(10,2) NOT NULL,
-        house_bonus DECIMAL(10,2) NOT NULL,
-        winner_info TEXT,
-        status VARCHAR(50) NOT NULL,
-        date TIMESTAMP NOT NULL,
-        user_id TEXT NOT NULL,
-        username VARCHAR(255) NOT NULL,
-        final_win_amount DECIMAL(10,2) NOT NULL,
-        called_numbers TEXT, -- JSON string
-        selected_cartelas TEXT, -- JSON string
-        winner_cartela_ids TEXT DEFAULT '[]', -- JSON array of winner cartela IDs
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+      // Admin logs table
+      await run(`
+        CREATE TABLE IF NOT EXISTS admin_logs (
+          id TEXT PRIMARY KEY,
+          admin_id TEXT NOT NULL,
+          action VARCHAR(255) NOT NULL,
+          target_type VARCHAR(100) NOT NULL,
+          target_id TEXT NOT NULL,
+          details TEXT, -- JSON string
+          ip_address INET,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (admin_id) REFERENCES users (id)
+        )
+      `);
 
-    // Sounds table
-    await run(`
-      CREATE TABLE IF NOT EXISTS sounds (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        file_path TEXT NOT NULL,
-        type VARCHAR(50) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+      // Game analysis table
+      await run(`
+        CREATE TABLE IF NOT EXISTS game_analysis (
+          id TEXT PRIMARY KEY,
+          game_id TEXT NOT NULL,
+          game_number INTEGER NOT NULL,
+          players INTEGER NOT NULL,
+          bet DECIMAL(10,2) NOT NULL,
+          total_bet DECIMAL(10,2) NOT NULL,
+          cut_percentage DECIMAL(5,2) NOT NULL,
+          profit DECIMAL(10,2) NOT NULL,
+          house_bonus DECIMAL(10,2) NOT NULL,
+          winner_info TEXT,
+          status VARCHAR(50) NOT NULL,
+          date TIMESTAMP NOT NULL,
+          user_id TEXT NOT NULL,
+          username VARCHAR(255) NOT NULL,
+          final_win_amount DECIMAL(10,2) NOT NULL,
+          called_numbers TEXT, -- JSON string
+          selected_cartelas TEXT, -- JSON string
+          winner_cartela_ids TEXT DEFAULT '[]', -- JSON array of winner cartela IDs
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
 
-    // User settings table
-    await run(`
-      CREATE TABLE IF NOT EXISTS user_settings (
-        id SERIAL PRIMARY KEY,
-        user_id TEXT NOT NULL UNIQUE,
-        selected_pattern VARCHAR(50) DEFAULT 'Two Lines',
-        bet_amount DECIMAL(10,2) DEFAULT 10.0,
-        house_cut_percentage DECIMAL(5,2) DEFAULT 10.0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-      )
-    `);
+      // Sounds table
+      await run(`
+        CREATE TABLE IF NOT EXISTS sounds (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          file_path TEXT NOT NULL,
+          type VARCHAR(50) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
 
-    console.log('✅ Database schema initialized');
-  } catch (error) {
-    console.error('Database initialization error:', error);
+      // User settings table
+      await run(`
+        CREATE TABLE IF NOT EXISTS user_settings (
+          id SERIAL PRIMARY KEY,
+          user_id TEXT NOT NULL UNIQUE,
+          selected_pattern VARCHAR(50) DEFAULT 'Two Lines',
+          bet_amount DECIMAL(10,2) DEFAULT 10.0,
+          house_cut_percentage DECIMAL(5,2) DEFAULT 10.0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+      `);
+
+      console.log('✅ Database schema initialized successfully');
+      return; // Success, exit the retry loop
+      
+    } catch (error) {
+      console.error(`Database initialization attempt ${attempt} failed:`, error.message);
+      
+      if (attempt >= maxRetries) {
+        console.error('❌ Failed to initialize database after maximum retries');
+        throw error;
+      }
+      
+      // Wait before retrying (exponential backoff)
+      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+      console.log(`Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
   }
 };
 

@@ -5,7 +5,7 @@ import { useAuth } from './hooks/useAuth';
 import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
 import AddCartela from './components/AddCartela';
-import GamePage from './components/GamePage';
+import GamePage from './components/GamePageOptimized';
 import Selectcartela from './components/select-cartela.tsx';
 import CardList from './components/CardList';
 import Settings from './components/Settings';
@@ -18,6 +18,7 @@ import AdminUserManagement from './components/AdminUserManagement';
 import NewAccountPage from './components/NewAccountPage';
 import NewGame from './components/NewGame';
 import GameAnalytics from './components/GameAnalytics';
+import DashboardDebug from './components/DashboardDebug';
 
 function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -46,23 +47,26 @@ function AppContent() {
     }
   }, [user, loading, location.pathname, navigate]);
 
-  // Redirect based on user status on login
+  // Redirect based on user status on initial login only
   useEffect(() => {
     if (user && !loading) {
       const currentPath = location.pathname;
       const userRole = user.role || 'user';
 
-      // Always redirect after login to ensure proper navigation
-      if (userRole === 'admin') {
-        console.log('Redirecting admin to backoffice dashboard');
-        navigate('/backoffice/dashboard', { replace: true });
-      } else {
-        // For regular users, always redirect to game page after login
-        console.log('Redirecting regular user to game page');
-        navigate('/game', { replace: true });
+      // Only redirect if we're on the root path (/) or login path
+      // This prevents automatic redirection on page refresh
+      if (currentPath === '/' || currentPath === '/login') {
+        if (userRole === 'admin') {
+          console.log('Redirecting admin to backoffice dashboard');
+          navigate('/backoffice/dashboard', { replace: true });
+        } else {
+          // For regular users, redirect to dashboard instead of game page
+          console.log('Redirecting regular user to dashboard');
+          navigate('/dashboard', { replace: true });
+        }
       }
     }
-  }, [user, loading]);
+  }, [user, loading, location.pathname, navigate]);
 
   // Show loading spinner while checking authentication
   if (loading) {
@@ -141,6 +145,7 @@ function AppContent() {
         <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'lg:ml-64' : ''}`}>
           <Routes>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/dashboard-debug" element={<DashboardDebug />} />
             <Route path="/game-analytics" element={<GameAnalytics />} />
             <Route path="/add-cartela" element={<AddCartela />} />
             <Route path="/game" element={<GamePage onNavigateToLottery={() => navigate('/newgame')} />} />

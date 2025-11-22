@@ -65,11 +65,11 @@ If `VITE_API_URL` is not set, it defaults to `/api` (relative path).
 ### 1. Get Your Backend URL
 1. Go to https://dashboard.render.com/
 2. Click on your backend web service
-3. Copy the URL (e.g., `https://amour-bingo-backend.onrender.com`)
+3. Copy the URL: `https://amour-bingo-backend.onrender.com`
 
 ### 2. Update .env File
 ```bash
-VITE_API_URL=https://your-backend-url.onrender.com/api
+VITE_API_URL=https://amour-bingo-backend.onrender.com/api
 ```
 
 ### 3. Restart Development Server
@@ -92,9 +92,9 @@ Open browser console and check for API calls. They should now go to your Render 
 
 ### Example API Calls:
 ```
-✅ https://your-backend.onrender.com/api/auth/login
-✅ https://your-backend.onrender.com/api/cartelas
-✅ https://your-backend.onrender.com/api/dashboard
+✅ https://amour-bingo-backend.onrender.com/api/auth/login
+✅ https://amour-bingo-backend.onrender.com/api/cartelas
+✅ https://amour-bingo-backend.onrender.com/api/dashboard
 ```
 
 **Not:**
@@ -130,7 +130,7 @@ FRONTEND_URL=https://your-frontend.netlify.app
 
 ### Frontend (.env):
 ```bash
-VITE_API_URL=https://your-backend.onrender.com/api
+VITE_API_URL=https://amour-bingo-backend.onrender.com/api
 ```
 
 ### Backend (Render Environment Variables):

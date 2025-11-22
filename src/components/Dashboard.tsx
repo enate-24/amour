@@ -39,6 +39,8 @@ const Dashboard: React.FC = () => {
     try {
       console.log('Dashboard: Fetching from:', `${API_BASE_URL}/dashboard`);
       const token = localStorage.getItem('auth_token');
+      console.log('Dashboard: Using token:', token ? 'Token present' : 'No token');
+      
       const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
@@ -48,26 +50,46 @@ const Dashboard: React.FC = () => {
       }
 
       const response = await fetch(`${API_BASE_URL}/dashboard`, {
-        headers
+        headers,
+        method: 'GET'
       });
 
       console.log('Dashboard: Response status:', response.status);
+      console.log('Dashboard: Response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (response.ok) {
         const data = await response.json();
         console.log('Dashboard: Received data:', data);
         setDashboardData(data);
         setError(null);
       } else {
-        const errorText = await response.text();
+        let errorText;
+        try {
+          errorText = await response.text();
+        } catch (e) {
+          errorText = 'Unable to read error response';
+        }
         console.log('Dashboard: Error response:', errorText);
-        setError(`Failed to fetch dashboard data: ${response.status} ${response.statusText} - ${errorText}`);
+        
+        // Handle specific error cases
+        if (response.status === 401) {
+          setError('Authentication required. Please log in again.');
+          // Optionally redirect to login
+          // navigate('/login');
+        } else if (response.status === 403) {
+          setError('Access forbidden. Please check your permissions.');
+        } else if (response.status === 500) {
+          setError(`Server error (500): ${errorText || 'Internal server error. The backend service may be experiencing issues.'}`);
+        } else {
+          setError(`Failed to fetch dashboard data: ${response.status} ${response.statusText} - ${errorText}`);
+        }
         console.error('Failed to fetch dashboard data:', response.status, response.statusText, errorText);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       let errorMessage = 'An unexpected error occurred.';
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        errorMessage = 'Network error: Please check your connection and if the API server is running.';
+        errorMessage = 'Network error: Unable to connect to the backend server. Please check if the server is running.';
       } else if (error instanceof Error) {
         errorMessage = error.message;
       }
@@ -135,8 +157,26 @@ const Dashboard: React.FC = () => {
       {/* Error Message */}
       {error && (
         <div className="bg-red-900 border border-red-600 text-white px-4 py-3 rounded-lg relative mb-6" role="alert">
-          <strong className="font-bold">Error:</strong>
+          <strong className="font-bold">Dashboard Error:</strong>
           <span className="block sm:inline ml-2">{error}</span>
+          <button
+            onClick={() => {
+              setError(null);
+              setLoading(true);
+              fetchDashboardData();
+            }}
+            className="mt-2 bg-red-700 hover:bg-red-600 px-3 py-1 rounded text-sm"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && !error && (
+        <div className="text-center py-8">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+          <p className="mt-2 text-slate-400">Loading dashboard data...</p>
         </div>
       )}
 

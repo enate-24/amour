@@ -96,7 +96,7 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       },
       cartelas: {
         total: allCartelas.length,
-        winners: allCartelas.filter(c => c.is_winner === true).length,
+        winners: allCartelas.filter(c => c.is_winner === 1 || c.is_winner === true).length,
         available: allCartelas.filter(c => !c.user_id && !c.game_id).length,
         assigned: allCartelas.filter(c => c.user_id || c.game_id).length
       }

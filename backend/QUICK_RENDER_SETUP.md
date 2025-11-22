@@ -71,7 +71,7 @@ Wait 2-3 minutes for deployment...
 
 ## Step 5: Test Your Backend
 
-Your backend URL will be: `https://amour-bingo-backend.onrender.com`
+Your backend URL is: `https://amour-bingo-backend.onrender.com`
 
 Test it:
 ```bash
