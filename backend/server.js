@@ -39,8 +39,27 @@ app.use(cors({
       }
     }
 
-    // Production allowed origins
-    const allowedOrigins = [
+    // Get frontend URLs from environment variables
+    const frontendUrls = process.env.FRONTEND_URLS 
+      ? process.env.FRONTEND_URLS.split(',').map(url => url.trim())
+      : [];
+
+    // Support for wildcard patterns (optional)
+    const wildcardPatterns = process.env.FRONTEND_PATTERNS
+      ? process.env.FRONTEND_PATTERNS.split(',').map(pattern => pattern.trim())
+      : [];
+
+    // Check wildcard patterns
+    const matchesPattern = wildcardPatterns.some(pattern => {
+      if (pattern.includes('*')) {
+        const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+        return regex.test(origin);
+      }
+      return false;
+    });
+
+    // Development allowed origins
+    const developmentOrigins = [
       'http://localhost:5173',
       'http://localhost:5174',
       'http://localhost:5175',
@@ -50,14 +69,27 @@ app.use(cors({
       'http://localhost:3000',
       'http://127.0.0.1:3000',
       'http://localhost:3003',
-      'http://127.0.0.1:3003',
+      'http://127.0.0.1:3003'
+    ];
+
+    // Combine all allowed origins
+    const allowedOrigins = [
+      ...developmentOrigins,
+      ...frontendUrls,
+      // Fallback for backward compatibility
       'https://amour-bingo.netlify.app'
     ];
 
-    if (allowedOrigins.includes(origin)) {
+    console.log('🌐 Configured frontend URLs:', frontendUrls);
+    console.log('🔍 Checking origin:', origin);
+
+    if (allowedOrigins.includes(origin) || matchesPattern) {
+      console.log('✅ CORS allowed for origin:', origin);
       return callback(null, true);
     } else {
-      console.log('CORS blocked origin:', origin);
+      console.log('❌ CORS blocked origin:', origin);
+      console.log('📋 Allowed origins:', allowedOrigins);
+      console.log('🔍 Wildcard patterns:', wildcardPatterns);
       return callback(new Error('Not allowed by CORS'), false);
     }
   },
@@ -135,6 +167,21 @@ app.get('/api/health', (req, res) => {
     status: 'OK', 
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
+  });
+});
+
+// CORS debug endpoint
+app.get('/api/cors-test', (req, res) => {
+  const frontendUrls = process.env.FRONTEND_URLS 
+    ? process.env.FRONTEND_URLS.split(',').map(url => url.trim())
+    : [];
+  
+  res.json({
+    message: 'CORS configuration test',
+    configuredUrls: frontendUrls,
+    requestOrigin: req.headers.origin,
+    environment: process.env.NODE_ENV,
+    timestamp: new Date().toISOString()
   });
 });
 
