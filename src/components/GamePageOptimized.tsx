@@ -425,13 +425,15 @@ const GamePageOptimized = (): JSX.Element => {
                 return newCalled;
               });
 
-              // Show popup immediately
+              // Synchronize popup and sound timing
               setPopupNumber(calledNumber);
               setShowPopup(true);
-              setTimeout(() => setShowPopup(false), 1500);
-
-              // Play sound asynchronously (non-blocking)
+              
+              // Play sound immediately with popup
               audioManagerRef.current?.playSound(calledNumber);
+              
+              // Hide popup after consistent duration (2.5 seconds total)
+              setTimeout(() => setShowPopup(false), 2500);
             }
           } else if (response.status === 400 || response.status === 429) {
             setAutoCall(false);
@@ -498,13 +500,15 @@ const GamePageOptimized = (): JSX.Element => {
             return newCalled;
           });
 
-          // Show popup immediately
+          // Synchronize popup and sound timing
           setPopupNumber(calledNumber);
           setShowPopup(true);
-          setTimeout(() => setShowPopup(false), 1500);
-
-          // Play sound asynchronously (non-blocking)
+          
+          // Play sound immediately with popup
           audioManagerRef.current?.playSound(calledNumber);
+          
+          // Hide popup after consistent duration (2.5 seconds total)
+          setTimeout(() => setShowPopup(false), 2500);
         }
       }
     } catch (error) {
@@ -901,6 +905,28 @@ const GamePageOptimized = (): JSX.Element => {
             }
             50% {
               transform: scale(1.1) translateY(-8px);
+            }
+          }
+          
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          
+          @keyframes bounceIn {
+            0% {
+              transform: scale(0.3);
+              opacity: 0;
+            }
+            50% {
+              transform: scale(1.05);
+            }
+            70% {
+              transform: scale(0.9);
+            }
+            100% {
+              transform: scale(1);
+              opacity: 1;
             }
           }
         `}
@@ -1319,6 +1345,42 @@ const GamePageOptimized = (): JSX.Element => {
           {checkingCartela ? "..." : "Check"}
         </button>
       </div>
+
+      {/* Number Popup Animation */}
+      {showPopup && popupNumber && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.8)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+          animation: "fadeIn 0.3s ease-in-out",
+        }}>
+          <div style={{
+            background: "linear-gradient(135deg, #ff6b6b 0%, #ffa500 50%, #ffd700 100%)",
+            borderRadius: "50%",
+            width: "clamp(120px, 25vw, 180px)",
+            height: "clamp(120px, 25vw, 180px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "clamp(36px, 8vw, 64px)",
+            fontWeight: "bold",
+            color: "#fff",
+            border: "6px solid #fff",
+            boxShadow: "0 0 40px rgba(255, 215, 0, 0.8)",
+            animation: "bounceIn 0.8s ease-in-out",
+            textShadow: "2px 2px 4px rgba(0,0,0,0.3)",
+          }}>
+            {popupNumber}
+          </div>
+        </div>
+      )}
 
       {/* Cartela Check Result Modal */}
       {showCartelaCheckModal && cartelaCheckResult && (
