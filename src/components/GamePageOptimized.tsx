@@ -101,20 +101,18 @@ const NumberButton = memo(({
   );
 });
 
-// Optimized audio manager with aggressive preloading and pooling
+// Optimized audio manager using LOCAL sound files (no network lag!)
 class AudioManager {
   private cache = new Map<number, HTMLAudioElement[]>();
   private poolSize = 2; // Multiple instances per sound for overlapping plays
-  private apiBaseUrl: string;
   private preloadedCount = 0;
   private isInitialized = false;
 
-  constructor(apiBaseUrl: string) {
-    this.apiBaseUrl = apiBaseUrl;
+  constructor() {
     this.initializePreload();
   }
 
-  // Aggressively preload all sounds on initialization
+  // Aggressively preload all sounds on initialization from LOCAL files
   private async initializePreload(): Promise<void> {
     if (this.isInitialized) return;
     this.isInitialized = true;
@@ -156,7 +154,8 @@ class AudioManager {
     // Create multiple instances for smooth overlapping
     for (let i = 0; i < this.poolSize; i++) {
       try {
-        const audio = new Audio(`${this.apiBaseUrl}/sound/number/${num}`);
+        // Use LOCAL sound files from public/sounds directory
+        const audio = new Audio(`/sounds/${num}.wav`);
         audio.volume = 0.7;
         audio.preload = 'auto';
         
@@ -392,14 +391,14 @@ const GamePageOptimized = (): JSX.Element => {
   const audioManagerRef = useRef<AudioManager | null>(null);
   const gameFetchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
-  // Initialize audio manager
+  // Initialize audio manager with LOCAL sounds
   useEffect(() => {
-    audioManagerRef.current = new AudioManager(API_BASE_URL);
+    audioManagerRef.current = new AudioManager();
     
     return () => {
       audioManagerRef.current?.cleanup();
     };
-  }, [API_BASE_URL]);
+  }, []);
 
   // Optimized polling - much less frequent and only when needed
   useEffect(() => {
@@ -579,11 +578,11 @@ const GamePageOptimized = (): JSX.Element => {
   }, [isGameFinished, selectedCartelas, isCallingNumber, called, currentGameData, API_BASE_URL]);
 
   const handleShuffle = useCallback(() => {
-    // Play shuffle sound without blocking using idle callback
+    // Play shuffle sound from LOCAL file without blocking
     const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
     schedulePlay(() => {
       try {
-        const shuffleAudio = new Audio(`${API_BASE_URL}/sound/shuffle`);
+        const shuffleAudio = new Audio('/sounds/shuffle-audio-TfqyAnvz.mp3');
         shuffleAudio.volume = 0.7;
         shuffleAudio.play().catch(() => {});
       } catch (error) {
@@ -595,7 +594,7 @@ const GamePageOptimized = (): JSX.Element => {
     setTimeout(() => {
       window.location.reload();
     }, 6000);
-  }, [API_BASE_URL]);
+  }, []);
 
   const handleFinish = useCallback(async () => {
     setIsGameFinished(true);
@@ -718,11 +717,11 @@ const GamePageOptimized = (): JSX.Element => {
         });
         setShowCartelaCheckModal(true);
         
-        // Play notwinner sound without blocking
+        // Play notwinner sound from LOCAL file without blocking
         const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
         schedulePlay(() => {
           try {
-            const audio = new Audio(`${API_BASE_URL}/sound/notwinner`);
+            const audio = new Audio('/sounds/notwinner.wav');
             audio.volume = 0.7;
             audio.play().catch(() => {});
           } catch (error) {
@@ -828,13 +827,13 @@ const GamePageOptimized = (): JSX.Element => {
         setCartelaCheckResult(result);
         setShowCartelaCheckModal(true);
         
-        // Play sound based on result without blocking
+        // Play sound based on result from LOCAL files without blocking
         const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
         schedulePlay(() => {
           try {
             const soundUrl = result.win 
-              ? `${API_BASE_URL}/sound/winner`
-              : `${API_BASE_URL}/sound/notwinner`;
+              ? '/sounds/winner.wav'
+              : '/sounds/notwinner.wav';
             const audio = new Audio(soundUrl);
             audio.volume = 0.7;
             audio.play().catch(() => {});
