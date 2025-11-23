@@ -209,12 +209,11 @@ const NewGame: React.FC = () => {
     }
   };
 
-  // Function to play start game sound
+  // Function to play start game sound from LOCAL file
   const playStartSound = () => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-      const soundUrl = `${API_BASE_URL}/sound/start`;
-      console.log('🔊 Playing start sound from:', soundUrl);
+      const soundUrl = '/sounds/start.wav';
+      console.log('🔊 Playing start sound from LOCAL file:', soundUrl);
       
       const audio = new Audio(soundUrl);
       audio.volume = 0.5;

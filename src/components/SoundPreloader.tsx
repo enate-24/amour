@@ -7,15 +7,14 @@ interface SoundPreloaderProps {
 const SoundPreloader: React.FC<SoundPreloaderProps> = ({ onPreloadComplete }) => {
   useEffect(() => {
     const preloadSounds = async () => {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-      console.log('🔄 Preloading game sounds...');
+      console.log('🔄 Preloading game sounds from LOCAL files...');
       
       const soundPromises: Promise<void>[] = [];
       
-      // Preload number sounds (1-75)
+      // Preload number sounds (1-75) from LOCAL files
       for (let i = 1; i <= 75; i++) {
         const promise = new Promise<void>((resolve) => {
-          const audio = new Audio(`${API_BASE_URL}/sound/number/${i}`);
+          const audio = new Audio(`/sounds/${i}.wav`);
           audio.preload = 'auto';
           
           const onLoad = () => {
@@ -47,11 +46,15 @@ const SoundPreloader: React.FC<SoundPreloaderProps> = ({ onPreloadComplete }) =>
         soundPromises.push(promise);
       }
       
-      // Preload other game sounds
-      const otherSounds = ['start', 'winner', 'notwinner'];
+      // Preload other game sounds from LOCAL files
+      const otherSounds = [
+        { name: 'start', file: 'start.wav' },
+        { name: 'winner', file: 'winner.wav' },
+        { name: 'notwinner', file: 'notwinner.wav' }
+      ];
       for (const sound of otherSounds) {
         const promise = new Promise<void>((resolve) => {
-          const audio = new Audio(`${API_BASE_URL}/sound/${sound}`);
+          const audio = new Audio(`/sounds/${sound.file}`);
           audio.preload = 'auto';
           
           const onLoad = () => {
@@ -63,7 +66,7 @@ const SoundPreloader: React.FC<SoundPreloaderProps> = ({ onPreloadComplete }) =>
           const onError = () => {
             audio.removeEventListener('canplaythrough', onLoad);
             audio.removeEventListener('error', onError);
-            console.log(`⚠️ Failed to preload sound ${sound}`);
+            console.log(`⚠️ Failed to preload sound ${sound.name}`);
             resolve();
           };
           
