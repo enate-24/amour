@@ -1399,7 +1399,7 @@ const GamePageOptimized = (): JSX.Element => {
         }}>
           <div style={{
             background: cartelaCheckResult.win 
-              ? "linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF8C00 100%)"
+              ? "linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #000000 100%)"
               : "linear-gradient(135deg, #3a3a3a 0%, #2d2d2d 100%)",
             borderRadius: 16,
             padding: "20px",
@@ -1407,11 +1407,11 @@ const GamePageOptimized = (): JSX.Element => {
             width: "95%",
             maxHeight: "90vh",
             boxShadow: cartelaCheckResult.win
-              ? "0 0 40px rgba(255, 215, 0, 0.9), 0 8px 30px rgba(0,0,0,0.6)"
+              ? "0 0 40px rgba(30, 58, 138, 0.9), 0 8px 30px rgba(0,0,0,0.6)"
               : "0 0 25px rgba(255, 215, 0, 0.6), 0 8px 30px rgba(0,0,0,0.8)",
             textAlign: "center" as const,
             position: "relative" as const,
-            border: cartelaCheckResult.win ? "3px solid #FFD700" : "2px solid #FFD700"
+            border: cartelaCheckResult.win ? "3px solid #1e40af" : "2px solid #FFD700"
           }}>
             {/* Close Button */}
             <button
@@ -1564,7 +1564,7 @@ const GamePageOptimized = (): JSX.Element => {
                       key={letter}
                       style={{
                         background: cartelaCheckResult.win
-                          ? "linear-gradient(180deg, #FFE55C 0%, #FFD700 100%)"
+                          ? "linear-gradient(180deg, #3b82f6 0%, #1e40af 100%)"
                           : "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)",
                         color: "#000",
                         fontWeight: "bold",
@@ -1657,16 +1657,16 @@ const GamePageOptimized = (): JSX.Element => {
                         if (cartelaCheckResult.win) {
                           // Winner cartela
                           if (isFreeSpace) {
-                            bgColor = "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)"; // Gold for FREE space
-                            textColor = "#000000";
-                            borderColor = "2px solid #FFD700";
-                            boxShadow = "0 2px 6px rgba(255, 215, 0, 0.8)";
+                            bgColor = "linear-gradient(180deg, #3b82f6 0%, #1e40af 100%)"; // Blue for FREE space
+                            textColor = "#FFFFFF";
+                            borderColor = "2px solid #1e40af";
+                            boxShadow = "0 2px 6px rgba(30, 64, 175, 0.8)";
                           } else if (isWinningCell) {
-                            // Part of winning line - Gold
-                            bgColor = "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)";
-                            textColor = "#000000";
-                            borderColor = "2px solid #FFD700";
-                            boxShadow = "0 3px 8px rgba(255, 215, 0, 0.9)";
+                            // Part of winning line - Blue
+                            bgColor = "linear-gradient(180deg, #3b82f6 0%, #1e40af 100%)";
+                            textColor = "#FFFFFF";
+                            borderColor = "2px solid #1e40af";
+                            boxShadow = "0 3px 8px rgba(30, 64, 175, 0.9)";
                           } else if (isCalled) {
                             // Called but not part of winning line - Chocolate
                             bgColor = "linear-gradient(180deg, #8B4513 0%, #654321 100%)";
@@ -1745,11 +1745,11 @@ const GamePageOptimized = (): JSX.Element => {
                       <div style={{
                         width: "14px",
                         height: "14px",
-                        background: "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)",
+                        background: "linear-gradient(180deg, #3b82f6 0%, #1e40af 100%)",
                         borderRadius: "3px",
-                        border: "1px solid #FFD700"
+                        border: "1px solid #1e40af"
                       }}></div>
-                      <span style={{ color: "#FFD700" }}>የአሸናፊ መስመር</span>
+                      <span style={{ color: "#3b82f6" }}>የአሸናፊ መስመር</span>
                     </div>
                   )}
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -1778,10 +1778,10 @@ const GamePageOptimized = (): JSX.Element => {
               <div style={{
                 padding: "30px",
                 marginBottom: "20px",
-                background: "rgba(255, 215, 0, 0.1)",
-                border: "2px solid #FFD700",
+                background: "rgba(30, 64, 175, 0.1)",
+                border: "2px solid #1e40af",
                 borderRadius: "12px",
-                color: "#FFD700",
+                color: "#3b82f6",
                 fontSize: "16px",
                 textAlign: "center" as const
               }}>
