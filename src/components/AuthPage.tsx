@@ -22,15 +22,20 @@ const AuthPage: React.FC = () => {
       const result = await signIn(formData.username, formData.password);
       if (result.error) throw result.error;
 
-      // Show success message - navigation will happen automatically via App.tsx
-      setSuccessMessage('Login successful! Redirecting to game...');
-      console.log('Login successful, navigation will happen automatically', result);
+      // Show success message
+      setSuccessMessage('Login successful! Redirecting...');
+      console.log('Login successful, reloading page', result);
 
       // Clear form on success
       setFormData({
         username: '',
         password: ''
       });
+
+      // Force immediate page reload to ensure fresh state
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 100);
 
     } catch (err) {
       console.error('Authentication error:', err);

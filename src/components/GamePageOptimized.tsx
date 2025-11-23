@@ -172,8 +172,6 @@ const GamePageOptimized = (): JSX.Element => {
   const [isGameFinished, setIsGameFinished] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
   const [popupNumber, setPopupNumber] = useState<number | null>(null);
-  const [showFinishAnimation, setShowFinishAnimation] = useState(false);
-  const [countdown, setCountdown] = useState(20);
   
   // Check for active game on component mount
   useEffect(() => {
@@ -523,18 +521,6 @@ const GamePageOptimized = (): JSX.Element => {
   const handleFinish = useCallback(async () => {
     setIsGameFinished(true);
     setAutoCall(false);
-    setShowFinishAnimation(true);
-    
-    // Play shuffle sound
-    try {
-      const shuffleAudio = new Audio(`${API_BASE_URL}/sound/shuffle`);
-      shuffleAudio.volume = 0.7;
-      shuffleAudio.play().catch(() => {
-        console.log('Could not play shuffle sound');
-      });
-    } catch (error) {
-      console.log('Error playing shuffle sound:', error);
-    }
     
     try {
       const token = localStorage.getItem('auth_token');
@@ -572,23 +558,8 @@ const GamePageOptimized = (): JSX.Element => {
     localStorage.removeItem('currentGame');
     localStorage.removeItem('calledNumbers');
     
-    // Start countdown
-    let timeLeft = 20;
-    setCountdown(timeLeft);
-    
-    const countdownInterval = setInterval(() => {
-      timeLeft -= 1;
-      setCountdown(timeLeft);
-      
-      if (timeLeft <= 0) {
-        clearInterval(countdownInterval);
-      }
-    }, 1000);
-    
-    // Navigate to new game page after 20 seconds
-    setTimeout(() => {
-      navigate('/newgame', { replace: true });
-    }, 20000);
+    // Navigate immediately to new game page
+    navigate('/newgame', { replace: true });
   }, [navigate, currentGameData, playerWin, API_BASE_URL]);
 
   const handleCheckCartela = useCallback(async () => {
@@ -1744,95 +1715,9 @@ const GamePageOptimized = (): JSX.Element => {
         </div>
       )}
 
-      {/* Finish Animation Overlay */}
-      {showFinishAnimation && (
-        <div style={{
-          position: "fixed" as const,
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "rgba(0, 0, 0, 0.95)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 9999,
-          animation: "fadeIn 0.5s ease-in"
-        }}>
-          {/* Shuffle Icon Animation */}
-          <div style={{
-            fontSize: "clamp(80px, 15vw, 120px)",
-            marginBottom: "30px",
-            animation: "shuffle 1s ease-in-out infinite"
-          }}>
-            🔀
-          </div>
-          
-          {/* Text */}
-          <h2 style={{
-            fontSize: "clamp(32px, 6vw, 48px)",
-            fontWeight: "bold",
-            color: "#FFD700",
-            marginBottom: "20px",
-            textShadow: "0 0 20px rgba(255, 215, 0, 0.5)",
-            animation: "pulse 1.5s ease-in-out infinite"
-          }}>
-            Game Finished!
-          </h2>
-          
-          <p style={{
-            fontSize: "clamp(18px, 3vw, 24px)",
-            color: "#FFA500",
-            marginBottom: "40px"
-          }}>
-            Preparing next game...
-          </p>
-          
-          {/* Countdown */}
-          <div style={{
-            fontSize: "clamp(48px, 10vw, 72px)",
-            fontWeight: "bold",
-            color: "#FFFFFF",
-            background: "linear-gradient(135deg, #FFA500, #FFD700)",
-            width: "clamp(100px, 20vw, 150px)",
-            height: "clamp(100px, 20vw, 150px)",
-            borderRadius: "50%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 0 40px rgba(255, 215, 0, 0.6)",
-            animation: "scaleUp 1s ease-in-out infinite"
-          }}>
-            {countdown}
-          </div>
-        </div>
-      )}
 
-      <style>
-        {`
-          @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-          
-          @keyframes shuffle {
-            0%, 100% { transform: rotate(0deg) scale(1); }
-            25% { transform: rotate(-15deg) scale(1.1); }
-            75% { transform: rotate(15deg) scale(1.1); }
-          }
-          
-          @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.8; transform: scale(1.05); }
-          }
-          
-          @keyframes scaleUp {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-          }
-        `}
-      </style>
+
+
     </div>
   );
 };

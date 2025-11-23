@@ -370,12 +370,7 @@ const NewGame: React.FC = () => {
   };
 
   return (
-    <div className="p-4 lg:p-8 relative" style={{
-      marginRight: '100px',
-      marginLeft: '60px',
-      marginTop: '50px',
-      marginBottom: '0px'
-    }}>
+    <div className="p-2 sm:p-4 lg:p-8 relative mx-2 sm:mx-4 md:mx-8 lg:mx-16 xl:mx-24 mt-4 sm:mt-8 lg:mt-12 mb-0">
       {/* Clean Button - Top Right Corner */}
       {selectedCards.length > 0 && (
         <button
@@ -385,31 +380,32 @@ const NewGame: React.FC = () => {
             // Clear from localStorage but keep remember selection active
             localStorage.removeItem('selectedCards');
           }}
-          className="absolute top-2 right-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-4 py-2 rounded-lg font-bold transition-all shadow-lg hover:shadow-xl transform hover:scale-105 text-sm z-10 flex items-center gap-2"
+          className="absolute top-1 right-1 sm:top-2 sm:right-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-2 py-1 sm:px-4 sm:py-2 rounded-lg font-bold transition-all shadow-lg hover:shadow-xl transform hover:scale-105 text-xs sm:text-sm z-10 flex items-center gap-1 sm:gap-2"
           title="Clear all selected cartelas"
         >
-          <span className="text-lg">🗑️</span>
-          <span>Clean ({selectedCards.length})</span>
+          <span className="text-sm sm:text-lg">🗑️</span>
+          <span className="hidden xs:inline">Clean ({selectedCards.length})</span>
+          <span className="xs:hidden">({selectedCards.length})</span>
         </button>
       )}
 
-      <div className="mb-6">
-        <div className="flex flex-wrap items-center gap-4 text-sm mb-4">
+      <div className="mb-4 sm:mb-6">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm mb-3 sm:mb-4">
           <span>Games Played: <span className="text-blue-400 font-bold">{gamesPlayed}</span></span>
           <span>Bonus Played: <span className="text-green-400 font-bold">{bonusPlayed}</span></span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 mb-6">
-          <div className="flex items-center gap-2">
-        <span>Bet Birr:</span>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4 sm:mb-6">
+          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
+        <span className="text-xs sm:text-base">Bet Birr:</span>
         <button
           onClick={() => handleBetChange(false)}
           className="p-1 bg-red-500 hover:bg-red-600 rounded transition-colors"
           aria-label="Decrease Bet"
         >
-          <Minus size={16} />
+          <Minus size={14} className="sm:w-4 sm:h-4" />
         </button>
-        <span className="bg-slate-700 px-4 py-2 rounded font-bold min-w-[60px] text-center">
+        <span className="bg-slate-700 px-2 py-1 sm:px-4 sm:py-2 rounded font-bold min-w-[50px] sm:min-w-[60px] text-center text-sm sm:text-base">
           {betBirr}
         </span>
         <button
@@ -417,27 +413,27 @@ const NewGame: React.FC = () => {
           className="p-1 bg-green-500 hover:bg-green-600 rounded transition-colors"
           aria-label="Increase Bet"
         >
-          <Plus size={16} />
+          <Plus size={14} className="sm:w-4 sm:h-4" />
         </button>
           </div>
 
 
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
             <span>House</span>
             <button
               onClick={() => setHideHouseCut(!hideHouseCut)}
               className="p-1 text-slate-400 hover:text-slate-200 transition-colors"
               title={hideHouseCut ? "Show house cut" : "Hide house cut"}
             >
-              {hideHouseCut ? <EyeOff size={16} /> : <Eye size={16} />}
+              {hideHouseCut ? <EyeOff size={14} className="sm:w-4 sm:h-4" /> : <Eye size={14} className="sm:w-4 sm:h-4" />}
             </button>
             {!hideHouseCut && (
               <div className="relative">
                 <select
                   value={housePercentage}
                   onChange={(e) => setHousePercentage(Number(e.target.value))}
-                  className="appearance-none bg-slate-700 text-white px-3 py-1 pr-6 rounded border border-slate-600 focus:border-blue-400 focus:outline-none cursor-pointer text-sm"
+                  className="appearance-none bg-slate-700 text-white px-2 py-1 pr-5 sm:px-3 sm:pr-6 rounded border border-slate-600 focus:border-blue-400 focus:outline-none cursor-pointer text-xs sm:text-sm"
                 >
                   <option value={10}>10%</option>
                   <option value={15}>15%</option>
@@ -448,7 +444,7 @@ const NewGame: React.FC = () => {
                   <option value={40}>40%</option>
                 </select>
                 <div className="absolute inset-y-0 right-0 flex items-center px-1 pointer-events-none">
-                  <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-2 h-2 sm:w-3 sm:h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
@@ -459,25 +455,27 @@ const NewGame: React.FC = () => {
 
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 mb-6">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
           <button
-        className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-medium transition-colors"
+        className="bg-blue-600 hover:bg-blue-700 px-3 py-2 sm:px-4 sm:py-2.5 md:px-6 md:py-3 rounded-lg font-medium transition-colors text-xs sm:text-sm md:text-base"
         onClick={() => alert(`Selected Cards: ${selectedCards.join(', ')}`)}
           >
-        Cartela Check ↗
+        <span className="hidden sm:inline">Cartela Check ↗</span>
+        <span className="sm:hidden">Check ↗</span>
           </button>
           <button
-        className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-medium transition-colors"
+        className="bg-blue-600 hover:bg-blue-700 px-3 py-2 sm:px-4 sm:py-2.5 md:px-6 md:py-3 rounded-lg font-medium transition-colors text-xs sm:text-sm md:text-base"
         onClick={() => {
           setIsIdModalOpen(true);
           setCurrentIdInput('');
           setRegistrationStatus({type: '', message: ''});
         }}
           >
-        Enter ID (Fast)
+        <span className="hidden sm:inline">Enter ID (Fast)</span>
+        <span className="sm:hidden">Enter ID</span>
           </button>
           <button
-        className="bg-green-600 hover:bg-green-700 px-8 py-3 rounded-lg font-bold transition-colors"
+        className="bg-green-600 hover:bg-green-700 px-4 py-2 sm:px-6 sm:py-2.5 md:px-8 md:py-3 rounded-lg font-bold transition-colors text-xs sm:text-sm md:text-base"
         onClick={handleStartGame}
         disabled={isSavingGame}
           >
@@ -569,10 +567,10 @@ const NewGame: React.FC = () => {
           </div>
         )}
 
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-white font-medium">Selected Cards ({selectedCards.length})</span>
-            <label className={`flex items-center gap-2 px-3 py-1 rounded-lg transition-colors ${
+        <div className="mb-3 sm:mb-4">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="text-white font-medium text-xs sm:text-sm md:text-base">Selected Cards ({selectedCards.length})</span>
+            <label className={`flex items-center gap-1 sm:gap-2 px-2 py-1 sm:px-3 rounded-lg transition-colors ${
               rememberSelection
                 ? 'bg-green-600 text-green-100'
                 : 'bg-slate-700 text-slate-300'
@@ -581,10 +579,11 @@ const NewGame: React.FC = () => {
                 type="checkbox"
                 checked={rememberSelection}
                 onChange={(e) => setRememberSelection(e.target.checked)}
-                className="rounded"
+                className="rounded w-3 h-3 sm:w-4 sm:h-4"
               />
-              <span className="text-sm font-medium">
-                {rememberSelection ? '✅ Remember Active' : 'Remember Selection'}
+              <span className="text-xs sm:text-sm font-medium">
+                <span className="hidden sm:inline">{rememberSelection ? '✅ Remember Active' : 'Remember Selection'}</span>
+                <span className="sm:hidden">{rememberSelection ? '✅ Remember' : 'Remember'}</span>
               </span>
             </label>
           </div>
@@ -618,7 +617,7 @@ const NewGame: React.FC = () => {
       {/* Cartela Grid */}
       {!loading && !error && (
         <>
-          <div className="grid grid-cols-8 sm:grid-cols-12 md:grid-cols-16 lg:grid-cols-20 xl:grid-cols-24 gap-1">
+          <div className="grid grid-cols-6 xs:grid-cols-8 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-16 xl:grid-cols-20 2xl:grid-cols-24 gap-0.5 sm:gap-1">
             {cartelas.sort((a, b) => {
               const aNum = parseInt(a.card_id) || 0;
               const bNum = parseInt(b.card_id) || 0;
@@ -627,14 +626,14 @@ const NewGame: React.FC = () => {
               <button
                 key={`${cartela.card_id}-${index}`}
                 onClick={() => handleCartelaSelect(cartela.card_id)}
-                className={`aspect-square p-0.5 rounded transition-all duration-200 hover:scale-105 ${
+                className={`aspect-square p-0.5 rounded transition-all duration-200 active:scale-95 sm:hover:scale-105 ${
                   selectedCards.includes(cartela.card_id)
                     ? 'bg-blue-600 text-white shadow-lg transform scale-105'
-                    : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+                    : 'bg-slate-700 active:bg-slate-600 sm:hover:bg-slate-600 text-slate-200'
                 }`}
               >
                 <div className="text-center h-full flex items-center justify-center">
-                  <div className="text-[10px] font-bold leading-tight">{cartela.card_id}</div>
+                  <div className="text-[8px] xs:text-[9px] sm:text-[10px] font-bold leading-tight">{cartela.card_id}</div>
                 </div>
               </button>
             ))}
