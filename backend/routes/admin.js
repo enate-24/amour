@@ -2,6 +2,7 @@ const express = require('express');
 const { param, validationResult, body } = require('express-validator');
 const multer = require('multer');
 const path = require('path');
+const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 // Re-export operations for consistency
 const { users, games, cartelas, adminLogs, get, all, run } = require('../db');
@@ -637,11 +638,16 @@ router.delete('/users/:userId', authenticateToken, requireAdmin, async (req, res
     const { userId } = req.params;
     const { hardDelete } = req.query;
 
+    console.log('🔍 Looking for user to delete:', userId);
+    
     // Find user before deletion
     const user = await users.findById(userId);
     if (!user) {
+      console.log('❌ User not found:', userId);
       return res.status(404).json({ error: 'User not found' });
     }
+    
+    console.log('✅ User found:', { id: user.id, username: user.username, role: user.role });
 
     // Prevent admin from deleting themselves
     if (user.id === req.user.id) {
@@ -663,12 +669,10 @@ router.delete('/users/:userId', authenticateToken, requireAdmin, async (req, res
         userCartelas.some(c => c.game_id === g.id)
       );
 
-      // Delete user (CASCADE will delete cartelas and admin_logs)
-      await run('DELETE FROM users WHERE id = $1', [userId]);
-
-      // Log admin action (create log before deletion to avoid cascade issues)
+      // Log admin action BEFORE deletion to avoid foreign key constraint issues
+      console.log('📝 Creating admin log for user deletion:', userId);
       await adminLogs.create({
-        id: require('uuid').v4(),
+        id: uuidv4(),
         adminId: req.user.id,
         action: 'HARD_DELETE_USER',
         targetType: 'USER',
@@ -681,6 +685,12 @@ router.delete('/users/:userId', authenticateToken, requireAdmin, async (req, res
         },
         ipAddress: req.ip || req.connection.remoteAddress
       });
+      console.log('✅ Admin log created successfully');
+
+      // Now delete user (CASCADE will delete cartelas and other related data)
+      console.log('🗑️ Attempting to delete user from database:', userId);
+      const deleteResult = await run('DELETE FROM users WHERE id = $1', [userId]);
+      console.log('✅ User deletion result:', deleteResult);
 
       res.json({ 
         message: 'User and all associated data deleted successfully',
@@ -707,8 +717,26 @@ router.delete('/users/:userId', authenticateToken, requireAdmin, async (req, res
       res.json({ message: 'User deactivated successfully' });
     }
   } catch (error) {
-    console.error('Delete user error:', error);
-    res.status(500).json({ error: 'Failed to delete user' });
+    console.error('❌ Delete user error:', error);
+    console.error('❌ Error details:', {
+      message: error.message,
+      stack: error.stack,
+      userId: req.params.userId,
+      hardDelete: req.query.hardDelete
+    });
+    
+    // Provide more specific error message
+    let errorMessage = 'Failed to delete user';
+    if (error.message.includes('foreign key')) {
+      errorMessage = 'Cannot delete user due to data dependencies';
+    } else if (error.message.includes('not found')) {
+      errorMessage = 'User not found';
+    }
+    
+    res.status(500).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
