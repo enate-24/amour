@@ -928,6 +928,7 @@ router.get('/weekly-report', authenticateToken, requireAdmin, async (req, res) =
         u.created_at,
         COALESCE(SUM(CASE WHEN g.created_at >= $1 AND g.created_at <= $2 AND g.user_id = u.id THEN g.bet_money * g.cartelas_selected ELSE 0 END), 0) as period_total_bet,
         COALESCE(SUM(CASE WHEN g.created_at >= $1 AND g.created_at <= $2 AND g.user_id = u.id THEN g.win_money ELSE 0 END), 0) as period_player_win,
+        COALESCE(SUM(CASE WHEN g.created_at >= $1 AND g.created_at <= $2 AND g.user_id = u.id THEN g.bet_money * g.cartelas_selected * (COALESCE(g.house_cut_percentage, 10.0) / 100.0) ELSE 0 END), 0) as period_house_profit,
         COUNT(DISTINCT CASE WHEN g.created_at >= $1 AND g.created_at <= $2 AND g.user_id = u.id THEN g.id END) as period_games_played,
         COALESCE(SUM(CASE WHEN g.created_at >= $1 AND g.created_at <= $2 AND g.user_id = u.id THEN g.cartelas_selected ELSE 0 END), 0) as period_cartelas_played
       FROM users u
@@ -951,10 +952,8 @@ router.get('/weekly-report', authenticateToken, requireAdmin, async (req, res) =
     const usersData = users.map(user => {
       const totalBet = parseFloat(user.period_total_bet || 0);
       const playerWin = parseFloat(user.period_player_win || 0);
+      const houseProfit = parseFloat(user.period_house_profit || 0);
       const gamesPlayed = parseInt(user.period_games_played || 0);
-      
-      // Calculate house profit (bet - player win)
-      const houseProfit = totalBet - playerWin;
 
       // Count active users (those who played at least one game)
       if (gamesPlayed > 0) {
