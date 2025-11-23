@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 
 interface SidebarProps {
   currentPage: string;
-  onPageChange: (page: 'dashboard' | 'add-cartela' | 'game' | 'select-cartela' | 'card-list' | 'settings' | 'backoffice') => void;
+  onPageChange: (page: 'dashboard' | 'game' | 'select-cartela' | 'card-list' | 'settings' | 'backoffice') => void;
   isOpen: boolean;
   onClose: () => void;
   onToggle: () => void;
@@ -17,9 +17,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange, isOpen, on
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'game', label: 'Play Bingo', icon: Play },
-    //{ id: 'lottery-game', label: 'Lottery Game', icon: Play },
     { id: 'game-analytics', label: 'Game History', icon: BarChart3 },
-    { id: 'add-cartela', label: 'Add Cartela', icon: Plus },
     { id: 'card-list', label: 'Card List', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];

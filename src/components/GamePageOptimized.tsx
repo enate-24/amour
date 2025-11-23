@@ -28,7 +28,7 @@ const NumberGrid = memo(({
     <div style={{
       display: "grid",
       gridTemplateColumns: "repeat(15, 1fr)",
-      gap: "6px",
+      gap: "clamp(3px, 0.8vw, 6px)",
       width: "100%",
       maxWidth: "100%"
     }}>
@@ -73,9 +73,9 @@ const NumberButton = memo(({
       : "linear-gradient(180deg, #8B0000 0%, #600000 100%)",
     color: isCalled ? "#000" : "#fff",
     border: isCalled ? "2px solid #FFD700" : "2px solid #400000",
-    borderRadius: 4,
+    borderRadius: "clamp(2px, 0.5vw, 4px)",
     fontWeight: "bold" as const,
-    fontSize: "clamp(14px, 1.2vw, 18px)",
+    fontSize: "clamp(10px, 2vw, 18px)",
     cursor: "default" as const,
     transition: "all 0.2s ease",
     transform: isCalled ? "scale(1.05)" : "scale(1)",
@@ -85,7 +85,7 @@ const NumberButton = memo(({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "35px"
+    minHeight: "clamp(25px, 4vw, 35px)"
   }), [isCalled, isPopupNumber]);
 
   return (
@@ -172,6 +172,8 @@ const GamePageOptimized = (): JSX.Element => {
   const [isGameFinished, setIsGameFinished] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
   const [popupNumber, setPopupNumber] = useState<number | null>(null);
+  const [showFinishAnimation, setShowFinishAnimation] = useState(false);
+  const [countdown, setCountdown] = useState(20);
   
   // Check for active game on component mount
   useEffect(() => {
@@ -181,6 +183,9 @@ const GamePageOptimized = (): JSX.Element => {
         
         if (!token) {
           console.log('No auth token, redirecting to play bingo page');
+          // Clear called numbers when no auth
+          localStorage.removeItem('calledNumbers');
+          setCalled([]);
           navigate('/newgame', { replace: true });
           return;
         }
@@ -205,11 +210,10 @@ const GamePageOptimized = (): JSX.Element => {
             setBetAmount(parseFloat(result.game.bet_money) || 10);
             setPlayerWin(parseFloat(result.game.win_money) || 0);
             
-            // Load called numbers from backend
-            const backendCalledNumbers = result.game.calledNumbers || [];
-            setCalled(backendCalledNumbers);
-            localStorage.setItem('calledNumbers', JSON.stringify(backendCalledNumbers));
-            console.log(`🔄 Loaded ${backendCalledNumbers.length} called numbers from backend`);
+            // Always clear called numbers on page refresh
+            console.log('🔄 Clearing called numbers on page refresh');
+            localStorage.removeItem('calledNumbers');
+            setCalled([]);
             
             // Update localStorage with backend data
             const gameData = {
@@ -222,6 +226,11 @@ const GamePageOptimized = (): JSX.Element => {
             localStorage.setItem('currentGame', JSON.stringify(gameData));
             
             return;
+          } else {
+            // No active game in backend, clear called numbers
+            console.log('No active game in backend, clearing called numbers');
+            localStorage.removeItem('calledNumbers');
+            setCalled([]);
           }
         }
         
@@ -229,8 +238,10 @@ const GamePageOptimized = (): JSX.Element => {
         const currentGame = localStorage.getItem('currentGame');
         
         if (!currentGame) {
-          // No active game found anywhere, redirect to NewGame
-          console.log('No active game found, redirecting to play bingo page');
+          // No active game found anywhere, clear called numbers and redirect to NewGame
+          console.log('No active game found, clearing called numbers and redirecting to play bingo page');
+          localStorage.removeItem('calledNumbers');
+          setCalled([]);
           navigate('/newgame', { replace: true });
           return;
         }
@@ -238,19 +249,27 @@ const GamePageOptimized = (): JSX.Element => {
         try {
           const gameData = JSON.parse(currentGame);
           if (!gameData.selectedCartelas || gameData.selectedCartelas.length === 0) {
-            // Invalid game data, redirect to NewGame
-            console.log('Invalid game data found, redirecting to play bingo page');
+            // Invalid game data, clear called numbers and redirect to NewGame
+            console.log('Invalid game data found, clearing called numbers and redirecting to play bingo page');
+            localStorage.removeItem('calledNumbers');
+            setCalled([]);
             navigate('/newgame', { replace: true });
             return;
           }
           
           // Valid game found in localStorage, set up the game state
+          // But clear called numbers since we're starting fresh
+          console.log('Starting fresh game, clearing called numbers');
+          localStorage.removeItem('calledNumbers');
+          setCalled([]);
           setSelectedCartelas(gameData.selectedCartelas.length);
           setBetAmount(gameData.betAmount || 10);
           setPlayerWin(gameData.playerWin || 0);
           
         } catch (error) {
           console.error('Error parsing current game data:', error);
+          localStorage.removeItem('calledNumbers');
+          setCalled([]);
           navigate('/newgame', { replace: true });
         }
         
@@ -259,6 +278,8 @@ const GamePageOptimized = (): JSX.Element => {
         // On error, fall back to localStorage check
         const currentGame = localStorage.getItem('currentGame');
         if (!currentGame) {
+          localStorage.removeItem('calledNumbers');
+          setCalled([]);
           navigate('/newgame', { replace: true });
         }
       }
@@ -481,9 +502,39 @@ const GamePageOptimized = (): JSX.Element => {
     }
   }, [isGameFinished, selectedCartelas, isCallingNumber, called, currentGameData, API_BASE_URL]);
 
+  const handleShuffle = useCallback(() => {
+    // Play shuffle sound
+    try {
+      const shuffleAudio = new Audio(`${API_BASE_URL}/sound/shuffle`);
+      shuffleAudio.volume = 0.7;
+      shuffleAudio.play().catch(() => {
+        console.log('Could not play shuffle sound');
+      });
+    } catch (error) {
+      console.log('Error playing shuffle sound:', error);
+    }
+    
+    // Reload page after 10 seconds
+    setTimeout(() => {
+      window.location.reload();
+    }, 6000);
+  }, [API_BASE_URL]);
+
   const handleFinish = useCallback(async () => {
     setIsGameFinished(true);
     setAutoCall(false);
+    setShowFinishAnimation(true);
+    
+    // Play shuffle sound
+    try {
+      const shuffleAudio = new Audio(`${API_BASE_URL}/sound/shuffle`);
+      shuffleAudio.volume = 0.7;
+      shuffleAudio.play().catch(() => {
+        console.log('Could not play shuffle sound');
+      });
+    } catch (error) {
+      console.log('Error playing shuffle sound:', error);
+    }
     
     try {
       const token = localStorage.getItem('auth_token');
@@ -521,10 +572,23 @@ const GamePageOptimized = (): JSX.Element => {
     localStorage.removeItem('currentGame');
     localStorage.removeItem('calledNumbers');
     
-    // Navigate to new game page
+    // Start countdown
+    let timeLeft = 20;
+    setCountdown(timeLeft);
+    
+    const countdownInterval = setInterval(() => {
+      timeLeft -= 1;
+      setCountdown(timeLeft);
+      
+      if (timeLeft <= 0) {
+        clearInterval(countdownInterval);
+      }
+    }, 1000);
+    
+    // Navigate to new game page after 20 seconds
     setTimeout(() => {
       navigate('/newgame', { replace: true });
-    }, 500);
+    }, 20000);
   }, [navigate, currentGameData, playerWin, API_BASE_URL]);
 
   const handleCheckCartela = useCallback(async () => {
@@ -660,35 +724,52 @@ const GamePageOptimized = (): JSX.Element => {
         console.log('✅ Winner check result:', result);
         console.log('📦 Cartela in result:', result.cartela);
         console.log('🔢 Numbers in cartela:', result.cartela?.numbers);
+        console.log('🔢 Numbers type:', typeof result.cartela?.numbers);
+        console.log('🔢 Is array?:', Array.isArray(result.cartela?.numbers));
         
-        // Always fetch cartela data to ensure we have the numbers
-        try {
-          const cartelaResponse = await fetch(`${API_BASE_URL}/cartelas/${inputId.trim()}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
+        // The backend should already include cartela data
+        // If it's missing or malformed, show the result anyway
+        if (!result.cartela || !result.cartela.numbers) {
+          console.warn('⚠️ Cartela data missing or incomplete in response');
+        } else if (result.cartela.numbers) {
+          // Check if numbers is a 2D array, if not, try to parse/convert it
+          if (typeof result.cartela.numbers === 'string') {
+            try {
+              result.cartela.numbers = JSON.parse(result.cartela.numbers);
+              console.log('✅ Parsed numbers from string:', result.cartela.numbers);
+            } catch (e) {
+              console.error('❌ Failed to parse numbers string:', e);
             }
-          });
-          
-          if (cartelaResponse.ok) {
-            const cartelaData = await cartelaResponse.json();
-            console.log('✅ Fetched cartela data:', cartelaData);
-            
-            // Ensure we have the cartela object with numbers
-            result.cartela = {
-              id: cartelaData.id,
-              card_id: cartelaData.cardId || cartelaData.card_id,
-              numbers: cartelaData.numbers,
-              pattern: result.winningPatterns?.join(', ') || null,
-              purchased_at: cartelaData.purchasedAt || cartelaData.purchased_at
-            };
-            
-            console.log('✅ Final cartela object:', result.cartela);
-          } else {
-            console.error('❌ Failed to fetch cartela:', await cartelaResponse.text());
           }
-        } catch (error) {
-          console.error('❌ Error fetching cartela details:', error);
+          
+          // If numbers is an object (like {B: [...], I: [...], N: [...], G: [...], O: [...]}), convert to 2D array
+          if (result.cartela.numbers && typeof result.cartela.numbers === 'object' && !Array.isArray(result.cartela.numbers)) {
+            console.log('🔄 Converting numbers object to 2D array');
+            const numbersObj = result.cartela.numbers as any;
+            
+            // Check if it has BINGO keys
+            if (numbersObj.B && numbersObj.I && numbersObj.N && numbersObj.G && numbersObj.O) {
+              result.cartela.numbers = [
+                numbersObj.B,
+                numbersObj.I,
+                numbersObj.N,
+                numbersObj.G,
+                numbersObj.O
+              ];
+              console.log('✅ Converted to 2D array:', result.cartela.numbers);
+            } else {
+              console.error('❌ Numbers object does not have BINGO keys:', numbersObj);
+            }
+          }
+          
+          // Verify it's a 2D array
+          if (Array.isArray(result.cartela.numbers)) {
+            if (result.cartela.numbers.length > 0 && !Array.isArray(result.cartela.numbers[0])) {
+              console.warn('⚠️ Numbers is not a 2D array, it might be flat');
+            } else {
+              console.log('✅ Numbers is a valid 2D array with', result.cartela.numbers.length, 'columns');
+            }
+          }
         }
         
         setCartelaCheckResult(result);
@@ -769,12 +850,9 @@ const GamePageOptimized = (): JSX.Element => {
       minHeight: "100vh",
       background: "#0F172A",
       color: "#fff",
-
-      marginRight: '100px',
-      marginLeft: '60px',
-      marginTop: '50px',
-      marginBottom: '0px'
-
+      padding: "clamp(10px, 3vw, 50px) clamp(10px, 4vw, 60px)",
+      paddingRight: "clamp(10px, 6vw, 100px)",
+      boxSizing: "border-box"
     }}>
       {/* Last 5 Called Numbers - Golden Balls */}
       {called.length > 0 && (
@@ -782,16 +860,17 @@ const GamePageOptimized = (): JSX.Element => {
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          gap: "clamp(15px, 2.5vw, 25px)",
-          marginBottom: "25px",
-          padding: "15px"
+          gap: "clamp(8px, 2vw, 25px)",
+          marginBottom: "clamp(15px, 3vw, 25px)",
+          padding: "clamp(10px, 2vw, 15px)",
+          flexWrap: "wrap"
         }}>
           {called.slice(-5).reverse().map((num, index) => (
             <div
               key={`${num}-${index}`}
               style={{
-                width: "clamp(60px, 8vw, 90px)",
-                height: "clamp(60px, 8vw, 90px)",
+                width: "clamp(50px, 12vw, 90px)",
+                height: "clamp(50px, 12vw, 90px)",
                 borderRadius: "50%",
                 background: index === 0 
                   ? "radial-gradient(circle at 30% 30%, #FFD700, #FFA500, #FF8C00)"
@@ -801,14 +880,15 @@ const GamePageOptimized = (): JSX.Element => {
                 alignItems: "center",
                 justifyContent: "center",
                 fontWeight: "bold",
-                fontSize: "clamp(24px, 3.5vw, 36px)",
+                fontSize: "clamp(20px, 5vw, 36px)",
                 boxShadow: index === 0 
                   ? "0 8px 20px rgba(255, 215, 0, 0.6), inset 0 -3px 8px rgba(0,0,0,0.3), inset 0 3px 8px rgba(255,255,255,0.4)"
                   : "0 6px 15px rgba(255, 140, 0, 0.4), inset 0 -3px 8px rgba(0,0,0,0.3), inset 0 3px 8px rgba(255,255,255,0.3)",
                 border: index === 0 ? "3px solid #FFD700" : "2px solid #FFA500",
                 animation: index === 0 ? "bounce 1.5s ease-in-out infinite" : "none",
                 position: "relative" as const,
-                transform: index === 0 ? "scale(1.1)" : "scale(1)"
+                transform: index === 0 ? "scale(1.1)" : "scale(1)",
+                flexShrink: 0
               }}
             >
               <div style={{
@@ -839,80 +919,87 @@ const GamePageOptimized = (): JSX.Element => {
         display: "flex",
         flexWrap: "wrap",
         alignItems: "center",
-        gap: "10px",
-        marginBottom: "20px"
+        gap: "clamp(6px, 1.5vw, 10px)",
+        marginBottom: "clamp(15px, 3vw, 20px)"
       }}>
         <div style={{
-          fontSize: "clamp(32px, 6vw, 48px)",
+          fontSize: "clamp(24px, 6vw, 48px)",
           fontWeight: "bold",
           color: "#FFA500",
-          marginRight: "10px"
+          marginRight: "clamp(5px, 1.5vw, 10px)",
+          width: "100%"
         }}>
           GAME <span style={{ color: "#FFD700" }}>{currentGameData?.game_number || "169"}</span>
         </div>
         <div style={{
           background: "#FFD700",
           color: "#000",
-          padding: "8px 16px",
+          padding: "clamp(6px, 1.5vw, 8px) clamp(10px, 2.5vw, 16px)",
           borderRadius: 8,
           fontWeight: "bold",
-          fontSize: "14px"
+          fontSize: "clamp(11px, 2.5vw, 14px)",
+          whiteSpace: "nowrap"
         }}>
           GAME STARTED
         </div>
         <div style={{
           background: "#FFA500",
           color: "#000",
-          padding: "8px 16px",
+          padding: "clamp(6px, 1.5vw, 8px) clamp(10px, 2.5vw, 16px)",
           borderRadius: 8,
           fontWeight: "bold",
-          fontSize: "14px"
+          fontSize: "clamp(11px, 2.5vw, 14px)",
+          whiteSpace: "nowrap"
         }}>
-          BET MONEY {betAmount} BIRR
+          BET {betAmount} BIRR
         </div>
         <div style={{
           background: "#90EE90",
           color: "#000",
-          padding: "8px 16px",
+          padding: "clamp(6px, 1.5vw, 8px) clamp(10px, 2.5vw, 16px)",
           borderRadius: 8,
           fontWeight: "bold",
-          fontSize: "14px"
+          fontSize: "clamp(11px, 2.5vw, 14px)",
+          whiteSpace: "nowrap"
         }}>
-          WIN MONEY {playerWin.toFixed(1)} BIRR
+          WIN {playerWin.toFixed(1)} BIRR
         </div>
         <div style={{
           background: "#FFD700",
           color: "#000",
-          padding: "8px 16px",
+          padding: "clamp(6px, 1.5vw, 8px) clamp(10px, 2.5vw, 16px)",
           borderRadius: 8,
           fontWeight: "bold",
-          fontSize: "14px"
+          fontSize: "clamp(11px, 2.5vw, 14px)",
+          whiteSpace: "nowrap"
         }}>
-          {selectedCartelas} CARTELA SELECTED
+          {selectedCartelas} CARTELA
         </div>
         <div style={{
           background: "#333",
           color: "#FFD700",
-          padding: "8px 16px",
+          padding: "clamp(6px, 1.5vw, 8px) clamp(10px, 2.5vw, 16px)",
           borderRadius: 8,
           fontWeight: "bold",
-          fontSize: "14px"
+          fontSize: "clamp(11px, 2.5vw, 14px)",
+          whiteSpace: "nowrap"
         }}>
-          Called {called.length}/75
+          {called.length}/75
         </div>
       </div>
 
       <div style={{
         display: "flex",
-        gap: "20px",
+        gap: "clamp(8px, 2vw, 20px)",
         flexWrap: "nowrap",
-        width: "100%"
+        width: "100%",
+        maxWidth: "100%"
       }}>
         {/* Left side - BINGO letters */}
         <div style={{
           display: "flex",
           flexDirection: "column",
-          gap: "8px",
+          gap: "clamp(4px, 1vw, 8px)",
           flexShrink: 0
         }}>
           {BINGO_LETTERS.map((letter) => (
@@ -920,13 +1007,13 @@ const GamePageOptimized = (): JSX.Element => {
               background: "linear-gradient(180deg, #FFA500 0%, #FF8C00 100%)",
               color: "#000",
               fontWeight: "bold",
-              borderRadius: 8,
+              borderRadius: "clamp(4px, 1vw, 8px)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              width: "50px",
-              height: "50px",
-              fontSize: "24px",
+              width: "clamp(30px, 6vw, 50px)",
+              height: "clamp(30px, 6vw, 50px)",
+              fontSize: "clamp(14px, 3vw, 24px)",
               boxShadow: "0 2px 4px rgba(0,0,0,0.5)"
             }}>
               {letter}
@@ -937,7 +1024,8 @@ const GamePageOptimized = (): JSX.Element => {
         {/* Center - Numbers grid */}
         <div style={{
           flex: 1,
-          width: "100%"
+          width: "100%",
+          minWidth: 0
         }}>
           <NumberGrid 
             numbers={BINGO_NUMBERS}
@@ -955,17 +1043,17 @@ const GamePageOptimized = (): JSX.Element => {
         display: "flex",
         flexWrap: "wrap",
         alignItems: "center",
-        gap: "10px",
-        marginTop: "20px",
-        marginLeft: "70px"
+        gap: "clamp(6px, 1.5vw, 10px)",
+        marginTop: "clamp(15px, 3vw, 20px)",
+        marginLeft: "clamp(0px, 8vw, 70px)"
       }}>
         {!isGameFinished && (
           <>
             <button
               style={{
                 ...btnStyle,
-                fontSize: "16px",
-                padding: "12px 24px",
+                fontSize: "clamp(12px, 2.5vw, 16px)",
+                padding: "clamp(8px, 2vw, 12px) clamp(12px, 3vw, 24px)",
                 margin: 0,
                 background: selectedCartelas >= 3
                   ? (autoCall
@@ -979,13 +1067,13 @@ const GamePageOptimized = (): JSX.Element => {
               onClick={() => selectedCartelas >= 3 && setAutoCall(a => !a)}
               disabled={selectedCartelas < 3}
             >
-              {autoCall ? "Auto Call On" : "Auto Call Off"}
+              {autoCall ? "Auto On" : "Auto Off"}
             </button>
             <button
               style={{
                 ...btnStyle,
-                fontSize: "16px",
-                padding: "12px 24px",
+                fontSize: "clamp(12px, 2.5vw, 16px)",
+                padding: "clamp(8px, 2vw, 12px) clamp(12px, 3vw, 24px)",
                 margin: 0,
                 background: selectedCartelas >= 3 && !isCallingNumber
                   ? "linear-gradient(180deg, #FFA500 0%, #FF8C00 100%)"
@@ -1002,8 +1090,8 @@ const GamePageOptimized = (): JSX.Element => {
             <button
               style={{
                 ...btnStyle,
-                fontSize: "16px",
-                padding: "12px 24px",
+                fontSize: "clamp(12px, 2.5vw, 16px)",
+                padding: "clamp(8px, 2vw, 12px) clamp(12px, 3vw, 24px)",
                 margin: 0,
                 background: selectedCartelas >= 3
                   ? "linear-gradient(180deg, #FFA500 0%, #FF8C00 100%)"
@@ -1020,15 +1108,18 @@ const GamePageOptimized = (): JSX.Element => {
             <button
               style={{
                 ...btnStyle,
-                fontSize: "16px",
-                padding: "12px 24px",
+                fontSize: "clamp(12px, 2.5vw, 16px)",
+                padding: "clamp(8px, 2vw, 12px) clamp(12px, 3vw, 24px)",
                 margin: 0,
-                background: "linear-gradient(180deg, #FFA500 0%, #FF8C00 100%)",
+                background: "linear-gradient(180deg, #9333EA 0%, #7C3AED 100%)",
                 cursor: "pointer",
                 whiteSpace: "nowrap" as const
               }}
+              onClick={handleShuffle}
+              disabled={selectedCartelas < 3}
+              title="Play shuffle sound"
             >
-              Shuffle
+              🔀 Shuffle
             </button>
           </>
         )}
@@ -1037,65 +1128,161 @@ const GamePageOptimized = (): JSX.Element => {
       {/* Cartela Check Section */}
       <div style={{
         display: "flex",
+        flexWrap: "wrap",
         alignItems: "center",
-        gap: "10px",
-        marginTop: "20px",
-        marginLeft: "70px"
+        gap: "clamp(10px, 2vw, 15px)",
+        marginTop: "clamp(15px, 3vw, 20px)",
+        marginLeft: "clamp(0px, 8vw, 70px)"
       }}>
-        <div style={{
-          fontSize: "24px",
-          marginRight: "10px"
-        }}>
-          ⏱️
-        </div>
+        {/* Auto Call Timer */}
         <div style={{
           display: "flex",
           alignItems: "center",
-          gap: "10px"
+          gap: "clamp(10px, 2vw, 14px)",
+          background: "linear-gradient(135deg, rgba(255, 165, 0, 0.15), rgba(255, 140, 0, 0.08))",
+          padding: "clamp(10px, 2vw, 14px) clamp(14px, 2.5vw, 18px)",
+          borderRadius: "16px",
+          border: "2px solid rgba(255, 165, 0, 0.4)",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)"
         }}>
           <div style={{
-            width: "100px",
-            height: "6px",
-            background: "#333",
-            borderRadius: "3px",
-            position: "relative" as const
+            fontSize: "clamp(22px, 3.5vw, 28px)",
+            filter: "drop-shadow(0 2px 4px rgba(255, 165, 0, 0.3))"
+          }}>
+            ⏱️
+          </div>
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "6px"
           }}>
             <div style={{
-              width: `${((slider - 3) / (7 - 3)) * 100}%`,
-              height: "100%",
-              background: "#FFA500",
-              borderRadius: "3px"
-            }}></div>
-            <input
-              type="range"
-              min={3}
-              max={7}
-              value={slider}
-              onChange={(e) => {
-                const newValue = Number(e.target.value);
-                setSlider(newValue);
-                localStorage.setItem('autoCallTimer', newValue.toString());
-              }}
-              style={{
-                position: "absolute" as const,
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                opacity: 0,
-                cursor: "pointer"
-              }}
-              disabled={selectedCartelas < 3}
-            />
+              fontSize: "clamp(10px, 1.8vw, 12px)",
+              color: "#cbd5e1",
+              fontWeight: "600",
+              textTransform: "uppercase",
+              letterSpacing: "0.8px"
+            }}>
+              Auto Call Speed
+            </div>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "clamp(10px, 2vw, 14px)"
+            }}>
+              <div style={{
+                position: "relative" as const,
+                width: "clamp(100px, 20vw, 140px)",
+                paddingTop: "8px",
+                paddingBottom: "8px"
+              }}>
+                {/* Tick marks */}
+                <div style={{
+                  position: "absolute" as const,
+                  top: "50%",
+                  left: 0,
+                  right: 0,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none" as const
+                }}>
+                  {[3, 4, 5, 6, 7].map((tick) => (
+                    <div
+                      key={tick}
+                      style={{
+                        width: "2px",
+                        height: slider === tick ? "12px" : "8px",
+                        background: slider >= tick 
+                          ? "rgba(255, 215, 0, 0.8)" 
+                          : "rgba(100, 100, 100, 0.5)",
+                        borderRadius: "1px",
+                        transition: "all 0.2s ease"
+                      }}
+                    />
+                  ))}
+                </div>
+                
+                {/* Track background */}
+                <div style={{
+                  height: "10px",
+                  background: "rgba(30, 30, 30, 0.9)",
+                  borderRadius: "5px",
+                  position: "relative" as const,
+                  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)"
+                }}>
+                  {/* Filled track */}
+                  <div style={{
+                    width: `${((slider - 3) / (7 - 3)) * 100}%`,
+                    height: "100%",
+                    background: "linear-gradient(90deg, #FF8C00, #FFA500, #FFD700)",
+                    borderRadius: "5px",
+                    transition: "width 0.3s ease",
+                    boxShadow: "0 0 10px rgba(255, 165, 0, 0.7)"
+                  }} />
+                  
+                  {/* Custom thumb */}
+                  <div style={{
+                    position: "absolute" as const,
+                    top: "50%",
+                    left: `${((slider - 3) / (7 - 3)) * 100}%`,
+                    transform: "translate(-50%, -50%)",
+                    width: "20px",
+                    height: "20px",
+                    background: "radial-gradient(circle at 30% 30%, #FFD700, #FFA500)",
+                    borderRadius: "50%",
+                    border: "3px solid #1e293b",
+                    boxShadow: "0 0 0 2px #FFA500, 0 4px 8px rgba(0, 0, 0, 0.5)",
+                    transition: "left 0.3s ease",
+                    pointerEvents: "none" as const,
+                    zIndex: 2
+                  }} />
+                </div>
+                
+                {/* Invisible input overlay */}
+                <input
+                  type="range"
+                  min={3}
+                  max={7}
+                  step={1}
+                  value={slider}
+                  onChange={(e) => {
+                    const newValue = Number(e.target.value);
+                    setSlider(newValue);
+                    localStorage.setItem('autoCallTimer', newValue.toString());
+                  }}
+                  style={{
+                    position: "absolute" as const,
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    opacity: 0,
+                    cursor: selectedCartelas < 3 ? "not-allowed" : "pointer",
+                    zIndex: 3
+                  }}
+                  disabled={selectedCartelas < 3}
+                />
+              </div>
+              
+              {/* Time display */}
+              <span style={{
+                color: "#FFD700",
+                fontWeight: "bold",
+                fontSize: "clamp(18px, 3.5vw, 24px)",
+                minWidth: "clamp(35px, 7vw, 45px)",
+                textAlign: "center" as const,
+                background: "linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.1))",
+                padding: "clamp(4px, 1vw, 6px) clamp(8px, 1.5vw, 10px)",
+                borderRadius: "8px",
+                border: "2px solid rgba(255, 215, 0, 0.5)",
+                boxShadow: "0 2px 8px rgba(255, 215, 0, 0.3), inset 0 1px 2px rgba(255, 255, 255, 0.2)",
+                textShadow: "0 2px 4px rgba(0, 0, 0, 0.5)"
+              }}>
+                {slider}s
+              </span>
+            </div>
           </div>
-          <span style={{
-            color: "#FFA500",
-            fontWeight: "bold",
-            fontSize: "16px",
-            minWidth: "35px"
-          }}>
-            {slider}s
-          </span>
         </div>
         <input
           type="text"
@@ -1108,23 +1295,24 @@ const GamePageOptimized = (): JSX.Element => {
             }
           }}
           style={{
-            padding: "12px 16px",
-            fontSize: "16px",
+            padding: "clamp(8px, 2vw, 12px) clamp(10px, 2.5vw, 16px)",
+            fontSize: "clamp(12px, 2.5vw, 16px)",
             borderRadius: 8,
             border: "2px solid #FFA500",
             background: "#222",
             color: "#FFA500",
             outline: "none",
-            width: "200px",
-            fontWeight: "bold"
+            width: "clamp(120px, 30vw, 200px)",
+            fontWeight: "bold",
+            boxSizing: "border-box"
           }}
           disabled={checkingCartela}
         />
         <button
           style={{
             ...btnStyle,
-            fontSize: "16px",
-            padding: "12px 24px",
+            fontSize: "clamp(12px, 2.5vw, 16px)",
+            padding: "clamp(8px, 2vw, 12px) clamp(12px, 3vw, 24px)",
             margin: 0,
             background: checkingCartela
               ? "linear-gradient(180deg, #666 0%, #444 100%)"
@@ -1136,7 +1324,7 @@ const GamePageOptimized = (): JSX.Element => {
           onClick={handleCheckCartela}
           disabled={checkingCartela}
         >
-          {checkingCartela ? "Checking..." : "Check"}
+          {checkingCartela ? "..." : "Check"}
         </button>
       </div>
 
@@ -1153,21 +1341,23 @@ const GamePageOptimized = (): JSX.Element => {
           alignItems: "center",
           justifyContent: "center",
           zIndex: 1000,
-          padding: "20px",
-          overflow: "auto"
+          padding: "20px"
         }}>
           <div style={{
-            background: "linear-gradient(135deg, #3a3a3a 0%, #2d2d2d 100%)",
-            borderRadius: 20,
-            padding: "clamp(25px, 4vw, 40px)",
-            maxWidth: "550px",
-            width: "90%",
+            background: cartelaCheckResult.win 
+              ? "linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF8C00 100%)"
+              : "linear-gradient(135deg, #3a3a3a 0%, #2d2d2d 100%)",
+            borderRadius: 16,
+            padding: "20px",
+            maxWidth: "350px",
+            width: "95%",
             maxHeight: "90vh",
-            overflowY: "auto",
-            boxShadow: "0 0 40px rgba(255, 215, 0, 0.6), 0 10px 50px rgba(0,0,0,0.8)",
+            boxShadow: cartelaCheckResult.win
+              ? "0 0 40px rgba(255, 215, 0, 0.9), 0 8px 30px rgba(0,0,0,0.6)"
+              : "0 0 25px rgba(255, 215, 0, 0.6), 0 8px 30px rgba(0,0,0,0.8)",
             textAlign: "center" as const,
             position: "relative" as const,
-            border: "3px solid #FFD700"
+            border: cartelaCheckResult.win ? "3px solid #FFD700" : "2px solid #FFD700"
           }}>
             {/* Close Button */}
             <button
@@ -1177,36 +1367,49 @@ const GamePageOptimized = (): JSX.Element => {
               }}
               style={{
                 position: "absolute" as const,
-                top: "15px",
-                right: "15px",
-                width: "45px",
-                height: "45px",
+                top: "8px",
+                right: "8px",
+                width: "30px",
+                height: "30px",
                 borderRadius: "50%",
                 background: "rgba(100, 100, 100, 0.8)",
-                border: "2px solid #888",
+                border: "1px solid #888",
                 color: "#fff",
-                fontSize: "28px",
+                fontSize: "20px",
                 fontWeight: "bold",
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.5)"
+                boxShadow: "0 2px 6px rgba(0, 0, 0, 0.5)"
               }}
             >
               ×
             </button>
             
-            {/* Cartela ID Title */}
-            <h2 style={{
-              color: "#FFFFFF",
-              fontSize: "clamp(24px, 5vw, 32px)",
-              fontWeight: "bold",
-              marginBottom: "10px",
-              letterSpacing: "1px"
-            }}>
-              {cartelaCheckResult.cartelaId}
-            </h2>
+            {/* Winner Title or Cartela ID */}
+            {cartelaCheckResult.win ? (
+              <h2 style={{
+                color: "#FFFFFF",
+                fontSize: "clamp(20px, 4vw, 28px)",
+                fontWeight: "bold",
+                marginBottom: "10px",
+                letterSpacing: "1px",
+                textShadow: "2px 2px 4px rgba(0,0,0,0.3)"
+              }}>
+                አሸናፊ!
+              </h2>
+            ) : (
+              <h2 style={{
+                color: "#FFFFFF",
+                fontSize: "clamp(14px, 3vw, 18px)",
+                fontWeight: "bold",
+                marginBottom: "6px",
+                letterSpacing: "0.5px"
+              }}>
+                {cartelaCheckResult.cartelaId}
+              </h2>
+            )}
             
             {/* Status Message with Icon */}
             {cartelaCheckResult.cardType === 'notregistered' ? (
@@ -1240,55 +1443,86 @@ const GamePageOptimized = (): JSX.Element => {
                   {cartelaCheckResult.message}
                 </div>
               </div>
-            ) : cartelaCheckResult.win && (
+            ) : cartelaCheckResult.win ? (
               <div style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: "10px",
-                marginBottom: "20px",
-                padding: "12px",
-                background: "rgba(255, 215, 0, 0.15)",
-                borderRadius: "10px"
+                gap: "6px",
+                marginBottom: "10px",
+                padding: "8px",
+                background: "rgba(255, 255, 255, 0.3)",
+                borderRadius: "8px",
+                border: "2px solid rgba(255, 255, 255, 0.5)"
               }}>
-                <span style={{ fontSize: "24px" }}>🎯</span>
+                <span style={{ fontSize: "18px" }}>🎯</span>
                 <span style={{
-                  color: "#FFD700",
-                  fontSize: "clamp(16px, 3vw, 20px)",
+                  color: "#FFFFFF",
+                  fontSize: "clamp(11px, 2.2vw, 14px)",
+                  fontWeight: "bold",
+                  textShadow: "1px 1px 2px rgba(0,0,0,0.3)"
+                }}>
+                  ካርታ {cartelaCheckResult.cartelaId} - የእርስዎ ቁጥሮች
+                </span>
+              </div>
+            ) : (
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                marginBottom: "12px",
+                padding: "8px",
+                background: "rgba(255, 107, 107, 0.2)",
+                borderRadius: "8px",
+                border: "2px solid #FF6B6B"
+              }}>
+                <span style={{ fontSize: "20px" }}>❌</span>
+                <span style={{
+                  color: "#FF6B6B",
+                  fontSize: "clamp(12px, 2.5vw, 16px)",
                   fontWeight: "bold"
                 }}>
-                  ካርታ 4 - የእርስዎ ቁጥሮች
+                  እስካሁን አላሸነፈም
                 </span>
               </div>
             )}
 
             {/* Display Cartela - Only show if registered and available */}
-            {cartelaCheckResult.cardType !== 'notregistered' && cartelaCheckResult.cartela && cartelaCheckResult.cartela.numbers ? (
+            {cartelaCheckResult.cardType !== 'notregistered' && cartelaCheckResult.cartela && cartelaCheckResult.cartela.numbers && Array.isArray(cartelaCheckResult.cartela.numbers) ? (
               <div style={{
-                marginBottom: "20px"
+                marginBottom: "15px",
+                padding: cartelaCheckResult.win ? "12px" : "0",
+                background: cartelaCheckResult.win ? "rgba(255, 255, 255, 0.25)" : "transparent",
+                borderRadius: cartelaCheckResult.win ? "10px" : "0",
+                border: cartelaCheckResult.win ? "2px solid rgba(255, 255, 255, 0.4)" : "none"
               }}>
                 {/* BINGO Letters */}
                 <div style={{
                   display: "grid",
                   gridTemplateColumns: "repeat(5, 1fr)",
-                  gap: "8px",
-                  maxWidth: "450px",
-                  margin: "0 auto 12px auto"
+                  gap: "6px",
+                  maxWidth: "300px",
+                  margin: "0 auto 10px auto"
                 }}>
                   {["B", "I", "N", "G", "O"].map((letter) => (
                     <div
                       key={letter}
                       style={{
-                        background: "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)",
+                        background: cartelaCheckResult.win
+                          ? "linear-gradient(180deg, #FFE55C 0%, #FFD700 100%)"
+                          : "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)",
                         color: "#000",
                         fontWeight: "bold",
-                        fontSize: "clamp(20px, 4vw, 28px)",
-                        padding: "10px",
-                        borderRadius: "10px",
+                        fontSize: "clamp(14px, 3vw, 18px)",
+                        padding: "8px",
+                        borderRadius: "8px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        boxShadow: "0 4px 8px rgba(0,0,0,0.3)"
+                        boxShadow: cartelaCheckResult.win
+                          ? "0 3px 8px rgba(0,0,0,0.5)"
+                          : "0 2px 6px rgba(0,0,0,0.4)"
                       }}
                     >
                       {letter}
@@ -1300,26 +1534,114 @@ const GamePageOptimized = (): JSX.Element => {
                 <div style={{
                   display: "grid",
                   gridTemplateColumns: "repeat(5, 1fr)",
-                  gap: "8px",
-                  maxWidth: "450px",
+                  gap: "6px",
+                  maxWidth: "300px",
                   margin: "0 auto"
                 }}>
-                  {cartelaCheckResult.cartela.numbers.map((column: any[], colIndex: number) => (
-                    <div key={colIndex} style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                      {column.map((num: number | null, rowIndex: number) => {
+                  {(() => {
+                    // Convert cartela numbers to proper format
+                    const numbers = cartelaCheckResult.cartela.numbers;
+                    let columns: number[][] = [];
+                    
+                    // Check if numbers is already a 2D array
+                    if (Array.isArray(numbers) && numbers.length === 5 && Array.isArray(numbers[0])) {
+                      columns = numbers;
+                    } 
+                    // Check if numbers is an object with B, I, N, G, O keys
+                    else if (numbers && typeof numbers === 'object' && 'B' in numbers) {
+                      columns = [
+                        numbers.B || [],
+                        numbers.I || [],
+                        numbers.N || [],
+                        numbers.G || [],
+                        numbers.O || []
+                      ];
+                    }
+                    
+                    return columns.map((column: any[], colIndex: number) => (
+                      <div key={colIndex} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        {column.map((num: number | null, rowIndex: number) => {
                         const isFreeSpace = colIndex === 2 && rowIndex === 2;
                         const isCalled = num !== null && called.includes(num);
+                        
+                        // Check if this cell is part of a winning line
+                        const completedLines = cartelaCheckResult.cartela?.completedLines || [];
+                        const isWinningCell = (() => {
+                          // Define line patterns
+                          const linePatterns: Record<string, [number, number][]> = {
+                            "Top Row": [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]],
+                            "Second Row": [[1, 0], [1, 1], [1, 2], [1, 3], [1, 4]],
+                            "Third Row": [[2, 0], [2, 1], [2, 2], [2, 3], [2, 4]],
+                            "Fourth Row": [[3, 0], [3, 1], [3, 2], [3, 3], [3, 4]],
+                            "Bottom Row": [[4, 0], [4, 1], [4, 2], [4, 3], [4, 4]],
+                            "Left Column": [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]],
+                            "Second Column": [[0, 1], [1, 1], [2, 1], [3, 1], [4, 1]],
+                            "Middle Column": [[0, 2], [1, 2], [2, 2], [3, 2], [4, 2]],
+                            "Fourth Column": [[0, 3], [1, 3], [2, 3], [3, 3], [4, 3]],
+                            "Right Column": [[0, 4], [1, 4], [2, 4], [3, 4], [4, 4]],
+                            "Main Diagonal": [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]],
+                            "Anti Diagonal": [[0, 4], [1, 3], [2, 2], [3, 1], [4, 0]],
+                            "Four Corners": [[0, 0], [0, 4], [4, 0], [4, 4]]
+                          };
+                          
+                          // Check if current cell is in any completed line
+                          for (const lineName of completedLines) {
+                            const positions = linePatterns[lineName];
+                            if (positions && positions.some(([r, c]) => r === rowIndex && c === colIndex)) {
+                              return true;
+                            }
+                          }
+                          return false;
+                        })();
                         
                         // Determine background color based on state
                         let bgColor = "#4a4a4a"; // Dark gray for uncalled
                         let textColor = "#FFFFFF"; // White text
+                        let borderColor = "none";
+                        let boxShadow = "0 1px 3px rgba(0,0,0,0.4)";
                         
-                        if (isFreeSpace) {
-                          bgColor = "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)"; // Gold for FREE
-                          textColor = "#000000";
-                        } else if (isCalled) {
-                          bgColor = "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)"; // Gold for called numbers
-                          textColor = "#000000";
+                        if (cartelaCheckResult.win) {
+                          // Winner cartela
+                          if (isFreeSpace) {
+                            bgColor = "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)"; // Gold for FREE space
+                            textColor = "#000000";
+                            borderColor = "2px solid #FFD700";
+                            boxShadow = "0 2px 6px rgba(255, 215, 0, 0.8)";
+                          } else if (isWinningCell) {
+                            // Part of winning line - Gold
+                            bgColor = "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)";
+                            textColor = "#000000";
+                            borderColor = "2px solid #FFD700";
+                            boxShadow = "0 3px 8px rgba(255, 215, 0, 0.9)";
+                          } else if (isCalled) {
+                            // Called but not part of winning line - Chocolate
+                            bgColor = "linear-gradient(180deg, #8B4513 0%, #654321 100%)";
+                            textColor = "#FFFFFF";
+                            borderColor = "1px solid #654321";
+                            boxShadow = "0 2px 4px rgba(139, 69, 19, 0.6)";
+                          } else {
+                            // Not called - Dark gray
+                            bgColor = "#4a4a4a";
+                            textColor = "#FFFFFF";
+                          }
+                        } else {
+                          // Non-winner cartela
+                          if (isFreeSpace) {
+                            bgColor = "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)";
+                            textColor = "#000000";
+                            borderColor = "1px solid #FFD700";
+                            boxShadow = "0 2px 6px rgba(255, 215, 0, 0.6)";
+                          } else if (isCalled) {
+                            // Called numbers - Chocolate
+                            bgColor = "linear-gradient(180deg, #8B4513 0%, #654321 100%)";
+                            textColor = "#FFFFFF";
+                            borderColor = "1px solid #654321";
+                            boxShadow = "0 2px 4px rgba(139, 69, 19, 0.6)";
+                          } else {
+                            // Not called - Dark gray
+                            bgColor = "#4a4a4a";
+                            textColor = "#FFFFFF";
+                          }
                         }
                         
                         return (
@@ -1329,17 +1651,17 @@ const GamePageOptimized = (): JSX.Element => {
                               background: bgColor,
                               color: textColor,
                               fontWeight: "bold",
-                              fontSize: "clamp(16px, 3.5vw, 22px)",
-                              padding: "clamp(10px, 2vw, 14px)",
-                              borderRadius: "10px",
+                              fontSize: isFreeSpace ? "clamp(8px, 1.5vw, 10px)" : "clamp(12px, 2.5vw, 16px)",
+                              padding: "clamp(6px, 1.5vw, 10px)",
+                              borderRadius: "6px",
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
-                              minHeight: "clamp(50px, 9vw, 65px)",
+                              minHeight: "clamp(35px, 6vw, 45px)",
                               aspectRatio: "1",
-                              boxShadow: isCalled || isFreeSpace ? "0 4px 12px rgba(255, 215, 0, 0.6)" : "0 2px 6px rgba(0,0,0,0.4)",
+                              boxShadow: boxShadow,
                               transition: "all 0.3s ease",
-                              border: isCalled || isFreeSpace ? "2px solid #FFD700" : "none"
+                              border: borderColor
                             }}
                           >
                             {isFreeSpace ? "FREE" : num || ""}
@@ -1347,33 +1669,52 @@ const GamePageOptimized = (): JSX.Element => {
                         );
                       })}
                     </div>
-                  ))}
+                    ));
+                  })()}
                 </div>
                 
                 {/* Legend */}
                 <div style={{
                   display: "flex",
-                  justifyContent: "center",
-                  gap: "20px",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "8px",
                   marginTop: "15px",
-                  fontSize: "clamp(12px, 2.5vw, 14px)",
+                  padding: "10px",
+                  background: "rgba(0, 0, 0, 0.3)",
+                  borderRadius: "8px",
+                  fontSize: "clamp(9px, 2vw, 11px)",
                   fontWeight: "bold"
                 }}>
+                  {cartelaCheckResult.win && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <div style={{
+                        width: "14px",
+                        height: "14px",
+                        background: "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)",
+                        borderRadius: "3px",
+                        border: "1px solid #FFD700"
+                      }}></div>
+                      <span style={{ color: "#FFD700" }}>የአሸናፊ መስመር</span>
+                    </div>
+                  )}
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <div style={{
-                      width: "20px",
-                      height: "20px",
-                      background: "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)",
-                      borderRadius: "4px"
+                      width: "14px",
+                      height: "14px",
+                      background: "linear-gradient(180deg, #8B4513 0%, #654321 100%)",
+                      borderRadius: "3px",
+                      border: "1px solid #654321"
                     }}></div>
-                    <span style={{ color: "#FFD700" }}>የተጠራ ቁጥሮች</span>
+                    <span style={{ color: "#D2691E" }}>የተጠራ ቁጥሮች</span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <div style={{
-                      width: "20px",
-                      height: "20px",
+                      width: "14px",
+                      height: "14px",
                       background: "#4a4a4a",
-                      borderRadius: "4px"
+                      borderRadius: "3px",
+                      border: "1px solid #666"
                     }}></div>
                     <span style={{ color: "#AAA" }}>ያልተጠራ ቁጥሮች</span>
                   </div>
@@ -1402,6 +1743,96 @@ const GamePageOptimized = (): JSX.Element => {
           </div>
         </div>
       )}
+
+      {/* Finish Animation Overlay */}
+      {showFinishAnimation && (
+        <div style={{
+          position: "fixed" as const,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0, 0, 0, 0.95)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          animation: "fadeIn 0.5s ease-in"
+        }}>
+          {/* Shuffle Icon Animation */}
+          <div style={{
+            fontSize: "clamp(80px, 15vw, 120px)",
+            marginBottom: "30px",
+            animation: "shuffle 1s ease-in-out infinite"
+          }}>
+            🔀
+          </div>
+          
+          {/* Text */}
+          <h2 style={{
+            fontSize: "clamp(32px, 6vw, 48px)",
+            fontWeight: "bold",
+            color: "#FFD700",
+            marginBottom: "20px",
+            textShadow: "0 0 20px rgba(255, 215, 0, 0.5)",
+            animation: "pulse 1.5s ease-in-out infinite"
+          }}>
+            Game Finished!
+          </h2>
+          
+          <p style={{
+            fontSize: "clamp(18px, 3vw, 24px)",
+            color: "#FFA500",
+            marginBottom: "40px"
+          }}>
+            Preparing next game...
+          </p>
+          
+          {/* Countdown */}
+          <div style={{
+            fontSize: "clamp(48px, 10vw, 72px)",
+            fontWeight: "bold",
+            color: "#FFFFFF",
+            background: "linear-gradient(135deg, #FFA500, #FFD700)",
+            width: "clamp(100px, 20vw, 150px)",
+            height: "clamp(100px, 20vw, 150px)",
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 0 40px rgba(255, 215, 0, 0.6)",
+            animation: "scaleUp 1s ease-in-out infinite"
+          }}>
+            {countdown}
+          </div>
+        </div>
+      )}
+
+      <style>
+        {`
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          
+          @keyframes shuffle {
+            0%, 100% { transform: rotate(0deg) scale(1); }
+            25% { transform: rotate(-15deg) scale(1.1); }
+            75% { transform: rotate(15deg) scale(1.1); }
+          }
+          
+          @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.05); }
+          }
+          
+          @keyframes scaleUp {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+          }
+        `}
+      </style>
     </div>
   );
 };

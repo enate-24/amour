@@ -128,20 +128,9 @@ router.get('/active', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'No active game found' });
     }
 
-    // For user_session games, only reset called_numbers if the game was just created (no numbers called yet)
-    // This prevents resetting called numbers during active gameplay
-    if (activeGame.winner_pattern === 'user_session') {
-      const currentCalledNumbers = Array.isArray(activeGame.called_numbers) ? activeGame.called_numbers : [];
-      if (currentCalledNumbers.length === 0) {
-        console.log(`[GET /active] User session game ${activeGame.id} has no called numbers yet - keeping empty`);
-      } else {
-        console.log(`[GET /active] User session game ${activeGame.id} has ${currentCalledNumbers.length} called numbers - preserving them`);
-      }
-      // Don't reset called_numbers for active user_session games
-    }
-
-    // Parse called_numbers from database using safe JSON parsing
-    const calledNumbers = safeJSONParseArray(activeGame.called_numbers, []);
+    // Called numbers are NOT stored in database - they are managed in localStorage only
+    // Always return empty array for calledNumbers from backend
+    const calledNumbers = [];
 
     // Parse selected_cartelas from database using safe JSON parsing
     const selectedCartelas = safeJSONParseArray(activeGame.selected_cartelas, []);
@@ -149,7 +138,7 @@ router.get('/active', authenticateToken, async (req, res) => {
     const game = {
       ...activeGame,
       gameNumber: activeGame.game_number,
-      calledNumbers: calledNumbers,
+      calledNumbers: calledNumbers, // Always empty - managed in localStorage
       selectedCartelas: selectedCartelas, // Include the selected cartela IDs
       cartelasSelected: activeGame.cartelas_selected,
       betMoney: parseFloat(activeGame.bet_money) || 0,
@@ -160,7 +149,7 @@ router.get('/active', authenticateToken, async (req, res) => {
       updatedAt: activeGame.updated_at
     };
 
-    console.log(`[GET /active] Loaded game ${game.id} for user ${req.user?.id || 'unknown'}. Called numbers count: ${calledNumbers.length}. Sequence exists: ${!!activeGame.number_sequence}`);
+    console.log(`[GET /active] Loaded game ${game.id} for user ${req.user?.id || 'unknown'}. Sequence exists: ${!!activeGame.number_sequence}`);
     console.log(`[GET /active] selectedCartelas:`, selectedCartelas);
 
     res.json({ game });
@@ -402,10 +391,8 @@ router.put('/:id/call-number', authenticateToken, [
         console.log('✅ User session game ownership validated for number calling');
       }
 
-      // Get current called numbers from database using safe JSON parsing
-      const currentCalledNumbers = safeJSONParseArray(game.called_numbers, []);
-
-      console.log(`📊 Database calledNumbers: ${currentCalledNumbers.length}, Client calledNumbers: ${clientCalledNumbers.length}`);
+      // Called numbers are managed in localStorage only, not in database
+      console.log(`📊 Client calledNumbers: ${clientCalledNumbers.length}`);
 
       // Get the number sequence (shuffled deck of 75 numbers)
       let numberSequence;
@@ -429,14 +416,12 @@ router.put('/:id/call-number', authenticateToken, [
         return res.status(500).json({ error: 'Game sequence not found.' });
       }
 
-      // Get the current valid called numbers count (limit to sequence length)
-      // For user_session games, use client data since database doesn't store called numbers
-      const validCalledCount = game.winner_pattern === 'user_session'
-        ? Math.min(clientCalledNumbers.length, numberSequence.length)
-        : Math.min(currentCalledNumbers.length, numberSequence.length);
+      // Use client-provided called numbers (from localStorage) to determine next number
+      // Called numbers are NOT stored in database
+      const validCalledCount = Math.min(clientCalledNumbers.length, numberSequence.length);
       const nextNumberIndex = validCalledCount;
 
-      console.log(`🎲 Next number index: ${nextNumberIndex}, sequence length: ${numberSequence.length}, valid called: ${validCalledCount}`);
+      console.log(`🎲 Next number index: ${nextNumberIndex}, sequence length: ${numberSequence.length}, client called: ${clientCalledNumbers.length}`);
 
       // Check if all numbers have been called (prevent calling beyond 75)
       if (nextNumberIndex >= numberSequence.length) {
@@ -449,14 +434,15 @@ router.put('/:id/call-number', authenticateToken, [
       }
 
       const numberToCall = numberSequence[nextNumberIndex];
-      const updatedCalledNumbers = [...currentCalledNumbers, numberToCall];
+      const updatedCalledNumbers = [...clientCalledNumbers, numberToCall];
 
-      // Update called_numbers in database so winner-check can access them
+      // Note: Called numbers are NOT saved to database - they are managed in localStorage only
+      // Just update the timestamp
       await client.query(`
         UPDATE games
-        SET called_numbers = $1, updated_at = $2
-        WHERE id = $3
-      `, [JSON.stringify(updatedCalledNumbers), new Date().toISOString(), gameId]);
+        SET updated_at = $1
+        WHERE id = $2
+      `, [new Date().toISOString(), gameId]);
 
       await client.query('COMMIT');
 
@@ -477,7 +463,6 @@ router.put('/:id/call-number', authenticateToken, [
           updatedAt: new Date().toISOString()
         },
         debug: {
-          serverCalledNumbersLength: currentCalledNumbers.length,
           clientCalledNumbersLength: clientCalledNumbers.length,
           nextNumberIndex: nextNumberIndex,
           numberToCall: numberToCall,

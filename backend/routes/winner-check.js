@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
 const { cartelas, games } = require('../data/database.js');
-const { checkWinningPatterns, validateCartela } = require('../utils/patternDetection');
+const { checkWinningPatterns, validateCartela, convertCartelaToGrid, countCompletedLines } = require('../utils/patternDetection');
 
 const router = express.Router();
 
@@ -100,24 +100,14 @@ router.post('/', [
       });
     }
 
-    // Get called numbers from game or use client-provided numbers as fallback
+    // Get called numbers from client only (not stored in database)
     let calledNumbers = [];
-    try {
-      if (Array.isArray(game.called_numbers)) {
-        calledNumbers = game.called_numbers;
-      } else if (typeof game.called_numbers === 'string') {
-        const parsed = JSON.parse(game.called_numbers || '[]');
-        calledNumbers = Array.isArray(parsed) ? parsed : [];
-      }
-    } catch (parseError) {
-      console.warn(`Error parsing called numbers for game ${game.id}:`, parseError);
-      calledNumbers = [];
-    }
-
-    // If database has no called numbers, use client-provided numbers as fallback
-    if (calledNumbers.length === 0 && clientCalledNumbers && Array.isArray(clientCalledNumbers) && clientCalledNumbers.length > 0) {
+    if (clientCalledNumbers && Array.isArray(clientCalledNumbers) && clientCalledNumbers.length > 0) {
       console.log(`📱 Using client-provided called numbers (${clientCalledNumbers.length} numbers)`);
       calledNumbers = clientCalledNumbers;
+    } else {
+      console.log(`⚠️ No called numbers provided by client`);
+      calledNumbers = [];
     }
 
     // Allow checking even with no called numbers - just show the cartela
@@ -148,6 +138,11 @@ router.post('/', [
       console.log(`🏆 Winning patterns: ${winningPatterns.join(', ')}`);
     }
 
+    // Get completed lines for highlighting in UI
+    const grid = convertCartelaToGrid(formattedCartela);
+    const { completedLines } = countCompletedLines(grid, calledNumbers);
+    console.log(`📊 Completed lines: ${completedLines.join(', ')}`);
+
     // Prepare response - always include cartela details
     const response = {
       success: true,
@@ -165,6 +160,7 @@ router.post('/', [
         id: cartela.id,
         card_id: cartela.card_id,
         numbers: cartelaNumbers,
+        completedLines: completedLines, // Add completed lines for UI highlighting
         pattern: isWinner ? winningPatterns.join(', ') : null,
         purchased_at: cartela.purchased_at
       }

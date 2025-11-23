@@ -8,10 +8,18 @@ const NewGame: React.FC = () => {
   const navigate = useNavigate();
   const [gamesPlayed, setGamesPlayed] = useState(19);
   const [bonusPlayed, setBonusPlayed] = useState(0);
-  const [betBirr, setBetBirr] = useState(10);
+  const [betBirr, setBetBirr] = useState(() => {
+    // Load saved bet amount from localStorage, default to 10
+    const savedBetAmount = localStorage.getItem('betAmount');
+    return savedBetAmount ? parseInt(savedBetAmount, 10) : 10;
+  });
   const [winBirr, setWinBirr] = useState(0.00);
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
-  const [rememberSelection, setRememberSelection] = useState(false);
+  const [rememberSelection, setRememberSelection] = useState(() => {
+    // Check if there's a saved preference, otherwise default to true
+    const savedRememberSelection = localStorage.getItem('rememberSelection');
+    return savedRememberSelection !== null ? savedRememberSelection === 'true' : true;
+  });
   const [housePercentage, setHousePercentage] = useState(25);
   const [showHouseOptions, setShowHouseOptions] = useState(false);
   const [hideHouseCut, setHideHouseCut] = useState(true);
@@ -23,8 +31,8 @@ const NewGame: React.FC = () => {
     const savedHousePercentage = localStorage.getItem('housePercentage');
     const savedHideHouseCut = localStorage.getItem('hideHouseCut');
 
-    if (savedRememberSelection === 'true') {
-      setRememberSelection(true);
+    // If remember selection is true (or default), load saved cards
+    if (savedRememberSelection !== 'false') {
       if (savedSelectedCards) {
         try {
           setSelectedCards(JSON.parse(savedSelectedCards));
@@ -73,6 +81,11 @@ const NewGame: React.FC = () => {
   React.useEffect(() => {
     localStorage.setItem('hideHouseCut', hideHouseCut.toString());
   }, [hideHouseCut]);
+
+  // Save bet amount to localStorage whenever it changes
+  React.useEffect(() => {
+    localStorage.setItem('betAmount', betBirr.toString());
+  }, [betBirr]);
   const [isIdModalOpen, setIsIdModalOpen] = useState(false);
   const [currentIdInput, setCurrentIdInput] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -369,14 +382,14 @@ const NewGame: React.FC = () => {
           onClick={() => {
             setSelectedCards([]);
             setRegisteredCount(0);
-            // Clear from localStorage
+            // Clear from localStorage but keep remember selection active
             localStorage.removeItem('selectedCards');
-            localStorage.setItem('rememberSelection', 'false');
           }}
-          className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg font-medium transition-colors text-sm z-10"
+          className="absolute top-2 right-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-4 py-2 rounded-lg font-bold transition-all shadow-lg hover:shadow-xl transform hover:scale-105 text-sm z-10 flex items-center gap-2"
           title="Clear all selected cartelas"
         >
-          🗑️ Clean ({selectedCards.length})
+          <span className="text-lg">🗑️</span>
+          <span>Clean ({selectedCards.length})</span>
         </button>
       )}
 

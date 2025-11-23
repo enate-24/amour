@@ -22,14 +22,9 @@ const AuthPage: React.FC = () => {
       const result = await signIn(formData.username, formData.password);
       if (result.error) throw result.error;
 
-      // Show success message and reload the page
-      setSuccessMessage('Login successful! Reloading page...');
-      console.log('Login successful, showing message and reloading page', result);
-
-      // Reload the page after showing message
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      // Show success message - navigation will happen automatically via App.tsx
+      setSuccessMessage('Login successful! Redirecting to game...');
+      console.log('Login successful, navigation will happen automatically', result);
 
       // Clear form on success
       setFormData({
@@ -40,7 +35,6 @@ const AuthPage: React.FC = () => {
     } catch (err) {
       console.error('Authentication error:', err);
       setError(err instanceof Error ? err.message : 'Authentication failed');
-    } finally {
       setLoading(false);
     }
   };
@@ -53,77 +47,101 @@ const AuthPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-900 to-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-yellow-400/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-400/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
+      </div>
+
+      <div className="w-full max-w-md relative z-10">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-yellow-400 rounded-full mb-4">
-            <GamepadIcon size={32} className="text-black" />
+        <div className="text-center mb-8 animate-fade-in">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-2xl mb-4 shadow-2xl shadow-yellow-500/50 transform hover:scale-105 transition-transform">
+            <GamepadIcon size={40} className="text-slate-900" />
           </div>
-          <h1 className="text-4xl font-bold text-yellow-400 mb-2">AMOUR BINGO</h1>
-          <p className="text-slate-400">Bingo Game Management System</p>
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 bg-clip-text text-transparent mb-2">
+            AMOUR BINGO
+          </h1>
+          <p className="text-slate-300 text-lg">Welcome back!</p>
         </div>
 
         {/* Auth Form */}
-        <div className="bg-slate-800 p-8 rounded-lg border border-slate-700 shadow-xl">
-          <div className="text-center mb-6">
-            <LogIn size={24} className="inline mr-2 text-yellow-400" />
-            <h2 className="text-xl font-semibold text-white inline">Login</h2>
+        <div className="bg-slate-800/80 backdrop-blur-xl p-8 rounded-2xl border border-slate-700/50 shadow-2xl">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl mb-3">
+              <LogIn size={24} className="text-white" />
+            </div>
+            <h2 className="text-2xl font-bold text-white">Sign In</h2>
+            <p className="text-slate-400 text-sm mt-1">Enter your credentials to continue</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <input
-              type="text"
-              name="username"
-              placeholder="Username or Email"
-              value={formData.username}
-              onChange={handleInputChange}
-              required
-              className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
-            />
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-300 block">Username or Email</label>
+              <input
+                type="text"
+                name="username"
+                placeholder="Enter your username or email"
+                value={formData.username}
+                onChange={handleInputChange}
+                required
+                className="w-full p-3.5 bg-slate-900/50 border border-slate-600 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all text-white placeholder-slate-500"
+              />
+            </div>
 
-            <input
-              type="password"
-              name="password"
-              placeholder="Password"
-              value={formData.password}
-              onChange={handleInputChange}
-              required
-              className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
-            />
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-300 block">Password</label>
+              <input
+                type="password"
+                name="password"
+                placeholder="Enter your password"
+                value={formData.password}
+                onChange={handleInputChange}
+                required
+                className="w-full p-3.5 bg-slate-900/50 border border-slate-600 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all text-white placeholder-slate-500"
+              />
+            </div>
 
             {error && (
-              <div className="p-3 bg-red-600/20 border border-red-600 rounded-lg text-red-400 text-sm">
-                {error}
+              <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-xl text-red-400 text-sm flex items-start gap-2 animate-shake">
+                <span className="text-red-500 font-bold">✕</span>
+                <span>{error}</span>
               </div>
             )}
 
             {successMessage && (
-              <div className="p-3 bg-green-600/20 border border-green-600 rounded-lg text-green-400 text-sm">
-                {successMessage}
+              <div className="p-4 bg-green-500/10 border border-green-500/50 rounded-xl text-green-400 text-sm flex items-start gap-2">
+                <span className="text-green-500 font-bold">✓</span>
+                <span>{successMessage}</span>
               </div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 rounded-lg font-medium transition-colors"
+              className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-slate-600 disabled:to-slate-600 rounded-xl font-semibold text-white transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-500/25 disabled:shadow-none"
             >
-              {loading ? 'Processing...' : 'Login'}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Processing...
+                </span>
+              ) : (
+                'Sign In'
+              )}
             </button>
           </form>
+        </div>
 
-          {/* Login Info */}
-          <div className="mt-6 p-4 bg-slate-700/50 rounded-lg border border-slate-600">
-            <p className="text-slate-300 text-sm font-medium mb-2">Login Information:</p>
-            <div className="space-y-1 text-xs text-slate-400">
-              <div><strong>Regular Users:</strong> Login with username</div>
-              <div><strong>Admin:</strong> Login with email (amouradmin@gmail.com)</div>
-            </div>
-            <p className="text-xs text-slate-500 mt-2">
-              Regular users use their username, admins use their email address.
-            </p>
-          </div>
+        {/* Footer */}
+        <div className="text-center mt-6">
+          <p className="text-slate-500 text-sm">
+            Bingo Game Management System
+          </p>
         </div>
       </div>
     </div>
