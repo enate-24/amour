@@ -18,9 +18,16 @@ const AuthPage: React.FC = () => {
     setLoading(true);
     setError('');
 
+    console.log('Login attempt with:', formData.username);
+
     try {
       const result = await signIn(formData.username, formData.password);
-      if (result.error) throw result.error;
+      console.log('Login result:', result);
+      
+      if (result.error) {
+        console.error('Login error from signIn:', result.error);
+        throw new Error(result.error.message);
+      }
 
       // Show success message
       setSuccessMessage('Login successful! Redirecting...');

@@ -101,46 +101,72 @@ const NumberButton = memo(({
   );
 });
 
-// Optimized audio manager
+// Optimized audio manager with preloading
 class AudioManager {
   private cache = new Map<number, HTMLAudioElement>();
-  private maxCacheSize = 15; // Reduced cache size
+  private preloadQueue: number[] = [];
+  private isPreloading = false;
   private apiBaseUrl: string;
 
   constructor(apiBaseUrl: string) {
     this.apiBaseUrl = apiBaseUrl;
   }
 
-  async playSound(number: number): Promise<void> {
-    try {
-      let audio = this.cache.get(number);
-      
-      if (!audio) {
-        audio = new Audio(`${this.apiBaseUrl}/sound/number/${number}`);
-        audio.volume = 0.7;
-        audio.preload = 'none';
-        
-        // Manage cache size
-        if (this.cache.size >= this.maxCacheSize) {
-          const firstKey = this.cache.keys().next().value as number | undefined;
-          if (firstKey !== undefined) {
-            const oldAudio = this.cache.get(firstKey);
-            if (oldAudio) {
-              oldAudio.pause();
-              oldAudio.src = '';
-            }
-            this.cache.delete(firstKey);
-          }
-        }
-        
-        this.cache.set(number, audio);
-      }
+  // Preload next few numbers in background
+  private async preloadNext(currentNumber: number): Promise<void> {
+    if (this.isPreloading) return;
+    this.isPreloading = true;
 
-      audio.currentTime = 0;
-      audio.play().catch(() => {}); // Silent fail
-    } catch (error) {
-      // Silent fail for better performance
+    // Preload next 5 numbers
+    const numbersToPreload = Array.from({ length: 5 }, (_, i) => currentNumber + i + 1)
+      .filter(n => n <= 75 && !this.cache.has(n));
+
+    for (const num of numbersToPreload) {
+      if (this.cache.size >= 20) break; // Max cache size
+      
+      try {
+        const audio = new Audio(`${this.apiBaseUrl}/sound/number/${num}`);
+        audio.volume = 0.7;
+        audio.preload = 'auto';
+        this.cache.set(num, audio);
+        
+        // Small delay between preloads to avoid blocking
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } catch (error) {
+        // Ignore preload errors
+      }
     }
+
+    this.isPreloading = false;
+  }
+
+  playSound(number: number): void {
+    // Non-blocking sound play
+    requestAnimationFrame(() => {
+      try {
+        let audio = this.cache.get(number);
+        
+        if (!audio) {
+          // Create immediately if not cached
+          audio = new Audio(`${this.apiBaseUrl}/sound/number/${number}`);
+          audio.volume = 0.7;
+          this.cache.set(number, audio);
+        }
+
+        // Reset and play without waiting
+        audio.currentTime = 0;
+        const playPromise = audio.play();
+        
+        if (playPromise) {
+          playPromise.catch(() => {}); // Silent fail
+        }
+
+        // Preload next numbers in background
+        this.preloadNext(number);
+      } catch (error) {
+        // Silent fail for better performance
+      }
+    });
   }
 
   cleanup(): void {
@@ -409,19 +435,20 @@ const GamePageOptimized = (): JSX.Element => {
 
             const calledNumber = result.calledNumber;
             if (calledNumber) {
+              // Update state first (non-blocking)
               setCalled(prev => {
                 const newCalled = [...prev, calledNumber];
                 localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
                 return newCalled;
               });
 
-              // Play sound
-              audioManagerRef.current?.playSound(calledNumber);
-
-              // Show popup briefly
+              // Show popup immediately
               setPopupNumber(calledNumber);
               setShowPopup(true);
-              setTimeout(() => setShowPopup(false), 1500); // Reduced from 2000ms
+              setTimeout(() => setShowPopup(false), 1500);
+
+              // Play sound asynchronously (non-blocking)
+              audioManagerRef.current?.playSound(calledNumber);
             }
           } else if (response.status === 400 || response.status === 429) {
             setAutoCall(false);
@@ -481,16 +508,20 @@ const GamePageOptimized = (): JSX.Element => {
 
         const calledNumber = result.calledNumber;
         if (calledNumber) {
+          // Update state first (non-blocking)
           setCalled(prev => {
             const newCalled = [...prev, calledNumber];
             localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
             return newCalled;
           });
 
-          audioManagerRef.current?.playSound(calledNumber);
+          // Show popup immediately
           setPopupNumber(calledNumber);
           setShowPopup(true);
           setTimeout(() => setShowPopup(false), 1500);
+
+          // Play sound asynchronously (non-blocking)
+          audioManagerRef.current?.playSound(calledNumber);
         }
       }
     } catch (error) {
@@ -501,18 +532,18 @@ const GamePageOptimized = (): JSX.Element => {
   }, [isGameFinished, selectedCartelas, isCallingNumber, called, currentGameData, API_BASE_URL]);
 
   const handleShuffle = useCallback(() => {
-    // Play shuffle sound
-    try {
-      const shuffleAudio = new Audio(`${API_BASE_URL}/sound/shuffle`);
-      shuffleAudio.volume = 0.7;
-      shuffleAudio.play().catch(() => {
-        console.log('Could not play shuffle sound');
-      });
-    } catch (error) {
-      console.log('Error playing shuffle sound:', error);
-    }
+    // Play shuffle sound without blocking
+    requestAnimationFrame(() => {
+      try {
+        const shuffleAudio = new Audio(`${API_BASE_URL}/sound/shuffle`);
+        shuffleAudio.volume = 0.7;
+        shuffleAudio.play().catch(() => {});
+      } catch (error) {
+        // Silent fail
+      }
+    });
     
-    // Reload page after 10 seconds
+    // Reload page after 6 seconds
     setTimeout(() => {
       window.location.reload();
     }, 6000);

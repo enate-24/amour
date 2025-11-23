@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Admin Login Test</h1>
+        
+        <div class="info">
+            <strong>Default Credentials:</strong><br>
+            Email: admin@amour-bingo.com<br>
+            Username: admin<br>
+            Password: demo123
+        </div>
+
+        <form id="loginForm">
+            <div class="form-group">
+                <label>API URL:</label>
+                <input type="text" id="apiUrl" value="https://amour-bingo-backend.onrender.com/api" />
+            </div>
+
+            <div class="form-group">
+                <label>Email or Username:</label>
+                <input type="text" id="username" value="admin@amour-bingo.com" required />
+            </div>
+
+            <div class="form-group">
+                <label>Password:</label>
+                <input type="password" id="password" value="demo123" required />
+            </div>
+
+            <button type="submit" id="submitBtn">Login</button>
+        </form>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('loginForm');
+        const resultDiv = document.getElementById('result');
+        const submitBtn = document.getElementById('submitBtn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const apiUrl = document.getElementById('apiUrl').value;
+            const usernameOrEmail = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Logging in...';
+            resultDiv.innerHTML = '';
+
+            try {
+                // Determine if input is email or username
+                const isEmail = usernameOrEmail.includes('@');
+                const loginData = isEmail 
+                    ? { email: usernameOrEmail, password }
+                    : { username: usernameOrEmail, password };
+
+                console.log('Sending login request:', loginData);
+
+                const response = await fetch(`${apiUrl}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(loginData)
+                });
+
+                console.log('Response status:', response.status);
+
+                const data = await response.json();
+                console.log('Response data:', data);
+
+                if (response.ok) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+✅ <strong>Login Successful!</strong>
+
+<strong>User Info:</strong>
+- ID: ${data.user.id}
+- Username: ${data.user.username}
+- Email: ${data.user.email}
+- Role: ${data.user.role}
+- Balance: ${data.user.balance}
+
+<strong>Token:</strong>
+${data.token.substring(0, 50)}...
+
+<strong>Full Response:</strong>
+${JSON.stringify(data, null, 2)}
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `
+❌ <strong>Login Failed!</strong>
+
+<strong>Error:</strong>
+${data.error || 'Unknown error'}
+
+<strong>Status:</strong> ${response.status}
+
+<strong>Full Response:</strong>
+${JSON.stringify(data, null, 2)}
+                    `;
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+❌ <strong>Request Failed!</strong>
+
+<strong>Error:</strong>
+${error.message}
+
+<strong>Details:</strong>
+This could be a network error, CORS issue, or the backend server might be down.
+
+<strong>Stack:</strong>
+${error.stack}
+                `;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Login';
+            }
+        });
+    </script>
+</body>
+</html>
