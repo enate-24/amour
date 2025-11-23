@@ -102,25 +102,38 @@ router.get('/', authenticateToken, async (req, res) => {
     // Check if user is admin
     const isAdmin = req.user?.role === 'admin';
     
-    // Daily query: show all games (games don't have user_id, they're global)
+    // Daily query: filter by user_id for regular users, show all for admin
     // Use lowercase aliases because PostgreSQL converts unquoted identifiers to lowercase
-    const dailyQuery = `
+    const dailyQuery = isAdmin ? `
       SELECT
         COALESCE(SUM(g.bet_money), 0) as dailytotal,
         COALESCE(SUM(g.bet_money - COALESCE(g.win_money, 0)), 0) as dailyprofit,
         COUNT(g.id) as dailygames
       FROM games g
       WHERE g.created_at >= $1 AND g.created_at < $2 AND g.status IN ('started', 'finished')
+    ` : `
+      SELECT
+        COALESCE(SUM(g.bet_money), 0) as dailytotal,
+        COALESCE(SUM(g.bet_money - COALESCE(g.win_money, 0)), 0) as dailyprofit,
+        COUNT(g.id) as dailygames
+      FROM games g
+      WHERE g.user_id = $3 AND g.created_at >= $1 AND g.created_at < $2 AND g.status IN ('started', 'finished')
     `;
 
-    // Weekly query: show all games (games don't have user_id, they're global)
+    // Weekly query: filter by user_id for regular users, show all for admin
     // Use lowercase aliases because PostgreSQL converts unquoted identifiers to lowercase
-    const weeklyQuery = `
+    const weeklyQuery = isAdmin ? `
       SELECT
         COALESCE(SUM(g.bet_money), 0) as weeklytotal,
         COALESCE(SUM(g.bet_money - COALESCE(g.win_money, 0)), 0) as weeklyprofit
       FROM games g
       WHERE g.created_at >= $1 AND g.created_at < $2 AND g.status IN ('started', 'finished')
+    ` : `
+      SELECT
+        COALESCE(SUM(g.bet_money), 0) as weeklytotal,
+        COALESCE(SUM(g.bet_money - COALESCE(g.win_money, 0)), 0) as weeklyprofit
+      FROM games g
+      WHERE g.user_id = $3 AND g.created_at >= $1 AND g.created_at < $2 AND g.status IN ('started', 'finished')
     `;
 
     // Use lowercase aliases because PostgreSQL converts unquoted identifiers to lowercase
@@ -136,7 +149,9 @@ router.get('/', authenticateToken, async (req, res) => {
     // Execute queries
     let dailyResults, weeklyResults, fifteenDayResults;
     try {
-      const dailyParams = [startOfDay.toISOString(), endOfDay.toISOString()];
+      const dailyParams = isAdmin 
+        ? [startOfDay.toISOString(), endOfDay.toISOString()]
+        : [startOfDay.toISOString(), endOfDay.toISOString(), userId];
       console.log('Executing daily query with params:', dailyParams);
       const dailyResult = await db.get(dailyQuery, dailyParams);
       console.log('Daily result:', dailyResult);
@@ -148,7 +163,9 @@ router.get('/', authenticateToken, async (req, res) => {
         dailygames: dailyResult?.dailygames || 0
       }];
 
-      const weeklyParams = [startOfWeek.toISOString(), endOfWeek.toISOString()];
+      const weeklyParams = isAdmin
+        ? [startOfWeek.toISOString(), endOfWeek.toISOString()]
+        : [startOfWeek.toISOString(), endOfWeek.toISOString(), userId];
       console.log('Executing weekly query with params:', weeklyParams);
       const weeklyResult = await db.get(weeklyQuery, weeklyParams);
       console.log('Weekly result:', weeklyResult);
@@ -180,9 +197,9 @@ router.get('/', authenticateToken, async (req, res) => {
 
     console.log('User created at:', userCreatedAt.toISOString());
 
-    // Get recent games data - show all games (games don't have user_id, they're global)
+    // Get recent games data - filter by user_id for regular users, show all for admin
     // Use lowercase aliases because PostgreSQL converts unquoted identifiers to lowercase
-    const recentGamesQuery = `
+    const recentGamesQuery = isAdmin ? `
       SELECT
         DATE(g.created_at) as created_date,
         COUNT(g.id) as games,
@@ -194,10 +211,24 @@ router.get('/', authenticateToken, async (req, res) => {
       GROUP BY DATE(g.created_at)
       ORDER BY DATE(g.created_at) DESC
       LIMIT 10
+    ` : `
+      SELECT
+        DATE(g.created_at) as created_date,
+        COUNT(g.id) as games,
+        COALESCE(SUM(g.bet_money), 0) as playersbet,
+        COALESCE(SUM(g.win_money), 0) as playerswon,
+        COALESCE(SUM(g.bet_money - COALESCE(g.win_money, 0)), 0) as houseprofit
+      FROM games g
+      WHERE g.user_id = $2 AND g.created_at >= $1 AND g.status IN ('started', 'finished')
+      GROUP BY DATE(g.created_at)
+      ORDER BY DATE(g.created_at) DESC
+      LIMIT 10
     `;
 
     try {
-      const recentGamesParams = [userCreatedAt.toISOString()];
+      const recentGamesParams = isAdmin 
+        ? [userCreatedAt.toISOString()]
+        : [userCreatedAt.toISOString(), userId];
       const recentGamesResults = await db.all(recentGamesQuery, recentGamesParams);
 
       console.log('Found game data for', recentGamesResults.length, 'days');
@@ -233,7 +264,7 @@ router.get('/', authenticateToken, async (req, res) => {
       thirtyDaysAgo.setHours(0, 0, 0, 0);
 
       // Use lowercase aliases because PostgreSQL converts unquoted identifiers to lowercase
-      const chartDataQuery = `
+      const chartDataQuery = isAdmin ? `
         SELECT
           DATE(g.created_at) as date,
           COUNT(g.id) as games,
@@ -243,9 +274,21 @@ router.get('/', authenticateToken, async (req, res) => {
         WHERE g.created_at >= $1 AND g.status IN ('started', 'finished')
         GROUP BY DATE(g.created_at)
         ORDER BY date ASC
+      ` : `
+        SELECT
+          DATE(g.created_at) as date,
+          COUNT(g.id) as games,
+          COALESCE(SUM(g.bet_money), 0) as totalbets,
+          COALESCE(SUM(g.bet_money - COALESCE(g.win_money, 0)), 0) as houseprofit
+        FROM games g
+        WHERE g.user_id = $2 AND g.created_at >= $1 AND g.status IN ('started', 'finished')
+        GROUP BY DATE(g.created_at)
+        ORDER BY date ASC
       `;
 
-      const chartDataParams = [thirtyDaysAgo.toISOString()];
+      const chartDataParams = isAdmin
+        ? [thirtyDaysAgo.toISOString()]
+        : [thirtyDaysAgo.toISOString(), userId];
       console.log('Executing chart data query with params:', chartDataParams);
       const chartDataResults = await db.all(chartDataQuery, chartDataParams);
       console.log('Chart data results:', chartDataResults);
@@ -272,15 +315,21 @@ router.get('/', authenticateToken, async (req, res) => {
       chartData = [];
     }
 
-    // Calculate 15-day house profit - show all games (games don't have user_id, they're global)
+    // Calculate 15-day house profit - filter by user_id for regular users, show all for admin
     // Use lowercase aliases because PostgreSQL converts unquoted identifiers to lowercase
-    const fifteenDayHouseProfitQuery = `
+    const fifteenDayHouseProfitQuery = isAdmin ? `
       SELECT COALESCE(SUM(g.bet_money - COALESCE(g.win_money, 0)), 0) as fifteendayhouseprofit
       FROM games g
       WHERE g.created_at >= $1 AND g.status IN ('started', 'finished')
+    ` : `
+      SELECT COALESCE(SUM(g.bet_money - COALESCE(g.win_money, 0)), 0) as fifteendayhouseprofit
+      FROM games g
+      WHERE g.user_id = $2 AND g.created_at >= $1 AND g.status IN ('started', 'finished')
     `;
 
-    const fifteenDayParams = [fifteenDaysAgo.toISOString()];
+    const fifteenDayParams = isAdmin
+      ? [fifteenDaysAgo.toISOString()]
+      : [fifteenDaysAgo.toISOString(), userId];
     const fifteenDayHouseProfitResult = await db.get(fifteenDayHouseProfitQuery, fifteenDayParams);
     // PostgreSQL returns lowercase column names
     const fifteenDayProfit = parseFloat(fifteenDayHouseProfitResult?.fifteendayhouseprofit || 0);

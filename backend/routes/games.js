@@ -1153,8 +1153,12 @@ router.get('/stats/overview', requireAdmin, async (req, res) => {
     daysAgo.setDate(daysAgo.getDate() - parseInt(days));
     const formattedDate = daysAgo.toISOString().split('T')[0];
 
-    // Get game statistics from database
-    const statsQuery = `
+    // Check if user is admin
+    const isAdmin = req.user?.role === 'admin';
+    const userId = req.user?.id;
+
+    // Get game statistics from database - filter by user_id for regular users
+    const statsQuery = isAdmin ? `
       SELECT
         COUNT(*) as totalGames,
         SUM(CASE WHEN status = 'finished' THEN 1 ELSE 0 END) as finishedGames,
@@ -1165,12 +1169,24 @@ router.get('/stats/overview', requireAdmin, async (req, res) => {
         COALESCE(SUM(CASE WHEN status = 'finished' THEN (bet_money - win_money) ELSE 0 END), 0) as totalProfit
       FROM games
       WHERE created_at >= $1
+    ` : `
+      SELECT
+        COUNT(*) as totalGames,
+        SUM(CASE WHEN status = 'finished' THEN 1 ELSE 0 END) as finishedGames,
+        SUM(CASE WHEN status = 'started' THEN 1 ELSE 0 END) as activeGames,
+        SUM(CASE WHEN status = 'waiting' THEN 1 ELSE 0 END) as waitingGames,
+        COALESCE(SUM(CASE WHEN status = 'finished' THEN bet_money ELSE 0 END), 0) as totalRevenue,
+        COALESCE(SUM(CASE WHEN status = 'finished' THEN win_money ELSE 0 END), 0) as totalPayout,
+        COALESCE(SUM(CASE WHEN status = 'finished' THEN (bet_money - win_money) ELSE 0 END), 0) as totalProfit
+      FROM games
+      WHERE user_id = $2 AND created_at >= $1
     `;
 
-    const statsResult = await db.get(statsQuery, [formattedDate]);
+    const statsParams = isAdmin ? [formattedDate] : [formattedDate, userId];
+    const statsResult = await db.get(statsQuery, statsParams);
 
-    // Get average players per game
-    const avgPlayersQuery = `
+    // Get average players per game - filter by user_id for regular users
+    const avgPlayersQuery = isAdmin ? `
       SELECT COALESCE(AVG(cartelas_count), 0) as averagePlayersPerGame
       FROM (
         SELECT COUNT(c.id) as cartelas_count
@@ -1179,9 +1195,19 @@ router.get('/stats/overview', requireAdmin, async (req, res) => {
         WHERE g.status = 'finished' AND g.created_at >= $1
         GROUP BY g.id
       ) game_cartelas
+    ` : `
+      SELECT COALESCE(AVG(cartelas_count), 0) as averagePlayersPerGame
+      FROM (
+        SELECT COUNT(c.id) as cartelas_count
+        FROM games g
+        LEFT JOIN cartelas c ON g.id = c.game_id
+        WHERE g.user_id = $2 AND g.status = 'finished' AND g.created_at >= $1
+        GROUP BY g.id
+      ) game_cartelas
     `;
 
-    const avgPlayersResult = await db.get(avgPlayersQuery, [formattedDate]);
+    const avgPlayersParams = isAdmin ? [formattedDate] : [formattedDate, userId];
+    const avgPlayersResult = await db.get(avgPlayersQuery, avgPlayersParams);
 
     const stats = {
       totalGames: statsResult.totalGames || 0,
