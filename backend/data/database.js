@@ -748,7 +748,7 @@ const userSettingsOperations = {
     `, [
       userId,
       settingsData.selectedPattern || 'Two Lines',
-      settingsData.betAmount || 10.0,
+      settingsData.betAmount || 5.0,
       settingsData.houseCutPercentage || 10.0,
       new Date().toISOString(),
       new Date().toISOString()

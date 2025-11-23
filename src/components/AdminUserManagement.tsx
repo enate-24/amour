@@ -278,7 +278,10 @@ const AdminUserManagement: React.FC = () => {
 
   // Ban/Unban user
   const handleToggleBan = async (userId: string, username: string, currentStatus: boolean) => {
-    const action = currentStatus ? 'unban' : 'ban';
+    // currentStatus is user.is_active (true = active, false = banned)
+    // We want to toggle this: if active, ban them; if banned, unban them
+    const action = currentStatus ? 'ban' : 'unban';
+    const shouldBan = currentStatus; // if currently active, we want to ban (true)
     
     if (!confirm(`Are you sure you want to ${action} user "${username}"?`)) {
       return;
@@ -290,9 +293,9 @@ const AdminUserManagement: React.FC = () => {
         throw new Error('No authentication token found');
       }
 
-      console.log(`🔄 Attempting to ${action} user:`, { userId, username, currentStatus });
+      console.log(`🔄 Attempting to ${action} user:`, { userId, username, currentStatus, shouldBan });
       console.log('🔗 API URL:', `${API_BASE_URL}/admin/users/${userId}/ban`);
-      console.log('📦 Request body:', { banned: !currentStatus });
+      console.log('📦 Request body:', { banned: shouldBan });
 
       const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/ban`, {
         method: 'PATCH',
@@ -300,7 +303,7 @@ const AdminUserManagement: React.FC = () => {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ banned: !currentStatus })
+        body: JSON.stringify({ banned: shouldBan })
       });
 
       console.log('📥 Response status:', response.status);

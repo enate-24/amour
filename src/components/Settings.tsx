@@ -7,7 +7,7 @@ const Settings: React.FC = () => {
   const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
   
   const [selectedPattern, setSelectedPattern] = useState<string>("Two Lines");
-  const [betAmount, setBetAmount] = useState<number>(10);
+  const [betAmount, setBetAmount] = useState<number>(5);
   const [houseCutPercentage, setHouseCutPercentage] = useState<number>(10);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -47,7 +47,7 @@ const Settings: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setSelectedPattern(data.selectedPattern || "Two Lines");
-        setBetAmount(data.betAmount || 10);
+        setBetAmount(data.betAmount || 5);
         setHouseCutPercentage(data.houseCutPercentage || 10);
         console.log('✅ Settings loaded from backend:', data);
       } else {

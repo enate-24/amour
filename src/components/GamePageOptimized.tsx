@@ -214,7 +214,7 @@ const GamePageOptimized = (): JSX.Element => {
             
             setCurrentGameData(result.game);
             setSelectedCartelas(result.game.cartelas_selected || 0);
-            setBetAmount(parseFloat(result.game.bet_money) || 10);
+            setBetAmount(parseFloat(result.game.bet_money) || 5);
             setPlayerWin(parseFloat(result.game.win_money) || 0);
             
             // Always clear called numbers on page refresh
@@ -226,7 +226,7 @@ const GamePageOptimized = (): JSX.Element => {
             const gameData = {
               gameId: result.game.id,
               selectedCartelas: result.game.selected_cartelas || [],
-              betAmount: parseFloat(result.game.bet_money) || 10,
+              betAmount: parseFloat(result.game.bet_money) || 5,
               playerWin: parseFloat(result.game.win_money) || 0,
               housePercentage: result.game.house_cut_percentage || 25
             };
@@ -270,7 +270,7 @@ const GamePageOptimized = (): JSX.Element => {
           localStorage.removeItem('calledNumbers');
           setCalled([]);
           setSelectedCartelas(gameData.selectedCartelas.length);
-          setBetAmount(gameData.betAmount || 10);
+          setBetAmount(gameData.betAmount || 5);
           setPlayerWin(gameData.playerWin || 0);
           
         } catch (error) {
@@ -297,7 +297,7 @@ const GamePageOptimized = (): JSX.Element => {
   
   // Game configuration
   const [selectedCartelas, setSelectedCartelas] = useState(0);
-  const [betAmount, setBetAmount] = useState(10);
+  const [betAmount, setBetAmount] = useState(5);
   const [playerWin, setPlayerWin] = useState(0);
   const [selectedPattern] = useState<string>("Two Lines");
   

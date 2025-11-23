@@ -16,7 +16,7 @@ interface selectcartelaProps {
 
 const Selectcartela: React.FC<selectcartelaProps> = ({ onNavigateToGame }) => {
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>([]);
-  const [betAmount, setBetAmount] = useState(10);
+  const [betAmount, setBetAmount] = useState(5);
   const [winAmount, setWinAmount] = useState(22.50);
   const [housePercentage, setHousePercentage] = useState(25);
   const [rememberSelection, setRememberSelection] = useState(true);

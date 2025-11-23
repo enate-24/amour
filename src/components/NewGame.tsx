@@ -9,9 +9,9 @@ const NewGame: React.FC = () => {
   const [gamesPlayed, setGamesPlayed] = useState(19);
   const [bonusPlayed, setBonusPlayed] = useState(0);
   const [betBirr, setBetBirr] = useState(() => {
-    // Load saved bet amount from localStorage, default to 10
+    // Load saved bet amount from localStorage, default to 5
     const savedBetAmount = localStorage.getItem('betAmount');
-    return savedBetAmount ? parseInt(savedBetAmount, 10) : 10;
+    return savedBetAmount ? parseInt(savedBetAmount, 10) : 5;
   });
   const [winBirr, setWinBirr] = useState(0.00);
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
@@ -119,7 +119,7 @@ const NewGame: React.FC = () => {
   // }, [cartelas, selectedCards.length]);
 
   const handleBetChange = (increment: boolean) => {
-    setBetBirr(prev => Math.max(10, increment ? prev + 5 : prev - 5));
+    setBetBirr(prev => Math.max(5, increment ? prev + 5 : prev - 5));
   };
 
   // Function to get next game number

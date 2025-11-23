@@ -15,7 +15,7 @@ router.get('/', authenticateToken, async (req, res) => {
     if (!settings) {
       await db.userSettings.create(userId, {
         selectedPattern: 'Two Lines',
-        betAmount: 10.0,
+        betAmount: 5.0,
         houseCutPercentage: 10.0
       });
       settings = await db.userSettings.findByUserId(userId);
@@ -43,7 +43,7 @@ router.get('/pattern', authenticateToken, async (req, res) => {
     if (!settings) {
       await db.userSettings.create(userId, {
         selectedPattern: 'Two Lines',
-        betAmount: 10.0,
+        betAmount: 5.0,
         houseCutPercentage: 10.0
       });
       settings = await db.userSettings.findByUserId(userId);
@@ -82,7 +82,7 @@ router.post('/pattern', authenticateToken, async (req, res) => {
       // Create new settings
       await db.userSettings.create(userId, {
         selectedPattern,
-        betAmount: 10.0,
+        betAmount: 5.0,
         houseCutPercentage: 10.0
       });
     }
@@ -136,7 +136,7 @@ router.post('/', authenticateToken, async (req, res) => {
       // Create new settings with defaults for missing values
       await db.userSettings.create(userId, {
         selectedPattern: selectedPattern || 'Two Lines',
-        betAmount: betAmount !== undefined ? parseFloat(betAmount) : 10.0,
+        betAmount: betAmount !== undefined ? parseFloat(betAmount) : 5.0,
         houseCutPercentage: houseCutPercentage !== undefined ? parseFloat(houseCutPercentage) : 10.0
       });
     }
