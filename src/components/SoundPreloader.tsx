@@ -7,7 +7,13 @@ interface SoundPreloaderProps {
 const SoundPreloader: React.FC<SoundPreloaderProps> = ({ onPreloadComplete }) => {
   useEffect(() => {
     const preloadSounds = async () => {
-      console.log('🔄 Preloading game sounds from LOCAL files...');
+      console.log('🔄 Skipping sound preloading to reduce system lag...');
+      
+      // Skip preloading to reduce system load and lag
+      // Sounds will load on-demand when needed
+      console.log('✅ Sound system ready (on-demand loading)');
+      onPreloadComplete?.();
+      return;
       
       const soundPromises: Promise<void>[] = [];
       

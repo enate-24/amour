@@ -101,130 +101,67 @@ const NumberButton = memo(({
   );
 });
 
-// Optimized audio manager using LOCAL sound files (no network lag!)
+// Lightweight audio manager - minimal preloading to reduce system lag
 class AudioManager {
-  private cache = new Map<number, HTMLAudioElement[]>();
-  private poolSize = 2; // Multiple instances per sound for overlapping plays
-  private preloadedCount = 0;
-  private isInitialized = false;
+  private cache = new Map<number, HTMLAudioElement>();
 
   constructor() {
-    this.initializePreload();
+    // Minimal initialization
   }
 
-  // Aggressively preload all sounds on initialization from LOCAL files
-  private async initializePreload(): Promise<void> {
-    if (this.isInitialized) return;
-    this.isInitialized = true;
-
-    // Preload first 20 numbers immediately for instant playback
-    const priorityNumbers = Array.from({ length: 20 }, (_, i) => i + 1);
+  // Create audio on-demand to reduce memory usage and system lag
+  private createAudio(num: number): HTMLAudioElement {
+    let audio = this.cache.get(num);
     
-    for (const num of priorityNumbers) {
-      this.preloadNumber(num);
-      // Minimal delay to avoid blocking UI
-      if (num % 5 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 10));
-      }
-    }
-
-    // Continue preloading remaining numbers in background
-    setTimeout(() => {
-      this.preloadRemainingNumbers(21);
-    }, 100);
-  }
-
-  private async preloadRemainingNumbers(startFrom: number): Promise<void> {
-    for (let num = startFrom; num <= 75; num++) {
-      if (!this.cache.has(num)) {
-        this.preloadNumber(num);
-        // Small delay every 10 numbers
-        if (num % 10 === 0) {
-          await new Promise(resolve => setTimeout(resolve, 50));
+    if (!audio) {
+      audio = new Audio(`/sounds/${num}.wav`);
+      audio.volume = 0.7;
+      audio.preload = 'none'; // Don't preload to reduce system load
+      this.cache.set(num, audio);
+      
+      // Limit cache size to prevent memory issues
+      if (this.cache.size > 10) {
+        const firstKey = this.cache.keys().next().value;
+        if (firstKey !== undefined) {
+          const oldAudio = this.cache.get(firstKey);
+          if (oldAudio) {
+            oldAudio.pause();
+            oldAudio.src = '';
+          }
+          this.cache.delete(firstKey);
         }
       }
     }
-  }
-
-  private preloadNumber(num: number): void {
-    if (this.cache.has(num)) return;
-
-    const pool: HTMLAudioElement[] = [];
     
-    // Create multiple instances for smooth overlapping
-    for (let i = 0; i < this.poolSize; i++) {
-      try {
-        // Use LOCAL sound files from public/sounds directory
-        const audio = new Audio(`/sounds/${num}.wav`);
-        audio.volume = 0.7;
-        audio.preload = 'auto';
-        
-        // Load the audio data
-        audio.load();
-        
-        pool.push(audio);
-      } catch (error) {
-        // Silent fail
-      }
-    }
-    
-    if (pool.length > 0) {
-      this.cache.set(num, pool);
-      this.preloadedCount++;
-    }
+    return audio;
   }
 
   playSound(number: number): void {
-    // Use requestIdleCallback if available, otherwise requestAnimationFrame
-    const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
-    
-    schedulePlay(() => {
-      try {
-        let pool = this.cache.get(number);
-        
-        // If not preloaded, create on-demand
-        if (!pool || pool.length === 0) {
-          this.preloadNumber(number);
-          pool = this.cache.get(number);
-        }
-
-        if (pool && pool.length > 0) {
-          // Find first available audio instance
-          let audio = pool.find(a => a.paused || a.ended);
-          
-          // If all busy, use first one anyway
-          if (!audio) {
-            audio = pool[0];
-          }
-
-          // Reset and play immediately
-          audio.currentTime = 0;
-          const playPromise = audio.play();
-          
-          if (playPromise) {
-            playPromise.catch(() => {}); // Silent fail
-          }
-        }
-      } catch (error) {
-        // Silent fail for better performance
+    try {
+      const audio = this.createAudio(number);
+      
+      // Reset and play
+      audio.currentTime = 0;
+      const playPromise = audio.play();
+      
+      if (playPromise) {
+        playPromise.catch(() => {}); // Silent fail
       }
-    });
+    } catch (error) {
+      // Silent fail for better performance
+    }
   }
 
   cleanup(): void {
-    this.cache.forEach(pool => {
-      pool.forEach(audio => {
-        try {
-          audio.pause();
-          audio.src = '';
-        } catch (error) {
-          // Ignore cleanup errors
-        }
-      });
+    this.cache.forEach(audio => {
+      try {
+        audio.pause();
+        audio.src = '';
+      } catch (error) {
+        // Ignore cleanup errors
+      }
     });
     this.cache.clear();
-    this.isInitialized = false;
-    this.preloadedCount = 0;
   }
 }
 
@@ -400,13 +337,13 @@ const GamePageOptimized = (): JSX.Element => {
     };
   }, []);
 
-  // Optimized polling - much less frequent and only when needed
+  // Minimal polling to reduce system load
   useEffect(() => {
     if (!selectedCartelas || selectedCartelas < 3 || isGameFinished) {
       return;
     }
 
-    // Poll every 2 minutes instead of 30 seconds
+    // Poll every 5 minutes to minimize system load
     const intervalId = setInterval(async () => {
       // Only poll if document is visible and game is active
       if (document.hidden || isGameFinished) return;
@@ -429,7 +366,7 @@ const GamePageOptimized = (): JSX.Element => {
       } catch (error) {
         // Silent fail
       }
-    }, 120000); // 2 minutes
+    }, 300000); // 5 minutes to reduce system load
 
     gameFetchIntervalRef.current = intervalId;
 
