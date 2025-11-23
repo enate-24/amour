@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Minus, Plus, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCartela } from '../hooks/useCartela';
@@ -100,6 +100,23 @@ const NewGame: React.FC = () => {
       setSelectedCards([...selectedCards, cardId]);
     }
   };
+
+  // Function to select all 1200 cartelas automatically
+  const selectAll1200Cartelas = () => {
+    if (cartelas.length > 0) {
+      // Select all available cartelas (up to 1200)
+      const allCartelaIds = cartelas.slice(0, 1200).map(cartela => cartela.card_id);
+      setSelectedCards(allCartelaIds);
+      console.log(`✅ Selected ${allCartelaIds.length} cartelas automatically`);
+    }
+  };
+
+  // Auto-select all cartelas when component loads
+  useEffect(() => {
+    if (cartelas.length > 0 && selectedCards.length === 0) {
+      selectAll1200Cartelas();
+    }
+  }, [cartelas, selectedCards.length]);
 
   const handleBetChange = (increment: boolean) => {
     setBetBirr(prev => Math.max(10, increment ? prev + 5 : prev - 5));
@@ -372,20 +389,34 @@ const NewGame: React.FC = () => {
     <div className="p-2 sm:p-4 lg:p-8 relative mx-2 sm:mx-4 md:mx-8 lg:mx-16 xl:mx-24 mt-4 sm:mt-8 lg:mt-12 mb-0">
       {/* Clean Button - Top Right Corner */}
       {selectedCards.length > 0 && (
-        <button
-          onClick={() => {
-            setSelectedCards([]);
-            setRegisteredCount(0);
-            // Clear from localStorage but keep remember selection active
-            localStorage.removeItem('selectedCards');
-          }}
-          className="absolute top-1 right-1 sm:top-2 sm:right-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-2 py-1 sm:px-4 sm:py-2 rounded-lg font-bold transition-all shadow-lg hover:shadow-xl transform hover:scale-105 text-xs sm:text-sm z-10 flex items-center gap-1 sm:gap-2"
-          title="Clear all selected cartelas"
-        >
-          <span className="text-sm sm:text-lg">🗑️</span>
-          <span className="hidden xs:inline">Clean ({selectedCards.length})</span>
-          <span className="xs:hidden">({selectedCards.length})</span>
-        </button>
+        <div className="absolute top-1 right-1 sm:top-2 sm:right-2 flex gap-1 sm:gap-2 z-10">
+          {/* Select All 1200 Button */}
+          <button
+            onClick={selectAll1200Cartelas}
+            className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-2 py-1 sm:px-4 sm:py-2 rounded-lg font-bold transition-all shadow-lg hover:shadow-xl transform hover:scale-105 text-xs sm:text-sm flex items-center gap-1 sm:gap-2"
+            title="Select all 1200 cartelas"
+          >
+            <span className="text-sm sm:text-lg">✅</span>
+            <span className="hidden xs:inline">All 1200</span>
+            <span className="xs:hidden">All</span>
+          </button>
+          
+          {/* Clear Button */}
+          <button
+            onClick={() => {
+              setSelectedCards([]);
+              setRegisteredCount(0);
+              // Clear from localStorage but keep remember selection active
+              localStorage.removeItem('selectedCards');
+            }}
+            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-2 py-1 sm:px-4 sm:py-2 rounded-lg font-bold transition-all shadow-lg hover:shadow-xl transform hover:scale-105 text-xs sm:text-sm flex items-center gap-1 sm:gap-2"
+            title="Clear all selected cartelas"
+          >
+            <span className="text-sm sm:text-lg">🗑️</span>
+            <span className="hidden xs:inline">Clean ({selectedCards.length})</span>
+            <span className="xs:hidden">({selectedCards.length})</span>
+          </button>
+        </div>
       )}
 
       <div className="mb-4 sm:mb-6">
@@ -568,7 +599,14 @@ const NewGame: React.FC = () => {
 
         <div className="mb-3 sm:mb-4">
           <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className="text-white font-medium text-xs sm:text-sm md:text-base">Selected Cards ({selectedCards.length})</span>
+            <span className="text-white font-medium text-xs sm:text-sm md:text-base">
+              Selected Cards ({selectedCards.length})
+              {selectedCards.length >= 1200 && (
+                <span className="ml-2 px-2 py-1 bg-green-600 text-white rounded-full text-xs font-bold">
+                  ALL 1200 ACTIVE! 🎯
+                </span>
+              )}
+            </span>
             <label className={`flex items-center gap-1 sm:gap-2 px-2 py-1 sm:px-3 rounded-lg transition-colors ${
               rememberSelection
                 ? 'bg-green-600 text-green-100'
