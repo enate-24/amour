@@ -101,7 +101,7 @@ const NewGame: React.FC = () => {
     }
   };
 
-  // Function to select all 1200 cartelas automatically
+  // Function to select all 1200 cartelas manually
   const selectAll1200Cartelas = () => {
     if (cartelas.length > 0) {
       // Select all available cartelas (up to 1200)
@@ -111,12 +111,12 @@ const NewGame: React.FC = () => {
     }
   };
 
-  // Auto-select all cartelas when component loads
-  useEffect(() => {
-    if (cartelas.length > 0 && selectedCards.length === 0) {
-      selectAll1200Cartelas();
-    }
-  }, [cartelas, selectedCards.length]);
+  // Auto-select disabled - users must manually select cartelas
+  // useEffect(() => {
+  //   if (cartelas.length > 0 && selectedCards.length === 0) {
+  //     selectAll1200Cartelas();
+  //   }
+  // }, [cartelas, selectedCards.length]);
 
   const handleBetChange = (increment: boolean) => {
     setBetBirr(prev => Math.max(10, increment ? prev + 5 : prev - 5));
@@ -390,16 +390,7 @@ const NewGame: React.FC = () => {
       {/* Clean Button - Top Right Corner */}
       {selectedCards.length > 0 && (
         <div className="absolute top-1 right-1 sm:top-2 sm:right-2 flex gap-1 sm:gap-2 z-10">
-          {/* Select All 1200 Button */}
-          <button
-            onClick={selectAll1200Cartelas}
-            className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-2 py-1 sm:px-4 sm:py-2 rounded-lg font-bold transition-all shadow-lg hover:shadow-xl transform hover:scale-105 text-xs sm:text-sm flex items-center gap-1 sm:gap-2"
-            title="Select all 1200 cartelas"
-          >
-            <span className="text-sm sm:text-lg">✅</span>
-            <span className="hidden xs:inline">All 1200</span>
-            <span className="xs:hidden">All</span>
-          </button>
+
           
           {/* Clear Button */}
           <button

@@ -4,6 +4,8 @@ import { useAuth } from '../hooks/useAuth';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
+console.log('🔗 AdminUserManagement API_BASE_URL:', API_BASE_URL);
+
 interface User {
   id: string;
   username: string;
@@ -198,6 +200,9 @@ const AdminUserManagement: React.FC = () => {
         throw new Error('No authentication token found');
       }
 
+      console.log('🔄 Attempting to delete user:', { userId, username });
+      console.log('🔗 API URL:', `${API_BASE_URL}/admin/users/${userId}?hardDelete=true`);
+
       const response = await fetch(`${API_BASE_URL}/admin/users/${userId}?hardDelete=true`, {
         method: 'DELETE',
         headers: {
@@ -206,18 +211,24 @@ const AdminUserManagement: React.FC = () => {
         }
       });
 
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Response ok:', response.ok);
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to delete user' }));
+        console.error('❌ Delete error:', errorData);
         throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
       const result = await response.json();
+      console.log('✅ Delete success:', result);
       alert(`✅ ${result.message}\n\nDeleted:\n• ${result.deletedData?.cartelas || 0} cartelas\n• ${result.deletedData?.affectedGames || 0} affected games`);
 
       // Refresh users list
       await fetchUsers();
 
     } catch (err) {
+      console.error('❌ Delete exception:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete user');
     }
   };
@@ -279,6 +290,10 @@ const AdminUserManagement: React.FC = () => {
         throw new Error('No authentication token found');
       }
 
+      console.log(`🔄 Attempting to ${action} user:`, { userId, username, currentStatus });
+      console.log('🔗 API URL:', `${API_BASE_URL}/admin/users/${userId}/ban`);
+      console.log('📦 Request body:', { banned: !currentStatus });
+
       const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/ban`, {
         method: 'PATCH',
         headers: {
@@ -288,17 +303,24 @@ const AdminUserManagement: React.FC = () => {
         body: JSON.stringify({ banned: !currentStatus })
       });
 
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Response ok:', response.ok);
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: `Failed to ${action} user` }));
+        console.error('❌ Ban/unban error:', errorData);
         throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
+      const result = await response.json();
+      console.log('✅ Ban/unban success:', result);
       alert(`✅ User ${action}ned successfully`);
 
       // Refresh users list
       await fetchUsers();
 
     } catch (err) {
+      console.error('❌ Ban/unban exception:', err);
       setError(err instanceof Error ? err.message : `Failed to ${action} user`);
     }
   };
