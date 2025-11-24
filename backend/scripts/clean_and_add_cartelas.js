@@ -1,4 +1,5 @@
-
+require('dotenv').config({ path: '../.env' });
+const { createClient } = require('@supabase/supabase-js');
 const { bingoCards, generateBingoCard } = require('../data/cartela.js');
 
 const supabaseUrl = process.env.SUPABASE_URL;
