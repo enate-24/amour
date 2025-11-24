@@ -9,15 +9,11 @@ const BINGO_LETTERS = ["B", "I", "N", "G", "O"] as const;
 const NumberGrid = memo(({ 
   numbers, 
   called, 
-  showPopup, 
-  popupNumber, 
   isGameFinished, 
   onNumberClick 
 }: {
   numbers: number[];
   called: number[];
-  showPopup: boolean;
-  popupNumber: number | null;
   isGameFinished: boolean;
   onNumberClick: (num: number) => void;
 }) => {
@@ -34,14 +30,12 @@ const NumberGrid = memo(({
     }}>
       {numbers.map((num) => {
         const isCalled = calledSet.has(num);
-        const isPopupNumber = showPopup && popupNumber === num;
         
         return (
           <NumberButton
             key={num}
             number={num}
             isCalled={isCalled}
-            isPopupNumber={isPopupNumber}
             isGameFinished={isGameFinished}
             onClick={onNumberClick}
           />
@@ -55,13 +49,11 @@ const NumberGrid = memo(({
 const NumberButton = memo(({ 
   number, 
   isCalled, 
-  isPopupNumber, 
   isGameFinished, 
   onClick 
 }: {
   number: number;
   isCalled: boolean;
-  isPopupNumber: boolean;
   isGameFinished: boolean;
   onClick: (num: number) => void;
 }) => {
@@ -69,7 +61,7 @@ const NumberButton = memo(({
     width: "100%",
     aspectRatio: "1" as const,
     background: isCalled
-      ? (isPopupNumber ? "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)" : "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)")
+      ? "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)"
       : "linear-gradient(180deg, #8B0000 0%, #600000 100%)",
     color: isCalled ? "#000" : "#fff",
     border: isCalled ? "2px solid #FFD700" : "2px solid #400000",
@@ -86,7 +78,7 @@ const NumberButton = memo(({
     alignItems: "center",
     justifyContent: "center",
     minHeight: "clamp(25px, 4vw, 35px)"
-  }), [isCalled, isPopupNumber]);
+  }), [isCalled]);
 
   return (
     <button
@@ -179,8 +171,6 @@ const GamePageOptimized = (): JSX.Element => {
   });
   const [inputId, setInputId] = useState("");
   const [isGameFinished, setIsGameFinished] = useState(false);
-  const [showPopup, setShowPopup] = useState(false);
-  const [popupNumber, setPopupNumber] = useState<number | null>(null);
   
   // Check for active game on component mount
   useEffect(() => {
@@ -425,15 +415,8 @@ const GamePageOptimized = (): JSX.Element => {
                 return newCalled;
               });
 
-              // Synchronize popup and sound timing
-              setPopupNumber(calledNumber);
-              setShowPopup(true);
-              
-              // Play sound immediately with popup
+              // Play sound immediately
               audioManagerRef.current?.playSound(calledNumber);
-              
-              // Hide popup after consistent duration (2.5 seconds total)
-              setTimeout(() => setShowPopup(false), 2500);
             }
           } else if (response.status === 400 || response.status === 429) {
             setAutoCall(false);
@@ -500,15 +483,8 @@ const GamePageOptimized = (): JSX.Element => {
             return newCalled;
           });
 
-          // Synchronize popup and sound timing
-          setPopupNumber(calledNumber);
-          setShowPopup(true);
-          
-          // Play sound immediately with popup
+          // Play sound immediately
           audioManagerRef.current?.playSound(calledNumber);
-          
-          // Hide popup after consistent duration (2.5 seconds total)
-          setTimeout(() => setShowPopup(false), 2500);
         }
       }
     } catch (error) {
@@ -1068,8 +1044,6 @@ const GamePageOptimized = (): JSX.Element => {
           <NumberGrid 
             numbers={BINGO_NUMBERS}
             called={called}
-            showPopup={showPopup}
-            popupNumber={popupNumber}
             isGameFinished={isGameFinished}
             onNumberClick={handleNumberClick}
           />
@@ -1366,41 +1340,7 @@ const GamePageOptimized = (): JSX.Element => {
         </button>
       </div>
 
-      {/* Number Popup Animation */}
-      {showPopup && popupNumber && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: "rgba(0, 0, 0, 0.8)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000,
-          animation: "fadeIn 0.3s ease-in-out",
-        }}>
-          <div style={{
-            background: "linear-gradient(135deg, #ff6b6b 0%, #ffa500 50%, #ffd700 100%)",
-            borderRadius: "50%",
-            width: "clamp(120px, 25vw, 180px)",
-            height: "clamp(120px, 25vw, 180px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "clamp(36px, 8vw, 64px)",
-            fontWeight: "bold",
-            color: "#fff",
-            border: "6px solid #fff",
-            boxShadow: "0 0 40px rgba(255, 215, 0, 0.8)",
-            animation: "bounceIn 0.8s ease-in-out",
-            textShadow: "2px 2px 4px rgba(0,0,0,0.3)",
-          }}>
-            {popupNumber}
-          </div>
-        </div>
-      )}
+
 
       {/* Cartela Check Result Modal */}
       {showCartelaCheckModal && cartelaCheckResult && (

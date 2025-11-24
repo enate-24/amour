@@ -419,6 +419,33 @@ const NewGame: React.FC = () => {
 
 
 
+        {/* Game Statistics Display */}
+        {selectedCards.length > 0 && (
+          <div className="bg-slate-800 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6 border border-slate-600">
+            <h3 className="text-sm sm:text-base font-bold text-white mb-2 sm:mb-3">Game Summary</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
+              <div className="bg-blue-600 rounded-lg p-3 sm:p-4 text-center">
+                <div className="text-blue-100 font-medium">Total Bet Money</div>
+                <div className="text-white font-bold text-lg sm:text-xl">
+                  {(selectedCards.length * betBirr).toLocaleString()} Birr
+                </div>
+                <div className="text-blue-200 text-xs">
+                  {selectedCards.length} cards × {betBirr} Birr
+                </div>
+              </div>
+              <div className="bg-green-600 rounded-lg p-3 sm:p-4 text-center">
+                <div className="text-green-100 font-medium">Win Money</div>
+                <div className="text-white font-bold text-lg sm:text-xl">
+                  {((selectedCards.length * betBirr) - ((selectedCards.length * betBirr * housePercentage) / 100)).toLocaleString()} Birr
+                </div>
+                <div className="text-green-200 text-xs">
+                  Potential Win Amount
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4 sm:mb-6">
           <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
         <span className="text-xs sm:text-base">Bet Birr:</span>

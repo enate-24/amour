@@ -148,27 +148,6 @@ function checkWinningPatterns(calledNumbers, cartela, selectedPatterns) {
         // Get line completion info with current called numbers
         const { lines, completedLines } = countCompletedLines(grid, calledNumbers);
         
-        // IMPORTANT: Check if the last called number was necessary for the win
-        // If we have called numbers, verify the pattern wasn't already complete before the last number
-        if (calledNumbers.length > 0) {
-            const lastNumber = calledNumbers[calledNumbers.length - 1];
-            const numbersWithoutLast = calledNumbers.slice(0, -1);
-            const { lines: linesWithoutLast } = countCompletedLines(grid, numbersWithoutLast);
-            
-            console.log('🔍 Last called number:', lastNumber);
-            console.log('🔍 Lines with last number:', lines);
-            console.log('🔍 Lines without last number:', linesWithoutLast);
-            
-            // If the line count is the same with or without the last number,
-            // the last number didn't contribute to completing the pattern
-            if (lines === linesWithoutLast) {
-                console.log('❌ Last number did NOT complete any new line - NOT A VALID WIN');
-                return []; // Not a valid win - pattern was already complete
-            }
-            
-            console.log('✅ Last number completed a new line - VALID WIN CONDITION');
-        }
-        
         // Debug logging for troubleshooting
         console.log('🔍 Grid:', grid);
         console.log('🔍 Lines completed:', lines, 'which are:', completedLines);
@@ -177,17 +156,6 @@ function checkWinningPatterns(calledNumbers, cartela, selectedPatterns) {
         if (patternsToCheck.includes("Full House")) {
             const fullHousePattern = patterns.find(p => p.name === "Full House");
             if (fullHousePattern && checkPattern(grid, calledNumbers, fullHousePattern.positions)) {
-                // For Full House, also verify the last number was necessary
-                if (calledNumbers.length > 0) {
-                    const numbersWithoutLast = calledNumbers.slice(0, -1);
-                    const wasCompleteWithoutLast = checkPattern(grid, numbersWithoutLast, fullHousePattern.positions);
-                    
-                    if (wasCompleteWithoutLast) {
-                        console.log('❌ Full House was already complete before last number - NOT A VALID WIN');
-                        return []; // Not a valid win
-                    }
-                }
-                
                 console.log('🏆 FULL HOUSE DETECTED!');
                 winningPatterns.push("Full House");
                 return winningPatterns; // Full House wins immediately
