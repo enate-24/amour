@@ -60,15 +60,29 @@ router.get('/daily', authenticateToken, async (req, res) => {
     const allGames = await games.findAll();
     console.log(`📈 Found ${allGames.length} total games`);
     
+    // Filter games for today and current user
+    // Note: If user_id column doesn't exist yet, we'll get empty results until database is updated
     const todayGames = allGames.filter(game => {
-      const gameDate = new Date(game.createdAt).toISOString().split('T')[0];
-      return gameDate === today && game.user_id === userId && game.status === 'finished';
+      try {
+        const gameDate = new Date(game.createdAt).toISOString().split('T')[0];
+        // Handle case where user_id might not exist yet (before database update)
+        const gameUserId = game.user_id || null;
+        return gameDate === today && gameUserId === userId && game.status === 'finished';
+      } catch (error) {
+        console.warn('⚠️ Error filtering game:', error.message);
+        return false;
+      }
     });
     console.log(`🎯 Found ${todayGames.length} games for user ${userId} today`);
 
     const dailyProfit = todayGames.reduce((total, game) => {
-      const houseCut = (game.betMoney * game.cartelasSelected * (game.houseCutPercentage || 25)) / 100;
-      return total + houseCut;
+      try {
+        const houseCut = (game.betMoney * game.cartelasSelected * (game.houseCutPercentage || 10)) / 100;
+        return total + houseCut;
+      } catch (error) {
+        console.warn('⚠️ Error calculating house cut for game:', error.message);
+        return total;
+      }
     }, 0);
     console.log(`💰 Calculated daily profit: ${dailyProfit}`);
 
@@ -316,11 +330,13 @@ router.post('/refresh-profit', authenticateToken, async (req, res) => {
     console.log('📈 Found', allGames.length, 'total games');
     const todayGames = allGames.filter(game => {
       const gameDate = new Date(game.createdAt).toISOString().split('T')[0];
-      return gameDate === today && game.user_id === userId && game.status === 'finished';
+      // Handle case where user_id might not exist yet (before database update)
+      const gameUserId = game.user_id || null;
+      return gameDate === today && gameUserId === userId && game.status === 'finished';
     });
 
     const dailyProfit = todayGames.reduce((total, game) => {
-      const houseCut = (game.betMoney * game.cartelasSelected * (game.houseCutPercentage || 25)) / 100;
+      const houseCut = (game.betMoney * game.cartelasSelected * (game.houseCutPercentage || 10)) / 100;
       return total + houseCut;
     }, 0);
 
