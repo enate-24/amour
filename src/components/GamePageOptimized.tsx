@@ -94,45 +94,15 @@ const NumberButton = memo(({
   );
 });
 
-// Simplified audio manager with better error handling
+// Improved audio manager that prevents sound stacking
 class AudioManager {
-  private cache = new Map<number, HTMLAudioElement>();
+  private currentAudio: HTMLAudioElement | null = null;
   private failedFiles = new Set<number>();
+  private isPlaying = false;
+  private audioQueue: number[] = [];
 
   constructor() {
-    console.log('🔊 AudioManager initialized');
-  }
-
-  // Create audio element with simple, reliable approach
-  private createAudio(num: number): HTMLAudioElement {
-    // Skip cache entirely to avoid ERR_CACHE_OPERATION_NOT_SUPPORTED
-    // Create fresh audio element each time
-    
-    const audio = new Audio();
-    
-    // Set basic properties
-    audio.volume = 0.7;
-    audio.preload = 'none';
-    
-    // Use aggressive cache busting to avoid browser cache issues
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 15);
-    const audioSrc = `/sounds/${num}.wav?t=${timestamp}&r=${random}&nocache=true`;
-    
-    // Simple error handling
-    audio.addEventListener('error', () => {
-      console.warn(`❌ Audio load failed: ${num}.wav (cache bypass)`);
-      this.failedFiles.add(num);
-    }, { once: true });
-    
-    audio.addEventListener('loadstart', () => {
-      console.log(`🔊 Loading audio: ${num}.wav`);
-    }, { once: true });
-    
-    // Set src after event listeners are attached
-    audio.src = audioSrc;
-    
-    return audio;
+    console.log('🔊 AudioManager initialized with anti-stacking');
   }
 
   playSound(number: number): void {
@@ -141,63 +111,83 @@ class AudioManager {
       console.warn(`⏭️ Skipping ${number}.wav - known failed file`);
       return;
     }
-    
+
+    // If already playing, stop current sound first
+    if (this.isPlaying && this.currentAudio) {
+      console.log('🛑 Stopping previous sound to prevent stacking');
+      this.currentAudio.pause();
+      this.currentAudio.currentTime = 0;
+      this.currentAudio = null;
+    }
+
     try {
-      const audio = this.createAudio(number);
+      // Create fresh audio element
+      const audio = new Audio();
+      audio.volume = 0.7;
+      audio.preload = 'auto';
       
-      // Simple play approach
-      if (audio.readyState >= 2) {
-        // Audio is ready, play immediately
-        audio.currentTime = 0;
-        audio.play().catch((error) => {
-          console.warn(`🔊 Play error for ${number}.wav:`, error.message);
-        });
-      } else {
-        // Audio needs to load first
-        const playWhenReady = () => {
-          audio.currentTime = 0;
-          audio.play().catch((error) => {
-            console.warn(`🔊 Delayed play error for ${number}.wav:`, error.message);
-          });
-        };
-        
-        if (audio.readyState === 0) {
-          // Not started loading yet
-          audio.addEventListener('canplay', playWhenReady, { once: true });
-          audio.load();
-        } else {
-          // Currently loading
-          audio.addEventListener('canplay', playWhenReady, { once: true });
-        }
-      }
+      // Use cache busting
+      const timestamp = Date.now();
+      const audioSrc = `/sounds/${number}.wav?t=${timestamp}`;
+      
+      // Error handling
+      audio.addEventListener('error', () => {
+        console.warn(`❌ Audio load failed: ${number}.wav`);
+        this.failedFiles.add(number);
+        this.isPlaying = false;
+        this.currentAudio = null;
+      }, { once: true });
+      
+      // Track when audio starts playing
+      audio.addEventListener('play', () => {
+        console.log(`▶️ Playing: ${number}.wav`);
+        this.isPlaying = true;
+      }, { once: true });
+      
+      // Track when audio ends
+      audio.addEventListener('ended', () => {
+        console.log(`✅ Finished: ${number}.wav`);
+        this.isPlaying = false;
+        this.currentAudio = null;
+      }, { once: true });
+      
+      // Set source and play
+      audio.src = audioSrc;
+      this.currentAudio = audio;
+      
+      audio.play().catch((error) => {
+        console.warn(`🔊 Play error for ${number}.wav:`, error.message);
+        this.isPlaying = false;
+        this.currentAudio = null;
+      });
+      
     } catch (error) {
       console.warn(`🔊 Audio error for ${number}.wav:`, error);
       this.failedFiles.add(number);
+      this.isPlaying = false;
     }
   }
 
+  // Stop any currently playing sound
+  stopCurrent(): void {
+    if (this.currentAudio) {
+      this.currentAudio.pause();
+      this.currentAudio.currentTime = 0;
+      this.currentAudio = null;
+      this.isPlaying = false;
+      console.log('🛑 Stopped current audio');
+    }
+  }
 
-
-  // Debug method to check audio cache state
-  debugAudioCache(): void {
-    console.group('🔊 Audio Cache Debug');
-    console.log(`Cache size: ${this.cache.size}`);
-    console.log(`Failed files: ${Array.from(this.failedFiles)}`);
-    
-    this.cache.forEach((audio, num) => {
-      console.log(`Audio ${num}:`, {
-        src: audio.src,
-        readyState: audio.readyState,
-        networkState: audio.networkState,
-        error: audio.error?.message || 'none'
-      });
-    });
-    console.groupEnd();
+  // Check if audio is currently playing
+  getIsPlaying(): boolean {
+    return this.isPlaying;
   }
 
   cleanup(): void {
-    // Since we're not using cache anymore, just clear the failed files list
+    this.stopCurrent();
     this.failedFiles.clear();
+    this.audioQueue = [];
     console.log('🧹 Audio manager cleaned up');
   }
 }
@@ -536,15 +526,17 @@ const GamePageOptimized = (): JSX.Element => {
 
             const calledNumber = result.calledNumber;
             if (calledNumber) {
-              // Update state and play sound simultaneously
-              setCalled(prev => {
-                const newCalled = [...prev, calledNumber];
-                localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
-                return newCalled;
-              });
-              
-              // Play sound at the exact same time
+              // Play sound first
               audioManagerRef.current?.playSound(calledNumber);
+              
+              // Show popup after 1 second delay
+              setTimeout(() => {
+                setCalled(prev => {
+                  const newCalled = [...prev, calledNumber];
+                  localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
+                  return newCalled;
+                });
+              }, 1000);
             }
           } else if (response.status === 400 || response.status === 429) {
             console.log('Auto-call stopped due to API response:', response.status);
@@ -628,15 +620,17 @@ const GamePageOptimized = (): JSX.Element => {
 
         const calledNumber = result.calledNumber;
         if (calledNumber) {
-          // Update state and play sound simultaneously
-          setCalled(prev => {
-            const newCalled = [...prev, calledNumber];
-            localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
-            return newCalled;
-          });
-          
-          // Play sound at the exact same time
+          // Play sound first
           audioManagerRef.current?.playSound(calledNumber);
+          
+          // Show popup after 1 second delay
+          setTimeout(() => {
+            setCalled(prev => {
+              const newCalled = [...prev, calledNumber];
+              localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
+              return newCalled;
+            });
+          }, 1000);
         }
       } else {
         console.error('API error:', response.status);
