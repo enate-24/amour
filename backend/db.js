@@ -1,5 +1,5 @@
 // Export the PostgreSQL database operations
-const { pool, users, games, cartelas, adminLogs, userSettings, createTables, get, all, run } = require('./data/database');
+const { pool, users, games, cartelas, adminLogs, userSettings, dailyBonuses, createTables, get, all, run } = require('./data/database');
 
 module.exports = {
   pool,
@@ -8,6 +8,7 @@ module.exports = {
   cartelas,
   adminLogs,
   userSettings,
+  dailyBonuses,
   createTables,
   get,
   all,

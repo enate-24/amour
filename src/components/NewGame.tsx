@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Minus, Plus, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCartela } from '../hooks/useCartela';
+import HouseBonusButton from './HouseBonusButton';
 
 const NewGame: React.FC = () => {
   const { cartelas, loading, error } = useCartela();
@@ -416,6 +417,8 @@ const NewGame: React.FC = () => {
           <span>Bonus Played: <span className="text-green-400 font-bold">{bonusPlayed}</span></span>
         </div>
 
+
+
         <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4 sm:mb-6">
           <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
         <span className="text-xs sm:text-base">Bet Birr:</span>
@@ -495,6 +498,10 @@ const NewGame: React.FC = () => {
         <span className="hidden sm:inline">Enter ID (Fast)</span>
         <span className="sm:hidden">Enter ID</span>
           </button>
+          
+          {/* House Bonus Button */}
+          <HouseBonusButton />
+          
           <button
         className="bg-green-600 hover:bg-green-700 px-4 py-2 sm:px-6 sm:py-2.5 md:px-8 md:py-3 rounded-lg font-bold transition-colors text-xs sm:text-sm md:text-base"
         onClick={handleStartGame}

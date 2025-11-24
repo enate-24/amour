@@ -564,6 +564,20 @@ const GamePageOptimized = (): JSX.Element => {
 
           if (response.ok) {
             console.log('✅ Game finished successfully');
+            
+            // Refresh daily profit calculation for house bonus
+            try {
+              await fetch(`${API_BASE_URL}/bonuses/refresh-profit`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                }
+              });
+              console.log('✅ Daily profit refreshed for house bonus');
+            } catch (bonusError) {
+              console.error('Failed to refresh daily profit:', bonusError);
+            }
           } else {
             console.error('Failed to finish game in backend');
           }
@@ -579,7 +593,7 @@ const GamePageOptimized = (): JSX.Element => {
     
     // Navigate immediately to new game page
     navigate('/newgame', { replace: true });
-  }, [navigate, currentGameData, playerWin, API_BASE_URL]);
+  }, [navigate, currentGameData, playerWin, selectedCartelas, betAmount, API_BASE_URL]);
 
   const handleCheckCartela = useCallback(async () => {
     if (!inputId.trim()) {

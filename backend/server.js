@@ -18,6 +18,7 @@ const adminRoutes = require('./routes/admin');
 const dashboardRoutes = require('./routes/dashboard');
 const soundRoutes = require('./routes/sound');
 const settingsRoutes = require('./routes/settings');
+const bonusRoutes = require('./routes/bonuses');
 
 const app = express();
 const PORT = process.env.PORT || 3003; // Changed from 3001 to 3002
@@ -158,6 +159,10 @@ app.use('/api/dashboard', (req, res, next) => {
 }, dashboardRoutes);
 app.use('/api/sound', soundRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/bonuses', (req, res, next) => {
+  console.log('🎁 Bonus router hit:', req.method, req.path);
+  next();
+}, bonusRoutes);
 
 
 

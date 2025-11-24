@@ -271,6 +271,25 @@ const createTables = async () => {
         )
       `);
 
+      // Daily bonuses table
+      await run(`
+        CREATE TABLE IF NOT EXISTS daily_bonuses (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          bonus_date DATE NOT NULL,
+          daily_profit DECIMAL(10,2) DEFAULT 0,
+          bonus_amount DECIMAL(10,2) DEFAULT 200,
+          bonus_type VARCHAR(50) DEFAULT 'house_bonus',
+          requirements_met BOOLEAN DEFAULT false,
+          bonus_claimed BOOLEAN DEFAULT false,
+          bonus_used BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+          UNIQUE(user_id, bonus_date)
+        )
+      `);
+
       console.log('✅ Database schema initialized successfully');
       return; // Success, exit the retry loop
       
@@ -788,6 +807,93 @@ const userSettingsOperations = {
   }
 };
 
+// Database operations for daily bonuses
+const dailyBonusOperations = {
+  findByUserAndDate: async (userId, date) => {
+    const dateStr = date instanceof Date ? date.toISOString().split('T')[0] : date;
+    return get('SELECT * FROM daily_bonuses WHERE user_id = $1 AND bonus_date = $2', [userId, dateStr]);
+  },
+
+  findByUser: async (userId, limit = 30) => {
+    return all('SELECT * FROM daily_bonuses WHERE user_id = $1 ORDER BY bonus_date DESC LIMIT $2', [userId, limit]);
+  },
+
+  create: async (bonusData) => {
+    const { v4: uuidv4 } = require('uuid');
+    return run(`
+      INSERT INTO daily_bonuses (id, user_id, bonus_date, daily_profit, bonus_amount, bonus_type, requirements_met, bonus_claimed, bonus_used, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `, [
+      bonusData.id || uuidv4(),
+      bonusData.userId,
+      bonusData.bonusDate,
+      bonusData.dailyProfit || 0,
+      bonusData.bonusAmount || 200,
+      bonusData.bonusType || 'house_bonus',
+      bonusData.requirementsMet || false,
+      bonusData.bonusClaimed || false,
+      bonusData.bonusUsed || false,
+      bonusData.createdAt || new Date().toISOString(),
+      bonusData.updatedAt || new Date().toISOString()
+    ]);
+  },
+
+  update: async (userId, date, updateData) => {
+    const dateStr = date instanceof Date ? date.toISOString().split('T')[0] : date;
+    const fields = [];
+    const values = [];
+    let paramCount = 1;
+
+    if (updateData.dailyProfit !== undefined) {
+      fields.push(`daily_profit = $${paramCount}`);
+      values.push(updateData.dailyProfit);
+      paramCount++;
+    }
+    if (updateData.bonusAmount !== undefined) {
+      fields.push(`bonus_amount = $${paramCount}`);
+      values.push(updateData.bonusAmount);
+      paramCount++;
+    }
+    if (updateData.requirementsMet !== undefined) {
+      fields.push(`requirements_met = $${paramCount}`);
+      values.push(updateData.requirementsMet);
+      paramCount++;
+    }
+    if (updateData.bonusClaimed !== undefined) {
+      fields.push(`bonus_claimed = $${paramCount}`);
+      values.push(updateData.bonusClaimed);
+      paramCount++;
+    }
+    if (updateData.bonusUsed !== undefined) {
+      fields.push(`bonus_used = $${paramCount}`);
+      values.push(updateData.bonusUsed);
+      paramCount++;
+    }
+
+    fields.push(`updated_at = $${paramCount}`);
+    values.push(new Date().toISOString());
+    paramCount++;
+
+    values.push(userId);
+    values.push(dateStr);
+
+    const sql = `UPDATE daily_bonuses SET ${fields.join(', ')} WHERE user_id = $${paramCount-1} AND bonus_date = $${paramCount}`;
+    return run(sql, values);
+  },
+
+  getLeaderboard: async (date, limit = 10) => {
+    const dateStr = date instanceof Date ? date.toISOString().split('T')[0] : date;
+    return all(`
+      SELECT db.*, u.username 
+      FROM daily_bonuses db 
+      JOIN users u ON db.user_id = u.id 
+      WHERE db.bonus_date = $1 AND db.requirements_met = true 
+      ORDER BY db.daily_profit DESC, db.bonus_amount DESC 
+      LIMIT $2
+    `, [dateStr, limit]);
+  }
+};
+
 module.exports = {
   pool,
   run,
@@ -799,5 +905,6 @@ module.exports = {
   cartelas: cartelaOperations,
   adminLogs: adminLogOperations,
   sounds: soundOperations,
-  userSettings: userSettingsOperations
+  userSettings: userSettingsOperations,
+  dailyBonuses: dailyBonusOperations
 };
