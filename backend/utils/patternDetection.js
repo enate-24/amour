@@ -205,24 +205,46 @@ function getPatternDescription(patternName) {
  */
 function validateCartela(cartela) {
     try {
-        if (!cartela || typeof cartela !== 'object')
+        if (!cartela || typeof cartela !== 'object') {
+            console.error('❌ Validation failed: cartela is not an object');
             return false;
-        if (!cartela.card_id || typeof cartela.card_id !== 'string')
+        }
+        if (!cartela.card_id || typeof cartela.card_id !== 'string') {
+            console.error('❌ Validation failed: card_id is missing or not a string', cartela.card_id);
             return false;
-        if (!cartela.numbers || typeof cartela.numbers !== 'object')
+        }
+        if (!cartela.numbers || typeof cartela.numbers !== 'object') {
+            console.error('❌ Validation failed: numbers is missing or not an object');
             return false;
+        }
         const columns = ['B', 'I', 'N', 'G', 'O'];
         for (const col of columns) {
-            if (!Array.isArray(cartela.numbers[col]) || cartela.numbers[col].length !== 5) {
+            if (!Array.isArray(cartela.numbers[col])) {
+                console.error(`❌ Validation failed: column ${col} is not an array`);
                 return false;
             }
-            for (const num of cartela.numbers[col]) {
+            if (cartela.numbers[col].length !== 5) {
+                console.error(`❌ Validation failed: column ${col} length is ${cartela.numbers[col].length}, expected 5`);
+                return false;
+            }
+            for (let i = 0; i < cartela.numbers[col].length; i++) {
+                const num = cartela.numbers[col][i];
                 // Allow 0 for FREE space in N column
-                if (typeof num !== 'number' || isNaN(num) || (num < 0 || num > 75)) {
+                if (typeof num !== 'number') {
+                    console.error(`❌ Validation failed: column ${col}[${i}] is not a number, got ${typeof num}: ${num}`);
+                    return false;
+                }
+                if (isNaN(num)) {
+                    console.error(`❌ Validation failed: column ${col}[${i}] is NaN`);
+                    return false;
+                }
+                if (num < 0 || num > 75) {
+                    console.error(`❌ Validation failed: column ${col}[${i}] is out of range (${num}), expected 0-75`);
                     return false;
                 }
             }
         }
+        console.log('✅ Cartela validation passed');
         return true;
     }
     catch (error) {

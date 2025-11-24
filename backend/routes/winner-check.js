@@ -100,6 +100,58 @@ router.post('/', [
       });
     }
 
+    // Convert 2D array format to BINGO column format if needed
+    // Database stores as [[row1], [row2], ...] but validation expects {B: [...], I: [...], N: [...], G: [...], O: [...]}
+    if (Array.isArray(cartelaNumbers) && cartelaNumbers.length === 5 && Array.isArray(cartelaNumbers[0])) {
+      console.log('🔄 Converting 2D array format to BINGO column format');
+      const bingoFormat = {
+        B: [],
+        I: [],
+        N: [],
+        G: [],
+        O: []
+      };
+      const columns = ['B', 'I', 'N', 'G', 'O'];
+      
+      // Transpose: convert rows to columns
+      for (let col = 0; col < 5; col++) {
+        for (let row = 0; row < 5; row++) {
+          const value = cartelaNumbers[row][col];
+          // Convert "FREE" or "Free" strings to 0 for the center square
+          if (col === 2 && row === 2 && (value === "FREE" || value === "Free")) {
+            bingoFormat[columns[col]].push(0);
+          } else {
+            bingoFormat[columns[col]].push(value);
+          }
+        }
+      }
+      cartelaNumbers = bingoFormat;
+      console.log('✅ Converted to BINGO format:', cartelaNumbers);
+    }
+
+    // Handle "FREE" or "Free" strings in BINGO format (already in column format)
+    if (cartelaNumbers && typeof cartelaNumbers === 'object' && !Array.isArray(cartelaNumbers)) {
+      console.log('🔍 Checking BINGO format for FREE strings...');
+      const columns = ['B', 'I', 'N', 'G', 'O'];
+      for (const col of columns) {
+        if (Array.isArray(cartelaNumbers[col])) {
+          console.log(`  Column ${col} before:`, cartelaNumbers[col]);
+          cartelaNumbers[col] = cartelaNumbers[col].map((value, index) => {
+            // Convert "FREE" or "Free" strings to 0 (center of N column)
+            if (col === 'N' && index === 2 && (value === "FREE" || value === "Free")) {
+              console.log(`  ✅ Converting "${value}" to 0 in N column position 2`);
+              return 0;
+            }
+            return value;
+          });
+          console.log(`  Column ${col} after:`, cartelaNumbers[col]);
+        }
+      }
+      console.log('✅ Converted FREE strings to 0 in BINGO format');
+    }
+    
+    console.log('🔍 Final cartelaNumbers before validation:', JSON.stringify(cartelaNumbers, null, 2));
+
     // Get called numbers from client only (not stored in database)
     let calledNumbers = [];
     if (clientCalledNumbers && Array.isArray(clientCalledNumbers) && clientCalledNumbers.length > 0) {
@@ -115,12 +167,21 @@ router.post('/', [
 
     // Format cartela for pattern checking
     const formattedCartela = {
-      card_id: cartela.card_id,
+      card_id: String(cartela.card_id), // Ensure card_id is a string
       numbers: cartelaNumbers
     };
 
+    console.log('🔍 Formatted cartela for validation:', {
+      card_id: formattedCartela.card_id,
+      card_id_type: typeof formattedCartela.card_id,
+      has_numbers: !!formattedCartela.numbers,
+      numbers_type: typeof formattedCartela.numbers,
+      is_array: Array.isArray(formattedCartela.numbers)
+    });
+
     // Validate cartela structure
     if (!validateCartela(formattedCartela)) {
+      console.error('❌ Cartela validation failed for:', JSON.stringify(formattedCartela, null, 2));
       return res.status(400).json({
         success: false,
         message: 'Invalid cartela structure',
