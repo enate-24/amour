@@ -565,18 +565,24 @@ const GamePageOptimized = (): JSX.Element => {
           if (response.ok) {
             console.log('✅ Game finished successfully');
             
-            // Refresh daily profit calculation for house bonus
+            // Refresh daily profit calculation for house bonus (optional)
             try {
-              await fetch(`${API_BASE_URL}/bonuses/refresh-profit`, {
+              const bonusResponse = await fetch(`${API_BASE_URL}/bonuses/refresh-profit`, {
                 method: 'POST',
                 headers: {
                   'Authorization': `Bearer ${token}`,
                   'Content-Type': 'application/json'
                 }
               });
-              console.log('✅ Daily profit refreshed for house bonus');
+              
+              if (bonusResponse.ok) {
+                console.log('✅ Daily profit refreshed for house bonus');
+              } else {
+                console.warn('⚠️ Bonus system not available (status:', bonusResponse.status, ')');
+              }
             } catch (bonusError) {
-              console.error('Failed to refresh daily profit:', bonusError);
+              console.warn('⚠️ Bonus system not available:', bonusError instanceof Error ? bonusError.message : 'Unknown error');
+              // Don't block game completion if bonus system is unavailable
             }
           } else {
             console.error('Failed to finish game in backend');

@@ -174,8 +174,10 @@ const createTables = async () => {
           total_numbers INTEGER NOT NULL,
           winner_pattern TEXT,
           house_cut_percentage DECIMAL(5,2) DEFAULT 10.0,
+          user_id TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id)
         )
       `);
 
@@ -183,6 +185,7 @@ const createTables = async () => {
       try {
         await run(`ALTER TABLE games ADD COLUMN IF NOT EXISTS number_sequence TEXT`);
         await run(`ALTER TABLE games ADD COLUMN IF NOT EXISTS selected_cartelas TEXT`);
+        await run(`ALTER TABLE games ADD COLUMN IF NOT EXISTS user_id TEXT`);
       } catch (alterError) {
         // Ignore errors if columns already exist
         console.log('Note: Some ALTER TABLE operations may have been skipped (columns might already exist)');
@@ -543,6 +546,8 @@ const gameOperations = {
       calledNumbers: JSON.parse(game.called_numbers || '[]'),
       totalNumbers: game.total_numbers,
       winnerPattern: game.winner_pattern,
+      user_id: game.user_id,
+      houseCutPercentage: parseFloat(game.house_cut_percentage || 10),
       createdAt: game.created_at,
       updatedAt: game.updated_at
     }));
@@ -561,6 +566,8 @@ const gameOperations = {
         calledNumbers: JSON.parse(game.called_numbers || '[]'),
         totalNumbers: game.total_numbers,
         winnerPattern: game.winner_pattern,
+        user_id: game.user_id,
+        houseCutPercentage: parseFloat(game.house_cut_percentage || 10),
         createdAt: game.created_at,
         updatedAt: game.updated_at
       };
@@ -571,8 +578,8 @@ const gameOperations = {
   findByStatus: (status) => all('SELECT * FROM games WHERE status = $1', [status]),
 
   create: (gameData) => run(`
-    INSERT INTO games (id, game_number, status, bet_money, win_money, cartelas_selected, called_numbers, total_numbers, winner_pattern, created_at, updated_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    INSERT INTO games (id, game_number, status, bet_money, win_money, cartelas_selected, called_numbers, total_numbers, winner_pattern, house_cut_percentage, user_id, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
   `, [
     gameData.id,
     gameData.gameNumber,
@@ -583,6 +590,8 @@ const gameOperations = {
     JSON.stringify(gameData.calledNumbers || []),
     gameData.totalNumbers,
     gameData.winnerPattern,
+    gameData.houseCutPercentage || 10.0,
+    gameData.user_id,
     gameData.createdAt || new Date().toISOString(),
     gameData.updatedAt || new Date().toISOString()
   ]),

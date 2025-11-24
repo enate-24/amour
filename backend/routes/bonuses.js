@@ -40,25 +40,44 @@ const calculateBonusEligibility = (dailyProfit) => {
 // GET /api/bonuses/daily - Get today's bonus status
 router.get('/daily', authenticateToken, async (req, res) => {
   try {
+    console.log('🎁 Daily bonus request from user:', req.user.id);
     const userId = req.user.id;
     const today = new Date().toISOString().split('T')[0];
 
+    // Check if required operations are available
+    if (!games || typeof games.findAll !== 'function') {
+      console.error('❌ Games operations not available');
+      return res.status(500).json({ error: 'Games operations not available' });
+    }
+
+    if (!dailyBonuses || typeof dailyBonuses.findByUserAndDate !== 'function') {
+      console.error('❌ Daily bonus operations not available');
+      return res.status(500).json({ error: 'Daily bonus operations not available' });
+    }
+
     // Calculate daily profit from games
+    console.log('📊 Fetching all games...');
     const allGames = await games.findAll();
+    console.log(`📈 Found ${allGames.length} total games`);
+    
     const todayGames = allGames.filter(game => {
       const gameDate = new Date(game.createdAt).toISOString().split('T')[0];
       return gameDate === today && game.user_id === userId && game.status === 'finished';
     });
+    console.log(`🎯 Found ${todayGames.length} games for user ${userId} today`);
 
     const dailyProfit = todayGames.reduce((total, game) => {
       const houseCut = (game.betMoney * game.cartelasSelected * (game.houseCutPercentage || 25)) / 100;
       return total + houseCut;
     }, 0);
+    console.log(`💰 Calculated daily profit: ${dailyProfit}`);
 
     // Get or create today's bonus record
+    console.log('🔍 Looking for existing bonus record...');
     let dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
 
     if (!dailyBonus) {
+      console.log('➕ Creating new daily bonus record...');
       // Create new daily bonus record
       await dailyBonuses.create({
         userId,
@@ -70,15 +89,20 @@ router.get('/daily', authenticateToken, async (req, res) => {
         bonusUsed: false
       });
       dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
+      console.log('✅ Created new bonus record');
     } else {
+      console.log('🔄 Updating existing bonus record...');
       // Update daily profit
       await dailyBonuses.update(userId, today, { dailyProfit: dailyProfit });
       dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
+      console.log('✅ Updated bonus record');
     }
 
     // Calculate current bonus eligibility
     const bonusStatus = calculateBonusEligibility(dailyProfit);
+    console.log('🎯 Bonus status:', bonusStatus);
 
+    console.log('✅ Sending successful response');
     res.json({
       success: true,
       dailyBonus: {
@@ -274,11 +298,22 @@ router.get('/leaderboard', authenticateToken, async (req, res) => {
 // POST /api/bonuses/refresh-profit - Refresh daily profit calculation
 router.post('/refresh-profit', authenticateToken, async (req, res) => {
   try {
+    console.log('🔄 Refresh profit called for user:', req.user.id);
+    
     const userId = req.user.id;
     const today = new Date().toISOString().split('T')[0];
 
+    console.log('📊 Fetching games for profit calculation...');
+    
+    // Check if games operations are available
+    if (!games || typeof games.findAll !== 'function') {
+      console.error('❌ Games operations not available');
+      return res.status(500).json({ error: 'Games operations not available' });
+    }
+
     // Calculate daily profit from games
     const allGames = await games.findAll();
+    console.log('📈 Found', allGames.length, 'total games');
     const todayGames = allGames.filter(game => {
       const gameDate = new Date(game.createdAt).toISOString().split('T')[0];
       return gameDate === today && game.user_id === userId && game.status === 'finished';
@@ -289,10 +324,18 @@ router.post('/refresh-profit', authenticateToken, async (req, res) => {
       return total + houseCut;
     }, 0);
 
+    // Check if dailyBonuses operations are available
+    if (!dailyBonuses || typeof dailyBonuses.findByUserAndDate !== 'function') {
+      console.error('❌ Daily bonus operations not available');
+      return res.status(500).json({ error: 'Daily bonus operations not available' });
+    }
+
     // Get or create today's bonus record
+    console.log('🔍 Looking for existing bonus record...');
     let dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
 
     if (!dailyBonus) {
+      console.log('➕ Creating new bonus record...');
       await dailyBonuses.create({
         userId,
         bonusDate: today,
@@ -303,6 +346,7 @@ router.post('/refresh-profit', authenticateToken, async (req, res) => {
         bonusUsed: false
       });
     } else {
+      console.log('🔄 Updating existing bonus record...');
       // Only update profit if bonus hasn't been used (to preserve deduction)
       if (!dailyBonus.bonus_used) {
         await dailyBonuses.update(userId, today, { dailyProfit: dailyProfit });

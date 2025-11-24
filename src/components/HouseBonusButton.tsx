@@ -38,6 +38,12 @@ const HouseBonusButton: React.FC = () => {
       if (response.ok) {
         const result = await response.json();
         setBonusData(result.dailyBonus);
+      } else if (response.status === 404 || response.status === 500) {
+        // Bonus system not available - hide component
+        console.warn('⚠️ Bonus system not available, hiding bonus button');
+        setBonusData(null);
+      } else {
+        console.error('❌ Bonus API error:', response.status, response.statusText);
       }
     } catch (err) {
       console.error('Error fetching house bonus data:', err);
@@ -81,9 +87,32 @@ const HouseBonusButton: React.FC = () => {
 
   useEffect(() => {
     fetchBonusData();
-    // Refresh every 30 seconds to update profit
-    const interval = setInterval(fetchBonusData, 30000);
-    return () => clearInterval(interval);
+    
+    // Only set up interval if initial fetch was successful
+    let interval: NodeJS.Timeout | null = null;
+    
+    const setupInterval = () => {
+      interval = setInterval(async () => {
+        try {
+          await fetchBonusData();
+        } catch (error) {
+          console.warn('⚠️ Bonus data fetch failed, stopping auto-refresh');
+          if (interval) {
+            clearInterval(interval);
+            interval = null;
+          }
+        }
+      }, 30000);
+    };
+    
+    // Set up interval after a short delay to allow initial fetch to complete
+    setTimeout(setupInterval, 1000);
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
   }, []);
 
   // Don't show anything if loading or no data
