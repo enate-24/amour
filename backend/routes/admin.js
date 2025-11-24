@@ -660,17 +660,19 @@ router.delete('/users/:userId', authenticateToken, requireAdmin, async (req, res
     }
 
     if (hardDelete === 'true') {
-      // Hard delete: Remove user and all associated data (CASCADE will handle cartelas and logs)
+      // Hard delete: Remove user and all associated data (CASCADE will handle dependencies)
       // First, get counts for logging
       const allCartelas = await cartelas.findAll();
       const userCartelas = allCartelas.filter(c => c.user_id === userId);
       const allGames = await games.findAll();
-      const userGames = allGames.filter(g => 
-        userCartelas.some(c => c.game_id === g.id)
-      );
+      const userGames = allGames.filter(g => g.user_id === userId);
+
+      console.log('🗑️ Starting hard delete process for user:', userId);
+      console.log(`   - User cartelas: ${userCartelas.length}`);
+      console.log(`   - User games: ${userGames.length}`);
 
       // Log admin action BEFORE deletion to avoid foreign key constraint issues
-      console.log('📝 Creating admin log for user deletion:', userId);
+      console.log('📝 Creating admin log for user deletion...');
       await adminLogs.create({
         id: uuidv4(),
         adminId: req.user.id,
@@ -681,22 +683,24 @@ router.delete('/users/:userId', authenticateToken, requireAdmin, async (req, res
           username: user.username, 
           email: user.email,
           deletedCartelas: userCartelas.length,
-          affectedGames: userGames.length
+          userGames: userGames.length
         },
         ipAddress: req.ip || req.connection.remoteAddress
       });
       console.log('✅ Admin log created successfully');
 
-      // Now delete user (CASCADE will delete cartelas and other related data)
-      console.log('🗑️ Attempting to delete user from database:', userId);
+      // Now delete user (CASCADE will automatically delete cartelas, admin_logs, user_settings, daily_bonuses)
+      // Games will have user_id set to NULL (ON DELETE SET NULL)
+      console.log('🗑️ Deleting user from database (CASCADE will handle dependencies)...');
       const deleteResult = await run('DELETE FROM users WHERE id = $1', [userId]);
-      console.log('✅ User deletion result:', deleteResult);
+      console.log('✅ User deletion completed:', deleteResult);
 
       res.json({ 
         message: 'User and all associated data deleted successfully',
         deletedData: {
           cartelas: userCartelas.length,
-          affectedGames: userGames.length
+          userGames: userGames.length,
+          note: 'CASCADE automatically deleted cartelas, admin_logs, user_settings, and daily_bonuses'
         }
       });
     } else {

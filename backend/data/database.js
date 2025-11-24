@@ -177,7 +177,7 @@ const createTables = async () => {
           user_id TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users (id)
+          FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
         )
       `);
 
@@ -203,8 +203,8 @@ const createTables = async () => {
           is_active INTEGER DEFAULT 1,
           is_winner INTEGER DEFAULT 0,
           purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (game_id) REFERENCES games (id),
-          FOREIGN KEY (user_id) REFERENCES users (id)
+          FOREIGN KEY (game_id) REFERENCES games (id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
         )
       `);
 
@@ -219,7 +219,7 @@ const createTables = async () => {
           details TEXT, -- JSON string
           ip_address INET,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (admin_id) REFERENCES users (id)
+          FOREIGN KEY (admin_id) REFERENCES users (id) ON DELETE CASCADE
         )
       `);
 
