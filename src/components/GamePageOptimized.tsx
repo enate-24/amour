@@ -99,7 +99,6 @@ class AudioManager {
   private currentAudio: HTMLAudioElement | null = null;
   private failedFiles = new Set<number>();
   private isPlaying = false;
-  private audioQueue: number[] = [];
 
   constructor() {
     console.log('🔊 AudioManager initialized with anti-stacking');
@@ -187,7 +186,6 @@ class AudioManager {
   cleanup(): void {
     this.stopCurrent();
     this.failedFiles.clear();
-    this.audioQueue = [];
     console.log('🧹 Audio manager cleaned up');
   }
 }
@@ -323,11 +321,39 @@ const GamePageOptimized = (): JSX.Element => {
     checkActiveGame();
   }, [navigate, API_BASE_URL]);
   
+  // Load selected pattern from settings
+  useEffect(() => {
+    const loadPattern = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+
+        const response = await fetch(`${API_BASE_URL}/settings`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const pattern = data.selectedPattern || "Two Lines";
+          setSelectedPattern(pattern);
+          console.log('✅ Loaded pattern from settings:', pattern);
+        }
+      } catch (error) {
+        console.error('Error loading pattern from settings:', error);
+      }
+    };
+
+    loadPattern();
+  }, [API_BASE_URL]);
+  
   // Game configuration
   const [selectedCartelas, setSelectedCartelas] = useState(0);
   const [betAmount, setBetAmount] = useState(5);
   const [playerWin, setPlayerWin] = useState(0);
-  const [selectedPattern] = useState<string>("Two Lines");
+  const [selectedPattern, setSelectedPattern] = useState<string>("Two Lines");
   
   // UI state
   const [isCallingNumber, setIsCallingNumber] = useState(false);
@@ -397,17 +423,13 @@ const GamePageOptimized = (): JSX.Element => {
     
     // Expose debug methods to window for debugging
     if (process.env.NODE_ENV === 'development') {
-      (window as any).debugAudio = () => {
-        audioManagerRef.current?.debugAudioCache();
-      };
-      
       (window as any).testAudio = (num: number) => {
-        console.log(`🧪 Testing audio ${num} with cache bypass...`);
+        console.log(`🧪 Testing audio ${num}...`);
         audioManagerRef.current?.playSound(num);
       };
       
       (window as any).testAudioMultiple = (nums: number[]) => {
-        console.log(`🧪 Testing multiple audio files with cache bypass...`);
+        console.log(`🧪 Testing multiple audio files...`);
         nums.forEach((num, index) => {
           setTimeout(() => {
             console.log(`🔊 Playing ${num}...`);
@@ -420,7 +442,6 @@ const GamePageOptimized = (): JSX.Element => {
     return () => {
       audioManagerRef.current?.cleanup();
       if (process.env.NODE_ENV === 'development') {
-        delete (window as any).debugAudio;
         delete (window as any).testAudio;
         delete (window as any).testAudioMultiple;
       }
