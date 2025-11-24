@@ -536,14 +536,14 @@ const GamePageOptimized = (): JSX.Element => {
 
             const calledNumber = result.calledNumber;
             if (calledNumber) {
-              // Update state first (non-blocking)
+              // Update state and play sound simultaneously
               setCalled(prev => {
                 const newCalled = [...prev, calledNumber];
                 localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
                 return newCalled;
               });
-
-              // Play sound immediately
+              
+              // Play sound at the exact same time
               audioManagerRef.current?.playSound(calledNumber);
             }
           } else if (response.status === 400 || response.status === 429) {
@@ -628,14 +628,14 @@ const GamePageOptimized = (): JSX.Element => {
 
         const calledNumber = result.calledNumber;
         if (calledNumber) {
-          // Update state first (non-blocking)
+          // Update state and play sound simultaneously
           setCalled(prev => {
             const newCalled = [...prev, calledNumber];
             localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
             return newCalled;
           });
-
-          // Play sound immediately
+          
+          // Play sound at the exact same time
           audioManagerRef.current?.playSound(calledNumber);
         }
       } else {
