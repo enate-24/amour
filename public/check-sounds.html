@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Files Diagnostic</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .result-section {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .result-section h3 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        .file-list {
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .exists { color: #4CAF50; }
+        .missing { color: #f44336; }
+        .checking { color: #ff9800; }
+        .progress {
+            background: #333;
+            border-radius: 4px;
+            padding: 8px;
+            margin: 10px 0;
+        }
+        .progress-bar {
+            background: #4CAF50;
+            height: 20px;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔊 Audio Files Diagnostic Tool</h1>
+        <p>This tool checks if all required audio files exist and are accessible.</p>
+        
+        <div>
+            <button onclick="checkAllFiles()" id="checkBtn">Check All Audio Files (1-75)</button>
+            <button onclick="checkSpecialFiles()">Check Special Files</button>
+            <button onclick="clearResults()">Clear Results</button>
+        </div>
+        
+        <div class="progress" id="progress" style="display: none;">
+            <div>Progress: <span id="progressText">0/75</span></div>
+            <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+        </div>
+        
+        <div class="results" id="results"></div>
+    </div>
+
+    <script>
+        let checkInProgress = false;
+
+        function updateProgress(current, total) {
+            const progressElement = document.getElementById('progress');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            
+            progressElement.style.display = 'block';
+            progressText.textContent = `${current}/${total}`;
+            progressBar.style.width = `${(current / total) * 100}%`;
+            
+            if (current === total) {
+                setTimeout(() => {
+                    progressElement.style.display = 'none';
+                }, 2000);
+            }
+        }
+
+        async function checkFileExists(filename) {
+            try {
+                const response = await fetch(`/sounds/${filename}`, { method: 'HEAD' });
+                return {
+                    exists: response.ok,
+                    status: response.status,
+                    size: response.headers.get('content-length'),
+                    type: response.headers.get('content-type')
+                };
+            } catch (error) {
+                return {
+                    exists: false,
+                    error: error.message
+                };
+            }
+        }
+
+        async function checkAllFiles() {
+            if (checkInProgress) return;
+            
+            checkInProgress = true;
+            document.getElementById('checkBtn').disabled = true;
+            
+            const results = document.getElementById('results');
+            results.innerHTML = '<div class="result-section"><h3>Checking files...</h3></div>';
+            
+            const existingFiles = [];
+            const missingFiles = [];
+            
+            // Check files 1-75
+            for (let i = 1; i <= 75; i++) {
+                updateProgress(i, 75);
+                
+                const result = await checkFileExists(`${i}.wav`);
+                
+                if (result.exists) {
+                    existingFiles.push({
+                        name: `${i}.wav`,
+                        size: result.size,
+                        type: result.type
+                    });
+                } else {
+                    missingFiles.push({
+                        name: `${i}.wav`,
+                        status: result.status,
+                        error: result.error
+                    });
+                }
+                
+                // Small delay to prevent overwhelming the server
+                if (i % 10 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            }
+            
+            displayResults(existingFiles, missingFiles);
+            
+            checkInProgress = false;
+            document.getElementById('checkBtn').disabled = false;
+        }
+
+        async function checkSpecialFiles() {
+            const specialFiles = ['winner.wav', 'notwinner.wav', 'shuffle-audio-TfqyAnvz.mp3'];
+            const results = [];
+            
+            for (const filename of specialFiles) {
+                const result = await checkFileExists(filename);
+                results.push({
+                    name: filename,
+                    exists: result.exists,
+                    size: result.size,
+                    type: result.type,
+                    status: result.status,
+                    error: result.error
+                });
+            }
+            
+            displaySpecialResults(results);
+        }
+
+        function displayResults(existing, missing) {
+            const results = document.getElementById('results');
+            
+            const totalFiles = existing.length + missing.length;
+            const successRate = ((existing.length / totalFiles) * 100).toFixed(1);
+            
+            results.innerHTML = `
+                <div class="result-section">
+                    <h3>📊 Summary</h3>
+                    <div>Total files checked: ${totalFiles}</div>
+                    <div class="exists">✅ Existing: ${existing.length}</div>
+                    <div class="missing">❌ Missing: ${missing.length}</div>
+                    <div>Success rate: ${successRate}%</div>
+                </div>
+                
+                <div class="result-section">
+                    <h3>✅ Existing Files (${existing.length})</h3>
+                    <div class="file-list">
+                        ${existing.map(file => 
+                            `<div class="exists">${file.name} (${file.size || 'unknown'} bytes)</div>`
+                        ).join('')}
+                    </div>
+                </div>
+                
+                <div class="result-section">
+                    <h3>❌ Missing Files (${missing.length})</h3>
+                    <div class="file-list">
+                        ${missing.map(file => 
+                            `<div class="missing">${file.name} - Status: ${file.status || 'Error'} ${file.error ? `(${file.error})` : ''}</div>`
+                        ).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function displaySpecialResults(results) {
+            const resultsDiv = document.getElementById('results');
+            
+            const existingSpecial = results.filter(r => r.exists);
+            const missingSpecial = results.filter(r => !r.exists);
+            
+            resultsDiv.innerHTML = `
+                <div class="result-section">
+                    <h3>🎵 Special Audio Files</h3>
+                    <div>Total special files: ${results.length}</div>
+                    <div class="exists">✅ Existing: ${existingSpecial.length}</div>
+                    <div class="missing">❌ Missing: ${missingSpecial.length}</div>
+                    
+                    <h4>Files:</h4>
+                    <div class="file-list">
+                        ${results.map(file => 
+                            `<div class="${file.exists ? 'exists' : 'missing'}">
+                                ${file.exists ? '✅' : '❌'} ${file.name} 
+                                ${file.exists ? `(${file.size || 'unknown'} bytes, ${file.type || 'unknown type'})` : `(Status: ${file.status || 'Error'})`}
+                            </div>`
+                        ).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        // Auto-check on page load
+        window.addEventListener('load', () => {
+            console.log('Audio diagnostic tool loaded');
+        });
+    </script>
+</body>
+</html>

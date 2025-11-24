@@ -152,33 +152,48 @@ function checkWinningPatterns(calledNumbers, cartela, selectedPatterns) {
         console.log('🔍 Grid:', grid);
         console.log('🔍 Lines completed:', lines, 'which are:', completedLines);
         console.log('🔍 FREE space (center):', grid[2][2]);
-        // Check Full House first (highest priority)
-        if (patternsToCheck.includes("Full House")) {
-            const fullHousePattern = patterns.find(p => p.name === "Full House");
-            if (fullHousePattern && checkPattern(grid, calledNumbers, fullHousePattern.positions)) {
-                console.log('🏆 FULL HOUSE DETECTED!');
-                winningPatterns.push("Full House");
-                return winningPatterns; // Full House wins immediately
+        // Check each selected pattern
+        for (const patternName of patternsToCheck) {
+            if (patternName === "Full House") {
+                const fullHousePattern = patterns.find(p => p.name === "Full House");
+                if (fullHousePattern && checkPattern(grid, calledNumbers, fullHousePattern.positions)) {
+                    console.log('🏆 FULL HOUSE DETECTED!');
+                    winningPatterns.push("Full House");
+                }
+                else {
+                    console.log('❌ Full House not completed');
+                }
             }
-            else {
-                console.log('❌ Full House not completed');
+            else if (patternName === "Three Lines") {
+                // Three Lines requires EXACTLY 3 or more lines
+                if (lines >= 3) {
+                    console.log(`🏆 THREE LINES DETECTED! (${lines} lines completed)`);
+                    winningPatterns.push("Three Lines");
+                }
+                else {
+                    console.log(`❌ Three Lines not completed (only ${lines} lines)`);
+                }
             }
-        }
-        // Check patterns based on MINIMUM lines required
-        // Three Lines requires AT LEAST 3 lines
-        if (patternsToCheck.includes("Three Lines") && lines >= 3) {
-            console.log('🏆 THREE LINES DETECTED! (3+ lines):', lines);
-            winningPatterns.push("Three Lines");
-        }
-        // Two Lines requires AT LEAST 2 lines (but only if Three Lines not already won)
-        else if (patternsToCheck.includes("Two Lines") && lines >= 2) {
-            console.log('🏆 TWO LINES DETECTED! (2+ lines):', lines);
-            winningPatterns.push("Two Lines");
-        }
-        // One Line requires AT LEAST 1 line (but only if higher patterns not already won)
-        else if (patternsToCheck.includes("One Line") && lines >= 1) {
-            console.log('🏆 ONE LINE DETECTED! (1+ lines):', lines);
-            winningPatterns.push("One Line");
+            else if (patternName === "Two Lines") {
+                // Two Lines requires EXACTLY 2 or more lines
+                if (lines >= 2) {
+                    console.log(`🏆 TWO LINES DETECTED! (${lines} lines completed)`);
+                    winningPatterns.push("Two Lines");
+                }
+                else {
+                    console.log(`❌ Two Lines not completed (only ${lines} lines)`);
+                }
+            }
+            else if (patternName === "One Line") {
+                // One Line requires EXACTLY 1 or more lines
+                if (lines >= 1) {
+                    console.log(`🏆 ONE LINE DETECTED! (${lines} lines completed)`);
+                    winningPatterns.push("One Line");
+                }
+                else {
+                    console.log(`❌ One Line not completed (only ${lines} lines)`);
+                }
+            }
         }
         if (winningPatterns.length === 0) {
             console.log('❌ No winning patterns detected');

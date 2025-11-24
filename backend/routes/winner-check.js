@@ -30,11 +30,6 @@ router.post('/', [
     const { cartelaId, gameId, patterns, calledNumbers: clientCalledNumbers } = req.body;
     console.log('📥 Winner check request body:', { cartelaId, gameId, patterns, clientCalledNumbers: clientCalledNumbers?.length || 0 });
 
-    // Default patterns if not provided
-    const selectedPatterns = patterns || ["One Line", "Two Lines", "Full House"];
-
-    console.log(`🎯 Winner check request for cartela: ${cartelaId}, game: ${gameId || 'N/A'}, patterns: ${selectedPatterns.join(', ')}`);
-
     // Find the cartela by ID or card_id
     const allCartelas = await cartelas.findAll();
     let cartela = allCartelas.find(c => c.id === cartelaId && c.is_active);
@@ -84,6 +79,12 @@ router.post('/', [
         cardType: 'gameinactive'
       });
     }
+
+    // Get the winner pattern from the game (this is what the user selected when creating the game)
+    const selectedPattern = game.winner_pattern || "Two Lines";
+    const selectedPatterns = [selectedPattern];
+    
+    console.log(`🎯 Winner check for cartela: ${cartelaId}, game: ${gameId}, checking pattern: ${selectedPattern}`);
 
     // Parse and validate cartela numbers
     let cartelaNumbers;
