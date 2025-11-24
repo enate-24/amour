@@ -1335,7 +1335,7 @@ router.get('/next-number', async (req, res) => {
 
 // Save user game session (for NewGame component)
 router.post('/session', authenticateToken, [
-  body('selectedCartelas').isArray().withMessage('Selected cartelas must be an array'),
+  body('selectedCartelas').isArray({ min: 3 }).withMessage('Selected cartelas must be an array with at least 3 items'),
   body('betAmount').isFloat({ min: 0.01 }).withMessage('Bet amount must be positive'),
   body('housePercentage').isFloat({ min: 0, max: 50 }).withMessage('House percentage must be between 0-50'),
   body('totalBet').isFloat({ min: 0 }).withMessage('Total bet must be non-negative'),
@@ -1366,9 +1366,30 @@ router.post('/session', authenticateToken, [
 
     console.log('Received request body:', JSON.stringify(req.body, null, 2));
 
+    // Get user's selected pattern from settings
+    let selectedPattern = 'Two Lines'; // Default
+    try {
+      const userSettings = await db.userSettings.findByUserId(req.user.id);
+      if (userSettings && userSettings.selectedPattern) {
+        selectedPattern = userSettings.selectedPattern;
+        console.log(`✅ Using user's selected pattern from settings: ${selectedPattern}`);
+      } else {
+        console.log(`⚠️ No user settings found, using default pattern: ${selectedPattern}`);
+      }
+    } catch (settingsError) {
+      console.warn('Error fetching user settings, using default pattern:', settingsError);
+    }
+
     // Validate required fields
     if (!Array.isArray(selectedCartelas) || selectedCartelas.length === 0) {
       return res.status(400).json({ error: 'Selected cartelas must be a non-empty array' });
+    }
+
+    // Validate minimum 3 cartelas requirement
+    if (selectedCartelas.length < 3) {
+      return res.status(400).json({ 
+        error: `Minimum 3 cartelas required to start a game. You selected ${selectedCartelas.length} cartela(s).` 
+      });
     }
 
     // Validate that all cartela IDs are non-empty strings
@@ -1417,7 +1438,7 @@ router.post('/session', authenticateToken, [
           JSON.stringify([]), // No called numbers for user sessions
           JSON.stringify(numbers), // Generated shuffled sequence for user session
           75, // Default total numbers
-          'user_session', // Special pattern to identify user sessions
+          selectedPattern, // Use the user's selected pattern from settings
           housePercentage,
           req.user.id, // user_id - link game to user
           createdAt,
