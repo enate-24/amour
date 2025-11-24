@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { useNavigate } from "react-router-dom";
+import { logGameState } from "../utils/gameDebug";
 
 // Memoize static data outside component to prevent recreation
 const BINGO_NUMBERS = Array.from({ length: 75 }, (_, i) => i + 1);
@@ -93,73 +94,119 @@ const NumberButton = memo(({
   );
 });
 
-// Lightweight audio manager - minimal preloading to reduce system lag
+// Simplified audio manager with better error handling
 class AudioManager {
   private cache = new Map<number, HTMLAudioElement>();
+  private failedFiles = new Set<number>();
 
   constructor() {
-    // Minimal initialization
+    console.log('🔊 AudioManager initialized');
   }
 
-  // Create audio on-demand to reduce memory usage and system lag
+  // Create audio element with simple, reliable approach
   private createAudio(num: number): HTMLAudioElement {
-    let audio = this.cache.get(num);
+    // Skip cache entirely to avoid ERR_CACHE_OPERATION_NOT_SUPPORTED
+    // Create fresh audio element each time
     
-    if (!audio) {
-      audio = new Audio(`/sounds/${num}.wav`);
-      audio.volume = 0.7;
-      audio.preload = 'none'; // Don't preload to reduce system load
-      this.cache.set(num, audio);
-      
-      // Limit cache size to prevent memory issues
-      if (this.cache.size > 10) {
-        const firstKey = this.cache.keys().next().value;
-        if (firstKey !== undefined) {
-          const oldAudio = this.cache.get(firstKey);
-          if (oldAudio) {
-            oldAudio.pause();
-            oldAudio.src = '';
-          }
-          this.cache.delete(firstKey);
-        }
-      }
-    }
+    const audio = new Audio();
+    
+    // Set basic properties
+    audio.volume = 0.7;
+    audio.preload = 'none';
+    
+    // Use aggressive cache busting to avoid browser cache issues
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 15);
+    const audioSrc = `/sounds/${num}.wav?t=${timestamp}&r=${random}&nocache=true`;
+    
+    // Simple error handling
+    audio.addEventListener('error', () => {
+      console.warn(`❌ Audio load failed: ${num}.wav (cache bypass)`);
+      this.failedFiles.add(num);
+    }, { once: true });
+    
+    audio.addEventListener('loadstart', () => {
+      console.log(`🔊 Loading audio: ${num}.wav`);
+    }, { once: true });
+    
+    // Set src after event listeners are attached
+    audio.src = audioSrc;
     
     return audio;
   }
 
   playSound(number: number): void {
+    // Skip if we know this file failed before
+    if (this.failedFiles.has(number)) {
+      console.warn(`⏭️ Skipping ${number}.wav - known failed file`);
+      return;
+    }
+    
     try {
       const audio = this.createAudio(number);
       
-      // Reset and play
-      audio.currentTime = 0;
-      const playPromise = audio.play();
-      
-      if (playPromise) {
-        playPromise.catch(() => {}); // Silent fail
+      // Simple play approach
+      if (audio.readyState >= 2) {
+        // Audio is ready, play immediately
+        audio.currentTime = 0;
+        audio.play().catch((error) => {
+          console.warn(`🔊 Play error for ${number}.wav:`, error.message);
+        });
+      } else {
+        // Audio needs to load first
+        const playWhenReady = () => {
+          audio.currentTime = 0;
+          audio.play().catch((error) => {
+            console.warn(`🔊 Delayed play error for ${number}.wav:`, error.message);
+          });
+        };
+        
+        if (audio.readyState === 0) {
+          // Not started loading yet
+          audio.addEventListener('canplay', playWhenReady, { once: true });
+          audio.load();
+        } else {
+          // Currently loading
+          audio.addEventListener('canplay', playWhenReady, { once: true });
+        }
       }
     } catch (error) {
-      // Silent fail for better performance
+      console.warn(`🔊 Audio error for ${number}.wav:`, error);
+      this.failedFiles.add(number);
     }
   }
 
-  cleanup(): void {
-    this.cache.forEach(audio => {
-      try {
-        audio.pause();
-        audio.src = '';
-      } catch (error) {
-        // Ignore cleanup errors
-      }
+
+
+  // Debug method to check audio cache state
+  debugAudioCache(): void {
+    console.group('🔊 Audio Cache Debug');
+    console.log(`Cache size: ${this.cache.size}`);
+    console.log(`Failed files: ${Array.from(this.failedFiles)}`);
+    
+    this.cache.forEach((audio, num) => {
+      console.log(`Audio ${num}:`, {
+        src: audio.src,
+        readyState: audio.readyState,
+        networkState: audio.networkState,
+        error: audio.error?.message || 'none'
+      });
     });
-    this.cache.clear();
+    console.groupEnd();
+  }
+
+  cleanup(): void {
+    // Since we're not using cache anymore, just clear the failed files list
+    this.failedFiles.clear();
+    console.log('🧹 Audio manager cleaned up');
   }
 }
 
 const GamePageOptimized = (): JSX.Element => {
   const navigate = useNavigate();
   const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
+
   
   // Core game state
   const [called, setCalled] = useState<number[]>([]);
@@ -245,10 +292,11 @@ const GamePageOptimized = (): JSX.Element => {
         
         try {
           const gameData = JSON.parse(currentGame);
-          if (!gameData.selectedCartelas || gameData.selectedCartelas.length === 0) {
-            // Invalid game data, clear called numbers and redirect to NewGame
-            console.log('Invalid game data found, clearing called numbers and redirecting to play bingo page');
+          if (!gameData.selectedCartelas || gameData.selectedCartelas.length < 3) {
+            // Invalid game data or insufficient cartelas, redirect to NewGame
+            console.log('Insufficient cartelas selected (need 3 minimum), redirecting to play bingo page');
             localStorage.removeItem('calledNumbers');
+            localStorage.removeItem('currentGame'); // Clear invalid game data
             setCalled([]);
             navigate('/newgame', { replace: true });
             return;
@@ -313,6 +361,41 @@ const GamePageOptimized = (): JSX.Element => {
   // Game data
   const [currentGameData, setCurrentGameData] = useState<any>(null);
   
+  // Safety mechanism to reset isCallingNumber if it gets stuck
+  useEffect(() => {
+    if (isCallingNumber) {
+      const resetTimer = setTimeout(() => {
+        console.warn('⚠️ Resetting stuck isCallingNumber state');
+        logGameState({
+          autoCall,
+          isCallingNumber,
+          isGameFinished,
+          selectedCartelas,
+          calledCount: called.length,
+          gameId: currentGameData?.id
+        });
+        setIsCallingNumber(false);
+        setAutoCall(false); // Also stop auto-call to prevent further issues
+      }, 15000); // Reset after 15 seconds if stuck
+      
+      return () => clearTimeout(resetTimer);
+    }
+  }, [isCallingNumber, autoCall, isGameFinished, selectedCartelas, called.length, currentGameData?.id]);
+
+  // Debug logging for state changes
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      logGameState({
+        autoCall,
+        isCallingNumber,
+        isGameFinished,
+        selectedCartelas,
+        calledCount: called.length,
+        gameId: currentGameData?.id
+      });
+    }
+  }, [autoCall, isCallingNumber, isGameFinished]);
+  
   // Refs
   const autoCallIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioManagerRef = useRef<AudioManager | null>(null);
@@ -322,8 +405,35 @@ const GamePageOptimized = (): JSX.Element => {
   useEffect(() => {
     audioManagerRef.current = new AudioManager();
     
+    // Expose debug methods to window for debugging
+    if (process.env.NODE_ENV === 'development') {
+      (window as any).debugAudio = () => {
+        audioManagerRef.current?.debugAudioCache();
+      };
+      
+      (window as any).testAudio = (num: number) => {
+        console.log(`🧪 Testing audio ${num} with cache bypass...`);
+        audioManagerRef.current?.playSound(num);
+      };
+      
+      (window as any).testAudioMultiple = (nums: number[]) => {
+        console.log(`🧪 Testing multiple audio files with cache bypass...`);
+        nums.forEach((num, index) => {
+          setTimeout(() => {
+            console.log(`🔊 Playing ${num}...`);
+            audioManagerRef.current?.playSound(num);
+          }, index * 1000);
+        });
+      };
+    }
+    
     return () => {
       audioManagerRef.current?.cleanup();
+      if (process.env.NODE_ENV === 'development') {
+        delete (window as any).debugAudio;
+        delete (window as any).testAudio;
+        delete (window as any).testAudioMultiple;
+      }
     };
   }, []);
 
@@ -367,27 +477,42 @@ const GamePageOptimized = (): JSX.Element => {
     };
   }, [selectedCartelas, isGameFinished, API_BASE_URL]);
 
-  // Optimized auto-call
+  // Optimized auto-call with better error handling
   useEffect(() => {
+    // Always clear existing interval first
     if (autoCallIntervalRef.current) {
       clearInterval(autoCallIntervalRef.current);
       autoCallIntervalRef.current = null;
     }
 
-    if (autoCall && !isGameFinished && selectedCartelas >= 3) {
+    if (autoCall && !isGameFinished && selectedCartelas >= 3 && !isCallingNumber) {
       autoCallIntervalRef.current = setInterval(async () => {
-        if (document.hidden) return; // Don't call when tab is hidden
+        // Skip if document is hidden or already calling a number
+        if (document.hidden || isCallingNumber) return;
+        
+        // Set calling state to prevent concurrent calls
+        setIsCallingNumber(true);
         
         try {
           const token = localStorage.getItem('auth_token');
           const gameData = localStorage.getItem('currentGame');
           
-          if (!token || !gameData) return;
+          if (!token || !gameData) {
+            setAutoCall(false);
+            return;
+          }
           
           const parsed = JSON.parse(gameData);
           const gameId = currentGameData?.id || parsed.gameId;
           
-          if (!gameId) return;
+          if (!gameId) {
+            setAutoCall(false);
+            return;
+          }
+
+          // Add timeout to prevent hanging requests
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
           const response = await fetch(`${API_BASE_URL}/games/${gameId}/call-number`, {
             method: 'PUT',
@@ -395,8 +520,11 @@ const GamePageOptimized = (): JSX.Element => {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ calledNumbers: called })
+            body: JSON.stringify({ calledNumbers: called }),
+            signal: controller.signal
           });
+
+          clearTimeout(timeoutId);
 
           if (response.ok) {
             const result = await response.json();
@@ -419,10 +547,21 @@ const GamePageOptimized = (): JSX.Element => {
               audioManagerRef.current?.playSound(calledNumber);
             }
           } else if (response.status === 400 || response.status === 429) {
+            console.log('Auto-call stopped due to API response:', response.status);
             setAutoCall(false);
+          } else {
+            console.warn('Auto-call API error:', response.status);
+            // Don't stop auto-call for temporary server errors
           }
         } catch (error) {
-          setAutoCall(false);
+          console.error('Auto-call error:', error);
+          if (error instanceof Error && error.name === 'AbortError') {
+            console.log('Auto-call request timed out');
+          }
+          // Don't stop auto-call for network errors, just log them
+        } finally {
+          // Always reset calling state
+          setIsCallingNumber(false);
         }
       }, slider * 1000);
     }
@@ -433,7 +572,7 @@ const GamePageOptimized = (): JSX.Element => {
         autoCallIntervalRef.current = null;
       }
     };
-  }, [autoCall, slider, isGameFinished, selectedCartelas, called, currentGameData, API_BASE_URL]);
+  }, [autoCall, slider, isGameFinished, selectedCartelas, called, currentGameData, API_BASE_URL, isCallingNumber]);
 
   // Memoized handlers
   const handleNumberClick = useCallback((_num: number) => {
@@ -449,12 +588,22 @@ const GamePageOptimized = (): JSX.Element => {
       const token = localStorage.getItem('auth_token');
       const gameData = localStorage.getItem('currentGame');
       
-      if (!gameData || !token) return;
+      if (!gameData || !token) {
+        console.error('Missing token or game data');
+        return;
+      }
       
       const parsed = JSON.parse(gameData);
       const gameId = currentGameData?.id || parsed.gameId;
       
-      if (!gameId) return;
+      if (!gameId) {
+        console.error('Missing game ID');
+        return;
+      }
+
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
       const response = await fetch(`${API_BASE_URL}/games/${gameId}/call-number`, {
         method: 'PUT',
@@ -462,15 +611,18 @@ const GamePageOptimized = (): JSX.Element => {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ calledNumbers: called })
+        body: JSON.stringify({ calledNumbers: called }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const result = await response.json();
         
         if (result.gameCompleted) {
           setAutoCall(false);
-          setCalled(result.game.calledNumbers);
+          setCalled(result.game.calledNumbers || called);
           return;
         }
 
@@ -486,9 +638,18 @@ const GamePageOptimized = (): JSX.Element => {
           // Play sound immediately
           audioManagerRef.current?.playSound(calledNumber);
         }
+      } else {
+        console.error('API error:', response.status);
+        if (response.status === 400) {
+          const errorData = await response.json();
+          console.error('Error details:', errorData);
+        }
       }
     } catch (error) {
-      // Handle error
+      console.error('Manual next error:', error);
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Manual next request timed out');
+      }
     } finally {
       setIsCallingNumber(false);
     }
@@ -1002,6 +1163,8 @@ const GamePageOptimized = (): JSX.Element => {
         </div>
       </div>
 
+
+
       <div style={{
         display: "flex",
         gap: "clamp(8px, 2vw, 20px)",
@@ -1133,6 +1296,27 @@ const GamePageOptimized = (): JSX.Element => {
             >
               🔀 Shuffle
             </button>
+            {isCallingNumber && (
+              <button
+                style={{
+                  ...btnStyle,
+                  fontSize: "clamp(12px, 2.5vw, 16px)",
+                  padding: "clamp(8px, 2vw, 12px) clamp(12px, 3vw, 24px)",
+                  margin: 0,
+                  background: "linear-gradient(180deg, #DC2626 0%, #B91C1C 100%)",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap" as const
+                }}
+                onClick={() => {
+                  console.log('🔄 Manual reset of calling state');
+                  setIsCallingNumber(false);
+                  setAutoCall(false);
+                }}
+                title="Reset if stuck calling numbers"
+              >
+                🔄 Reset
+              </button>
+            )}
           </>
         )}
       </div>

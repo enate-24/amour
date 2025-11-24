@@ -257,8 +257,8 @@ const NewGame: React.FC = () => {
   };
 
   const handleStartGame = async () => {
-    if (selectedCards.length === 0) {
-      alert('Please select at least one card to start the game.');
+    if (selectedCards.length < 3) {
+      alert('Please select at least 3 cartelas to start the game. You have selected ' + selectedCards.length + ' cartela(s).');
       return;
     }
 
@@ -529,12 +529,34 @@ const NewGame: React.FC = () => {
           {/* House Bonus Button */}
           <HouseBonusButton />
           
+          {/* Cartela Selection Status */}
+          <div className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold ${
+            selectedCards.length >= 3 
+              ? 'bg-green-100 text-green-800 border border-green-300' 
+              : 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+          }`}>
+            {selectedCards.length >= 3 
+              ? `✅ ${selectedCards.length} cartelas selected` 
+              : `⚠️ ${selectedCards.length}/3 cartelas (need ${3 - selectedCards.length} more)`
+            }
+          </div>
+          
           <button
-        className="bg-green-600 hover:bg-green-700 px-4 py-2 sm:px-6 sm:py-2.5 md:px-8 md:py-3 rounded-lg font-bold transition-colors text-xs sm:text-sm md:text-base"
+        className={`px-4 py-2 sm:px-6 sm:py-2.5 md:px-8 md:py-3 rounded-lg font-bold transition-colors text-xs sm:text-sm md:text-base ${
+          selectedCards.length >= 3 && !isSavingGame
+            ? 'bg-green-600 hover:bg-green-700 cursor-pointer'
+            : 'bg-gray-600 cursor-not-allowed opacity-50'
+        }`}
         onClick={handleStartGame}
-        disabled={isSavingGame}
+        disabled={isSavingGame || selectedCards.length < 3}
+        title={selectedCards.length < 3 ? `Select at least 3 cartelas to start (${selectedCards.length}/3 selected)` : ''}
           >
-        {isSavingGame ? 'Saving...' : 'Start Game'}
+        {isSavingGame 
+          ? 'Saving...' 
+          : selectedCards.length < 3 
+            ? `Start Game (${selectedCards.length}/3)` 
+            : 'Start Game'
+        }
           </button>
         </div>
 
