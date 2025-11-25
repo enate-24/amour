@@ -94,14 +94,16 @@ const NumberButton = memo(({
   );
 });
 
-// Improved audio manager that prevents sound stacking
+// Improved audio manager with queue system
 class AudioManager {
   private currentAudio: HTMLAudioElement | null = null;
   private failedFiles = new Set<number>();
   private isPlaying = false;
+  private queue: number[] = [];
+  private isProcessingQueue = false;
 
   constructor() {
-    console.log('🔊 AudioManager initialized with anti-stacking');
+    console.log('🔊 AudioManager initialized with queue system');
   }
 
   playSound(number: number): void {
@@ -111,69 +113,90 @@ class AudioManager {
       return;
     }
 
-    // If already playing, stop current sound first
-    if (this.isPlaying && this.currentAudio) {
-      console.log('🛑 Stopping previous sound to prevent stacking');
-      try {
-        this.currentAudio.pause();
-        this.currentAudio.currentTime = 0;
-      } catch (e) {
-        // Ignore pause errors
-      }
-      this.currentAudio = null;
-      this.isPlaying = false;
-    }
-
-    try {
-      // Create fresh audio element
-      const audio = new Audio();
-      audio.volume = 0.7;
-      audio.preload = 'auto';
-      
-      // Use cache busting
-      const timestamp = Date.now();
-      const audioSrc = `/sounds/${number}.wav?t=${timestamp}`;
-      
-      // Error handling
-      audio.addEventListener('error', () => {
-        console.warn(`❌ Audio load failed: ${number}.wav`);
-        this.failedFiles.add(number);
-        this.isPlaying = false;
-        this.currentAudio = null;
-      }, { once: true });
-      
-      // Track when audio starts playing
-      audio.addEventListener('play', () => {
-        console.log(`▶️ Playing: ${number}.wav`);
-        this.isPlaying = true;
-      }, { once: true });
-      
-      // Track when audio ends
-      audio.addEventListener('ended', () => {
-        console.log(`✅ Finished: ${number}.wav`);
-        this.isPlaying = false;
-        this.currentAudio = null;
-      }, { once: true });
-      
-      // Set source and play
-      audio.src = audioSrc;
-      this.currentAudio = audio;
-      
-      audio.play().catch((error) => {
-        console.warn(`🔊 Play error for ${number}.wav:`, error.message);
-        this.isPlaying = false;
-        this.currentAudio = null;
-      });
-      
-    } catch (error) {
-      console.warn(`🔊 Audio error for ${number}.wav:`, error);
-      this.failedFiles.add(number);
-      this.isPlaying = false;
+    // Add to queue
+    this.queue.push(number);
+    console.log(`📝 Added ${number} to queue. Queue length: ${this.queue.length}`);
+    
+    // Process queue if not already processing
+    if (!this.isProcessingQueue) {
+      this.processQueue();
     }
   }
 
-  // Stop any currently playing sound
+  private async processQueue(): Promise<void> {
+    if (this.isProcessingQueue || this.queue.length === 0) {
+      return;
+    }
+
+    this.isProcessingQueue = true;
+
+    while (this.queue.length > 0) {
+      const number = this.queue.shift()!;
+      await this.playAudioFile(number);
+    }
+
+    this.isProcessingQueue = false;
+  }
+
+  private playAudioFile(number: number): Promise<void> {
+    return new Promise((resolve) => {
+      try {
+        // Create fresh audio element
+        const audio = new Audio();
+        audio.volume = 0.7;
+        audio.preload = 'auto';
+        
+        const audioSrc = `/sounds/${number}.wav`;
+        
+        // Error handling
+        audio.addEventListener('error', () => {
+          console.warn(`❌ Audio load failed: ${number}.wav`);
+          this.failedFiles.add(number);
+          this.isPlaying = false;
+          this.currentAudio = null;
+          resolve();
+        }, { once: true });
+        
+        // Track when audio starts playing
+        audio.addEventListener('play', () => {
+          console.log(`▶️ Playing: ${number}.wav`);
+          this.isPlaying = true;
+        }, { once: true });
+        
+        // Track when audio ends
+        audio.addEventListener('ended', () => {
+          console.log(`✅ Finished: ${number}.wav`);
+          this.isPlaying = false;
+          this.currentAudio = null;
+          resolve();
+        }, { once: true });
+        
+        // Set source and play
+        audio.src = audioSrc;
+        this.currentAudio = audio;
+        
+        audio.play().catch((error) => {
+          console.warn(`🔊 Play error for ${number}.wav:`, error.message);
+          this.isPlaying = false;
+          this.currentAudio = null;
+          resolve();
+        });
+        
+      } catch (error) {
+        console.warn(`� Apudio error for ${number}.wav:`, error);
+        this.failedFiles.add(number);
+        this.isPlaying = false;
+        resolve();
+      }
+    });
+  }
+
+  // Stop any currently playing sound and clear queue
   stopCurrent(): void {
+    // Clear queue
+    this.queue = [];
+    this.isProcessingQueue = false;
+    
     if (this.currentAudio) {
       try {
         this.currentAudio.pause();
@@ -183,7 +206,7 @@ class AudioManager {
       }
       this.currentAudio = null;
       this.isPlaying = false;
-      console.log('🛑 Stopped current audio');
+      console.log('🛑 Stopped current audio and cleared queue');
     }
   }
 
