@@ -243,7 +243,7 @@ router.post('/', [
 
     // Get completed lines for highlighting in UI
     const grid = convertCartelaToGrid(formattedCartela);
-    const { completedLines } = countCompletedLines(grid, calledNumbers);
+    const { lines: completedLines } = countCompletedLines(grid, calledNumbers);
     console.log(`📊 Completed lines: ${completedLines.join(', ')}`);
 
     // Prepare response - always include cartela details
