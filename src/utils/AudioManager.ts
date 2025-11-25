@@ -25,10 +25,10 @@ export class AudioManager {
           const audio = new Audio();
           audio.preload = 'auto';
           audio.volume = 0.7;
-          audio.src = `/sounds/${i}.wav`;
+          audio.src = `/sounds/${i}.mp3`;
           
           const timeoutId = setTimeout(() => {
-            console.warn(`⏱️ Timeout preloading ${i}.wav`);
+            console.warn(`⏱️ Timeout preloading ${i}.mp3`);
             this.failedFiles.add(i);
             resolve();
           }, timeout);
@@ -41,7 +41,7 @@ export class AudioManager {
           
           audio.addEventListener('error', () => {
             clearTimeout(timeoutId);
-            console.warn(`⚠️ Failed to preload ${i}.wav`);
+            console.warn(`⚠️ Failed to preload ${i}.mp3`);
             this.failedFiles.add(i);
             resolve();
           }, { once: true });
@@ -86,7 +86,7 @@ export class AudioManager {
     if (!audio) {
       // Fallback if not preloaded yet
       console.log(`⚠️ ${number}.wav not preloaded, creating on-demand`);
-      audio = new Audio(`/sounds/${number}.wav`);
+      audio = new Audio(`/sounds/${number}.mp3`);
       audio.volume = 0.7;
     } else {
       // Reset preloaded audio to start
