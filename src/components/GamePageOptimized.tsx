@@ -1838,18 +1838,18 @@ const GamePageOptimized = (): JSX.Element => {
                         // Check if this cell is part of a winning line
                         const completedLines = cartelaCheckResult.cartela?.completedLines || [];
                         const isWinningCell = (() => {
-                          // Define line patterns
+                          // Define line patterns - MUST match names from patternDetection.ts
                           const linePatterns: Record<string, [number, number][]> = {
                             "Top Row": [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]],
                             "Second Row": [[1, 0], [1, 1], [1, 2], [1, 3], [1, 4]],
                             "Third Row": [[2, 0], [2, 1], [2, 2], [2, 3], [2, 4]],
                             "Fourth Row": [[3, 0], [3, 1], [3, 2], [3, 3], [3, 4]],
                             "Bottom Row": [[4, 0], [4, 1], [4, 2], [4, 3], [4, 4]],
-                            "Left Column": [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]],
-                            "Second Column": [[0, 1], [1, 1], [2, 1], [3, 1], [4, 1]],
-                            "Middle Column": [[0, 2], [1, 2], [2, 2], [3, 2], [4, 2]],
-                            "Fourth Column": [[0, 3], [1, 3], [2, 3], [3, 3], [4, 3]],
-                            "Right Column": [[0, 4], [1, 4], [2, 4], [3, 4], [4, 4]],
+                            "B Column": [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]],
+                            "I Column": [[0, 1], [1, 1], [2, 1], [3, 1], [4, 1]],
+                            "N Column": [[0, 2], [1, 2], [2, 2], [3, 2], [4, 2]],
+                            "G Column": [[0, 3], [1, 3], [2, 3], [3, 3], [4, 3]],
+                            "O Column": [[0, 4], [1, 4], [2, 4], [3, 4], [4, 4]],
                             "Main Diagonal": [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]],
                             "Anti Diagonal": [[0, 4], [1, 3], [2, 2], [3, 1], [4, 0]],
                             "Four Corners": [[0, 0], [0, 4], [4, 0], [4, 4]]
@@ -1885,11 +1885,11 @@ const GamePageOptimized = (): JSX.Element => {
                             borderColor = "2px solid #1e40af";
                             boxShadow = "0 3px 8px rgba(30, 64, 175, 0.9)";
                           } else if (isCalled) {
-                            // Called but not part of winning line - Chocolate
-                            bgColor = "linear-gradient(180deg, #8B4513 0%, #654321 100%)";
-                            textColor = "#FFFFFF";
-                            borderColor = "1px solid #654321";
-                            boxShadow = "0 2px 4px rgba(139, 69, 19, 0.6)";
+                            // Called but not part of winning line - Gold
+                            bgColor = "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)";
+                            textColor = "#000000";
+                            borderColor = "1px solid #FFD700";
+                            boxShadow = "0 2px 4px rgba(255, 215, 0, 0.6)";
                           } else {
                             // Not called - Dark gray
                             bgColor = "#4a4a4a";
