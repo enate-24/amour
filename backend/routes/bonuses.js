@@ -47,18 +47,29 @@ router.get('/daily', authenticateToken, async (req, res) => {
     // Check if required operations are available
     if (!games || typeof games.findAll !== 'function') {
       console.error('❌ Games operations not available');
+      console.error('Games object:', games);
       return res.status(500).json({ error: 'Games operations not available' });
     }
 
     if (!dailyBonuses || typeof dailyBonuses.findByUserAndDate !== 'function') {
       console.error('❌ Daily bonus operations not available');
+      console.error('dailyBonuses object:', dailyBonuses);
       return res.status(500).json({ error: 'Daily bonus operations not available' });
     }
 
     // Calculate daily profit from games
     console.log('📊 Fetching all games...');
-    const allGames = await games.findAll();
-    console.log(`📈 Found ${allGames.length} total games`);
+    let allGames;
+    try {
+      allGames = await games.findAll();
+      console.log(`📈 Found ${allGames.length} total games`);
+    } catch (gamesError) {
+      console.error('❌ Error fetching games:', gamesError);
+      return res.status(500).json({ 
+        error: 'Failed to fetch games', 
+        details: process.env.NODE_ENV === 'development' ? gamesError.message : undefined 
+      });
+    }
     
     // Filter games for today and current user
     // Note: If user_id column doesn't exist yet, we'll get empty results until database is updated
@@ -88,28 +99,37 @@ router.get('/daily', authenticateToken, async (req, res) => {
 
     // Get or create today's bonus record
     console.log('🔍 Looking for existing bonus record...');
-    let dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
+    let dailyBonus;
+    try {
+      dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
 
-    if (!dailyBonus) {
-      console.log('➕ Creating new daily bonus record...');
-      // Create new daily bonus record
-      await dailyBonuses.create({
-        userId,
-        bonusDate: today,
-        dailyProfit: dailyProfit,
-        bonusAmount: 200,
-        requirementsMet: false,
-        bonusClaimed: false,
-        bonusUsed: false
+      if (!dailyBonus) {
+        console.log('➕ Creating new daily bonus record...');
+        // Create new daily bonus record
+        await dailyBonuses.create({
+          userId,
+          bonusDate: today,
+          dailyProfit: dailyProfit,
+          bonusAmount: 200,
+          requirementsMet: false,
+          bonusClaimed: false,
+          bonusUsed: false
+        });
+        dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
+        console.log('✅ Created new bonus record');
+      } else {
+        console.log('🔄 Updating existing bonus record...');
+        // Update daily profit
+        await dailyBonuses.update(userId, today, { dailyProfit: dailyProfit });
+        dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
+        console.log('✅ Updated bonus record');
+      }
+    } catch (bonusError) {
+      console.error('❌ Error with bonus record:', bonusError);
+      return res.status(500).json({ 
+        error: 'Failed to manage bonus record', 
+        details: process.env.NODE_ENV === 'development' ? bonusError.message : undefined 
       });
-      dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
-      console.log('✅ Created new bonus record');
-    } else {
-      console.log('🔄 Updating existing bonus record...');
-      // Update daily profit
-      await dailyBonuses.update(userId, today, { dailyProfit: dailyProfit });
-      dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
-      console.log('✅ Updated bonus record');
     }
 
     // Calculate current bonus eligibility
