@@ -66,17 +66,20 @@ export class AudioManager {
   async playSound(number: number): Promise<void> {
     // Skip if we know this file failed
     if (this.failedFiles.has(number)) {
-      console.warn(`⏭️ Skipping ${number}.wav - known failed file`);
+      console.warn(`⏭️ Skipping ${number}.mp3 - known failed file`);
       return;
     }
 
-    // Stop current audio immediately to prevent stacking
+    // Stop current audio cleanly to prevent noise
     if (this.currentAudio && this.isPlaying) {
       try {
         this.currentAudio.pause();
         this.currentAudio.currentTime = 0;
+        // Clean up event listeners to prevent memory leaks
+        this.currentAudio.onended = null;
+        this.currentAudio.onerror = null;
       } catch (e) {
-        // Ignore
+        // Ignore cleanup errors
       }
     }
 
@@ -85,40 +88,44 @@ export class AudioManager {
     
     if (!audio) {
       // Fallback if not preloaded yet
-      console.log(`⚠️ ${number}.wav not preloaded, creating on-demand`);
+      console.log(`⚠️ ${number}.mp3 not preloaded, creating on-demand`);
       audio = new Audio(`/sounds/${number}.mp3`);
-      audio.volume = 0.7;
+      audio.volume = 0.6; // Slightly lower volume to prevent distortion
+      audio.preload = 'auto';
     } else {
-      // Reset preloaded audio to start
-      try {
-        audio.currentTime = 0;
-      } catch (e) {
-        // If reset fails, clone the audio
-        const newAudio = audio.cloneNode() as HTMLAudioElement;
-        newAudio.volume = 0.7;
-        audio = newAudio;
-      }
+      // Use preloaded audio - create a fresh instance to avoid conflicts
+      audio = new Audio(audio.src);
+      audio.volume = 0.6; // Clean volume level
+      audio.preload = 'auto';
     }
 
     this.currentAudio = audio;
     this.isPlaying = true;
 
-    // Play immediately
-    try {
-      await audio.play();
-      console.log(`▶️ Playing: ${number}.wav`);
-    } catch (error) {
-      console.warn(`🔊 Play error for ${number}.wav:`, error instanceof Error ? error.message : 'Unknown error');
-      this.isPlaying = false;
-      this.failedFiles.add(number);
-    }
-
-    // Handle end event
+    // Clean event handling
     audio.onended = () => {
-      console.log(`✅ Finished: ${number}.wav`);
+      console.log(`✅ Finished: ${number}.mp3`);
       this.isPlaying = false;
       this.currentAudio = null;
     };
+
+    audio.onerror = () => {
+      console.warn(`🔊 Play error for ${number}.mp3`);
+      this.isPlaying = false;
+      this.failedFiles.add(number);
+      this.currentAudio = null;
+    };
+
+    // Play with proper error handling
+    try {
+      await audio.play();
+      console.log(`▶️ Playing: ${number}.mp3`);
+    } catch (error) {
+      console.warn(`🔊 Play error for ${number}.mp3:`, error instanceof Error ? error.message : 'Unknown error');
+      this.isPlaying = false;
+      this.failedFiles.add(number);
+      this.currentAudio = null;
+    }
   }
 
   // Wait for preloading to complete
@@ -136,14 +143,17 @@ export class AudioManager {
     }
   }
 
-  // Stop current audio
+  // Stop current audio cleanly
   stopCurrent(): void {
     if (this.currentAudio) {
       try {
         this.currentAudio.pause();
         this.currentAudio.currentTime = 0;
+        // Clean up event listeners
+        this.currentAudio.onended = null;
+        this.currentAudio.onerror = null;
       } catch (e) {
-        // Ignore
+        // Ignore cleanup errors
       }
       this.currentAudio = null;
       this.isPlaying = false;
@@ -161,9 +171,23 @@ export class AudioManager {
     return this.isPlaying;
   }
 
-  // Cleanup
+  // Cleanup with proper audio disposal
   cleanup(): void {
     this.stopCurrent();
+    
+    // Clean up all preloaded audio elements
+    this.audioPool.forEach((audio) => {
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.onended = null;
+        audio.onerror = null;
+        audio.src = '';
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    });
+    
     this.audioPool.clear();
     this.failedFiles.clear();
   }
