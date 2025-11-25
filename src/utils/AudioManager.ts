@@ -22,12 +22,21 @@ export class AudioManager {
         audio.volume = 0.7;
         audio.src = `/sounds/${i}.wav`;
         
+        // Add timeout to prevent hanging on slow loads
+        const timeout = setTimeout(() => {
+          console.warn(`⏱️ Timeout preloading ${i}.wav`);
+          this.failedFiles.add(i);
+          resolve();
+        }, 3000);
+        
         audio.addEventListener('canplaythrough', () => {
+          clearTimeout(timeout);
           this.audioPool.set(i, audio);
           resolve();
         }, { once: true });
         
         audio.addEventListener('error', () => {
+          clearTimeout(timeout);
           console.warn(`⚠️ Failed to preload ${i}.wav`);
           this.failedFiles.add(i);
           resolve();
@@ -42,10 +51,13 @@ export class AudioManager {
     
     await Promise.all(preloadPromises);
     this.preloadComplete = true;
-    console.log(`✅ Preloaded ${this.audioPool.size} audio files`);
+    console.log(`✅ Preloaded ${this.audioPool.size}/75 audio files`);
+    if (this.failedFiles.size > 0) {
+      console.warn(`⚠️ ${this.failedFiles.size} files failed to preload`);
+    }
   }
 
-  playSound(number: number): void {
+  async playSound(number: number): Promise<void> {
     // Skip if we know this file failed
     if (this.failedFiles.has(number)) {
       console.warn(`⏭️ Skipping ${number}.wav - known failed file`);
@@ -72,22 +84,28 @@ export class AudioManager {
       audio.volume = 0.7;
     } else {
       // Reset preloaded audio to start
-      audio.currentTime = 0;
+      try {
+        audio.currentTime = 0;
+      } catch (e) {
+        // If reset fails, clone the audio
+        const newAudio = audio.cloneNode() as HTMLAudioElement;
+        newAudio.volume = 0.7;
+        audio = newAudio;
+      }
     }
 
     this.currentAudio = audio;
     this.isPlaying = true;
 
     // Play immediately
-    audio.play()
-      .then(() => {
-        console.log(`▶️ Playing: ${number}.wav`);
-      })
-      .catch((error) => {
-        console.warn(`🔊 Play error for ${number}.wav:`, error.message);
-        this.isPlaying = false;
-        this.failedFiles.add(number);
-      });
+    try {
+      await audio.play();
+      console.log(`▶️ Playing: ${number}.wav`);
+    } catch (error) {
+      console.warn(`🔊 Play error for ${number}.wav:`, error instanceof Error ? error.message : 'Unknown error');
+      this.isPlaying = false;
+      this.failedFiles.add(number);
+    }
 
     // Handle end event
     audio.onended = () => {
@@ -95,6 +113,21 @@ export class AudioManager {
       this.isPlaying = false;
       this.currentAudio = null;
     };
+  }
+
+  // Wait for preloading to complete
+  async waitForPreload(): Promise<void> {
+    if (this.preloadComplete) return;
+    
+    // Poll until preload is complete (max 10 seconds)
+    const startTime = Date.now();
+    while (!this.preloadComplete && Date.now() - startTime < 10000) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    if (!this.preloadComplete) {
+      console.warn('⚠️ Preload timeout - continuing anyway');
+    }
   }
 
   // Stop current audio
