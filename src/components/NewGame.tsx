@@ -424,16 +424,7 @@ const NewGame: React.FC = () => {
         // Clear input for next entry
         setCurrentIdInput('');
 
-        // Minimal success feedback - just a brief flash
-        setRegistrationStatus({
-          type: 'success',
-          message: `✓ Registered & Selected (${registeredCount + 1})`
-        });
-
-        // Clear success message after brief delay
-        setTimeout(() => {
-          setRegistrationStatus({type: '', message: ''});
-        }, 1000);
+        // No success message - just register silently
 
       } else {
         setRegistrationStatus({
@@ -452,7 +443,7 @@ const NewGame: React.FC = () => {
   };
 
   return (
-    <div className="p-2 sm:p-4 lg:p-8 relative mx-2 sm:mx-4 md:mx-8 lg:mx-16 xl:mx-24 mt-4 sm:mt-8 lg:mt-12 mb-0">
+    <div className="min-h-screen py-2 px-2 sm:py-4 sm:px-4 md:px-8 lg:px-16 xl:px-[87px] relative bg-[#001A23]">
       {/* Clean Button - Top Right Corner */}
       {selectedCards.length > 0 && (
         <div className="absolute top-1 right-1 sm:top-2 sm:right-2 flex gap-1 sm:gap-2 z-10">
@@ -552,7 +543,7 @@ const NewGame: React.FC = () => {
                 <select
                   value={selectedPattern}
                   onChange={(e) => handlePatternChange(e.target.value)}
-                  className="appearance-none bg-gradient-to-r from-yellow-600 to-yellow-700 text-white px-2 py-1 pr-5 sm:px-3 sm:pr-6 rounded border border-yellow-500 focus:border-yellow-400 focus:outline-none cursor-pointer text-xs sm:text-sm font-semibold shadow-lg"
+                  className="appearance-none bg-[#1D4ED8] text-white px-2 py-1 pr-5 sm:px-3 sm:pr-6 rounded border border-blue-500 focus:border-blue-400 focus:outline-none cursor-pointer text-xs sm:text-sm font-semibold shadow-lg"
                   title="Select winning pattern"
                 >
                   {patternOptions.map((pattern) => (
@@ -647,7 +638,7 @@ const NewGame: React.FC = () => {
 
         {/* Sticky ID Modal */}
         {isIdModalOpen && (
-          <div className="fixed top-2 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md mx-2 sm:mx-4 sm:top-4">
+          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-[95%] max-w-md sm:w-full sm:mx-4 md:top-8">
             <div className="bg-slate-800 rounded-lg border-2 border-blue-400 shadow-2xl">
               <div className="p-3 sm:p-4">
                 <div className="flex items-center justify-between mb-3 sm:mb-4">
@@ -785,31 +776,27 @@ const NewGame: React.FC = () => {
 
       {/* Cartela Grid */}
       {!loading && !error && (
-        <>
-          <div className="grid grid-cols-6 xs:grid-cols-8 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-16 xl:grid-cols-20 2xl:grid-cols-24 gap-0.5 sm:gap-1">
-            {cartelas.sort((a, b) => {
-              const aNum = parseInt(a.card_id) || 0;
-              const bNum = parseInt(b.card_id) || 0;
-              return aNum - bNum;
-            }).map((cartela, index) => (
-              <button
-                key={`${cartela.card_id}-${index}`}
-                onClick={() => handleCartelaSelect(cartela.card_id)}
-                className={`aspect-square p-0.5 rounded transition-all duration-200 active:scale-95 sm:hover:scale-105 ${
-                  selectedCards.includes(cartela.card_id)
-                    ? 'bg-blue-600 text-white shadow-lg transform scale-105'
-                    : 'bg-slate-700 active:bg-slate-600 sm:hover:bg-slate-600 text-slate-200'
-                }`}
-              >
-                <div className="text-center h-full flex items-center justify-center">
-                  <div className="text-[8px] xs:text-[9px] sm:text-[10px] font-bold leading-tight">{cartela.card_id}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-
-
-        </>
+        <div className="grid grid-cols-6 xs:grid-cols-8 sm:grid-cols-12 md:grid-cols-16 lg:grid-cols-20 xl:grid-cols-24 2xl:grid-cols-28 gap-0.5 sm:gap-1">
+          {cartelas.sort((a, b) => {
+            const aNum = parseInt(a.card_id) || 0;
+            const bNum = parseInt(b.card_id) || 0;
+            return aNum - bNum;
+          }).map((cartela, index) => (
+            <button
+              key={`${cartela.card_id}-${index}`}
+              onClick={() => handleCartelaSelect(cartela.card_id)}
+              className={`aspect-square p-0.5 rounded transition-all duration-200 active:scale-95 sm:hover:scale-105 ${
+                selectedCards.includes(cartela.card_id)
+                  ? 'bg-blue-600 text-white shadow-lg transform scale-105'
+                  : 'bg-[#c5c9c8] active:bg-[#b0b5b4] sm:hover:bg-[#b0b5b4] text-black border border-gray-300'
+              }`}
+            >
+              <div className="text-center h-full flex items-center justify-center">
+                <div className="text-[8px] xs:text-[9px] sm:text-[10px] md:text-[11px] font-semibold leading-tight">{cartela.card_id}</div>
+              </div>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -52,7 +52,9 @@ const StatsChart: React.FC<StatsChartProps> = ({ data }) => {
       month: 'short',
       day: 'numeric'
     }),
-    houseProfit: Math.round(item.houseProfit)
+    houseProfit: Math.round(item.houseProfit),
+    totalBets: Math.round(item.totalBets),
+    games: item.games
   }));
 
   // Custom tooltip component
@@ -75,16 +77,12 @@ const StatsChart: React.FC<StatsChartProps> = ({ data }) => {
     <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-xl font-semibold text-white">House Profit Chart</h3>
+          <h3 className="text-xl font-semibold text-white">House Profit Column Chart</h3>
           <p className="text-sm text-slate-400">Last 10 days performance</p>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 bg-green-800 rounded"></div>
-          <span className="text-xs text-slate-400">House Profit</span>
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={350}>
         <BarChart
           data={formattedData}
           margin={{
@@ -93,6 +91,7 @@ const StatsChart: React.FC<StatsChartProps> = ({ data }) => {
             left: 20,
             bottom: 5,
           }}
+          barCategoryGap="20%"
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
           <XAxis
@@ -107,12 +106,12 @@ const StatsChart: React.FC<StatsChartProps> = ({ data }) => {
             fontSize={12}
             tick={{ fill: '#9CA3AF' }}
             axisLine={{ stroke: '#374151' }}
-            label={{ value: 'Profit (Birr)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#9CA3AF' } }}
+            label={{ value: 'Amount (Birr)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#9CA3AF' } }}
           />
           <Tooltip content={<CustomTooltip />} />
           <Bar
             dataKey="houseProfit"
-            fill="#03adfc"
+            fill="#10B981"
             name="House Profit"
             radius={[4, 4, 0, 0]}
             opacity={0.9}

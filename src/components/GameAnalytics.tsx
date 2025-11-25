@@ -14,6 +14,7 @@ interface GameData {
   houseBonus: number;
   playersBonus: number;
   winner: string;
+  winnerCartelaIds?: string[];
   finished: boolean;
   gameId: string;
   playersDetails?: Array<{
@@ -103,6 +104,7 @@ const GameAnalytics: React.FC = () => {
           houseBonus: parseFloat(game.housebonus || game.houseBonus) || 0,
           playersBonus: parseFloat(game.playersbonus || game.playersBonus) || 0,
           winner: game.winnerinfo || game.winnerInfo || 'No Winner',
+          winnerCartelaIds: game.winnercartelaids || game.winnerCartelaIds || [],
           finished: game.status === 'finished' || game.finished || false,
           gameId: game.gameid || game.gameId || '',
           playersDetails: game.playersDetails || []
@@ -291,6 +293,9 @@ const GameAnalytics: React.FC = () => {
                   Winner
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                  Winner Cartelas
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                   Finished
                 </th>
               </tr>
@@ -298,7 +303,7 @@ const GameAnalytics: React.FC = () => {
             <tbody className="bg-slate-800 divide-y divide-slate-700">
               {filteredGames.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-6 py-4 text-center text-slate-400">
+                  <td colSpan={13} className="px-6 py-4 text-center text-slate-400">
                     No games found
                   </td>
                 </tr>
@@ -337,6 +342,24 @@ const GameAnalytics: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                       {game.winner}
+                    </td>
+                    <td className="px-1 py-0.5 text-xs">
+                      {game.winnerCartelaIds && game.winnerCartelaIds.length > 0 ? (
+                        <div className="flex gap-0.5 max-w-[80px]">
+                          {game.winnerCartelaIds.slice(0, 2).map((cartelaId, idx) => (
+                            <span key={idx} className="px-1 py-0.5 text-[6px] font-bold bg-green-600 text-white rounded-sm">
+                              {cartelaId}
+                            </span>
+                          ))}
+                          {game.winnerCartelaIds.length > 2 && (
+                            <span className="px-1 py-0.5 text-[6px] font-bold bg-gray-600 text-white rounded-sm">
+                              +{game.winnerCartelaIds.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-500 text-[8px]">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${game.finished

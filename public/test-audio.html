@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .test-btn {
+            padding: 8px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .test-btn:hover {
+            background: #0056b3;
+        }
+        .test-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>Audio Files Test</h1>
+    <p>Click any number to test the corresponding audio file:</p>
+    
+    <div class="status info" id="status">Ready to test audio files...</div>
+    
+    <div>
+        <button onclick="testAll()" class="test-btn" style="margin: 10px 0; padding: 10px 20px;">Test All Files</button>
+        <button onclick="stopAll()" class="test-btn" style="margin: 10px 0; padding: 10px 20px; background: #dc3545;">Stop All</button>
+    </div>
+    
+    <div class="test-grid" id="testGrid"></div>
+    
+    <div id="results" style="margin-top: 20px;"></div>
+
+    <script>
+        let currentAudio = null;
+        let testResults = { success: [], failed: [] };
+        
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        function createTestGrid() {
+            const grid = document.getElementById('testGrid');
+            for (let i = 1; i <= 75; i++) {
+                const btn = document.createElement('button');
+                btn.textContent = i;
+                btn.className = 'test-btn';
+                btn.onclick = () => testAudio(i);
+                btn.id = `btn-${i}`;
+                grid.appendChild(btn);
+            }
+        }
+        
+        function testAudio(number) {
+            stopAll();
+            
+            const btn = document.getElementById(`btn-${number}`);
+            btn.disabled = true;
+            btn.style.background = '#ffc107';
+            
+            updateStatus(`Testing ${number}.mp3...`, 'info');
+            
+            currentAudio = new Audio(`/sounds/${number}.mp3`);
+            currentAudio.volume = 0.7;
+            
+            currentAudio.onloadeddata = () => {
+                updateStatus(`✅ ${number}.mp3 loaded successfully`, 'success');
+            };
+            
+            currentAudio.onended = () => {
+                updateStatus(`✅ ${number}.mp3 played successfully`, 'success');
+                btn.disabled = false;
+                btn.style.background = '#28a745';
+                testResults.success.push(number);
+                updateResults();
+            };
+            
+            currentAudio.onerror = (e) => {
+                updateStatus(`❌ Failed to load ${number}.mp3`, 'error');
+                btn.disabled = false;
+                btn.style.background = '#dc3545';
+                testResults.failed.push(number);
+                updateResults();
+            };
+            
+            currentAudio.play().catch(error => {
+                updateStatus(`❌ Failed to play ${number}.mp3: ${error.message}`, 'error');
+                btn.disabled = false;
+                btn.style.background = '#dc3545';
+                testResults.failed.push(number);
+                updateResults();
+            });
+        }
+        
+        function stopAll() {
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+                currentAudio = null;
+            }
+            
+            // Re-enable all buttons
+            for (let i = 1; i <= 75; i++) {
+                const btn = document.getElementById(`btn-${i}`);
+                if (btn) {
+                    btn.disabled = false;
+                    if (!testResults.success.includes(i) && !testResults.failed.includes(i)) {
+                        btn.style.background = '#007bff';
+                    }
+                }
+            }
+        }
+        
+        async function testAll() {
+            testResults = { success: [], failed: [] };
+            updateStatus('Testing all audio files...', 'info');
+            
+            for (let i = 1; i <= 75; i++) {
+                await new Promise(resolve => {
+                    const audio = new Audio(`/sounds/${i}.mp3`);
+                    audio.volume = 0.1; // Very quiet for batch testing
+                    
+                    const timeout = setTimeout(() => {
+                        testResults.failed.push(i);
+                        document.getElementById(`btn-${i}`).style.background = '#dc3545';
+                        resolve();
+                    }, 3000);
+                    
+                    audio.onloadeddata = () => {
+                        clearTimeout(timeout);
+                        testResults.success.push(i);
+                        document.getElementById(`btn-${i}`).style.background = '#28a745';
+                        resolve();
+                    };
+                    
+                    audio.onerror = () => {
+                        clearTimeout(timeout);
+                        testResults.failed.push(i);
+                        document.getElementById(`btn-${i}`).style.background = '#dc3545';
+                        resolve();
+                    };
+                    
+                    audio.load();
+                });
+                
+                updateStatus(`Testing ${i}/75...`, 'info');
+            }
+            
+            updateStatus(`✅ Test complete: ${testResults.success.length} success, ${testResults.failed.length} failed`, 
+                        testResults.failed.length === 0 ? 'success' : 'error');
+            updateResults();
+        }
+        
+        function updateResults() {
+            const results = document.getElementById('results');
+            results.innerHTML = `
+                <h3>Test Results</h3>
+                <p><strong>Successful:</strong> ${testResults.success.length}/75</p>
+                <p><strong>Failed:</strong> ${testResults.failed.length}/75</p>
+                ${testResults.failed.length > 0 ? `<p><strong>Failed files:</strong> ${testResults.failed.join(', ')}</p>` : ''}
+            `;
+        }
+        
+        // Initialize
+        createTestGrid();
+    </script>
+</body>
+</html>

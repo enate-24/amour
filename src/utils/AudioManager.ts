@@ -13,8 +13,8 @@ export class AudioManager {
 
   // Preload all number sounds (1-75) in batches to avoid browser limits
   private async preloadSounds(): Promise<void> {
-    const batchSize = 10; // Load 10 files at a time
-    const timeout = 8000; // 8 seconds per file
+    const batchSize = 5; // Smaller batches to reduce browser load
+    const timeout = 5000; // Shorter timeout per file
     
     for (let start = 1; start <= 75; start += batchSize) {
       const end = Math.min(start + batchSize - 1, 75);
@@ -23,30 +23,47 @@ export class AudioManager {
       for (let i = start; i <= end; i++) {
         const promise = new Promise<void>((resolve) => {
           const audio = new Audio();
-          audio.preload = 'auto';
+          audio.preload = 'metadata'; // Load metadata only, not full audio
           audio.volume = 0.7;
           audio.src = `/sounds/${i}.mp3`;
           
           const timeoutId = setTimeout(() => {
-            console.warn(`⏱️ Timeout preloading ${i}.mp3`);
+            console.warn(`⏱️ Timeout preloading ${i}.mp3 - will load on demand`);
             this.failedFiles.add(i);
             resolve();
           }, timeout);
           
-          audio.addEventListener('canplaythrough', () => {
+          // Use 'loadedmetadata' instead of 'canplaythrough' for faster loading
+          audio.addEventListener('loadedmetadata', () => {
             clearTimeout(timeoutId);
             this.audioPool.set(i, audio);
             resolve();
           }, { once: true });
           
-          audio.addEventListener('error', () => {
+          audio.addEventListener('error', (e) => {
             clearTimeout(timeoutId);
-            console.warn(`⚠️ Failed to preload ${i}.mp3`);
+            console.warn(`⚠️ Failed to preload ${i}.mp3:`, e);
             this.failedFiles.add(i);
             resolve();
           }, { once: true });
           
-          audio.load();
+          // Add load event as fallback
+          audio.addEventListener('load', () => {
+            clearTimeout(timeoutId);
+            if (!this.audioPool.has(i)) {
+              this.audioPool.set(i, audio);
+            }
+            resolve();
+          }, { once: true });
+          
+          try {
+            audio.load();
+          } catch (error) {
+            clearTimeout(timeoutId);
+            console.warn(`⚠️ Error loading ${i}.mp3:`, error);
+            this.failedFiles.add(i);
+            resolve();
+          }
         });
         
         batchPromises.push(promise);
@@ -54,17 +71,22 @@ export class AudioManager {
       
       await Promise.all(batchPromises);
       console.log(`📦 Loaded batch ${start}-${end}: ${this.audioPool.size} total files loaded`);
+      
+      // Small delay between batches to prevent overwhelming the browser
+      if (end < 75) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
     
     this.preloadComplete = true;
     console.log(`✅ Preloading complete: ${this.audioPool.size}/75 audio files ready`);
     if (this.failedFiles.size > 0) {
-      console.warn(`⚠️ ${this.failedFiles.size} files failed to preload`);
+      console.warn(`⚠️ ${this.failedFiles.size} files failed to preload - will load on demand`);
     }
   }
 
   async playSound(number: number): Promise<void> {
-    // Skip if we know this file failed
+    // Skip if we know this file failed multiple times
     if (this.failedFiles.has(number)) {
       console.warn(`⏭️ Skipping ${number}.mp3 - known failed file`);
       return;
@@ -87,44 +109,66 @@ export class AudioManager {
     let audio = this.audioPool.get(number);
     
     if (!audio) {
-      // Fallback if not preloaded yet
+      // Fallback if not preloaded yet - create fresh audio
       console.log(`⚠️ ${number}.mp3 not preloaded, creating on-demand`);
-      audio = new Audio(`/sounds/${number}.mp3`);
-      audio.volume = 0.6; // Slightly lower volume to prevent distortion
+      audio = new Audio();
+      audio.volume = 0.6;
       audio.preload = 'auto';
+      audio.src = `/sounds/${number}.mp3`;
     } else {
-      // Use preloaded audio - create a fresh instance to avoid conflicts
-      audio = new Audio(audio.src);
-      audio.volume = 0.6; // Clean volume level
+      // Clone preloaded audio to avoid conflicts
+      const originalSrc = audio.src;
+      audio = new Audio();
+      audio.volume = 0.6;
       audio.preload = 'auto';
+      audio.src = originalSrc;
     }
 
     this.currentAudio = audio;
     this.isPlaying = true;
 
-    // Clean event handling
+    // Set up event handlers before attempting to play
+    const cleanup = () => {
+      this.isPlaying = false;
+      this.currentAudio = null;
+      audio.onended = null;
+      audio.onerror = null;
+      audio.onloadeddata = null;
+    };
+
     audio.onended = () => {
       console.log(`✅ Finished: ${number}.mp3`);
-      this.isPlaying = false;
-      this.currentAudio = null;
+      cleanup();
     };
 
-    audio.onerror = () => {
-      console.warn(`🔊 Play error for ${number}.mp3`);
-      this.isPlaying = false;
+    audio.onerror = (e) => {
+      console.warn(`🔊 Play error for ${number}.mp3:`, e);
       this.failedFiles.add(number);
-      this.currentAudio = null;
+      cleanup();
     };
 
-    // Play with proper error handling
+    // Try to play with timeout protection
     try {
-      await audio.play();
+      const playPromise = audio.play();
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Play timeout')), 3000);
+      });
+      
+      await Promise.race([playPromise, timeoutPromise]);
       console.log(`▶️ Playing: ${number}.mp3`);
+      
     } catch (error) {
-      console.warn(`🔊 Play error for ${number}.mp3:`, error instanceof Error ? error.message : 'Unknown error');
-      this.isPlaying = false;
-      this.failedFiles.add(number);
-      this.currentAudio = null;
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`🔊 Play error for ${number}.mp3:`, errorMsg);
+      
+      // Only mark as failed if it's a real error, not user interaction
+      if (!errorMsg.includes('user interaction') && !errorMsg.includes('gesture')) {
+        this.failedFiles.add(number);
+      }
+      
+      cleanup();
     }
   }
 

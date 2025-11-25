@@ -788,7 +788,42 @@ const GamePageOptimized = (): JSX.Element => {
         const gameId = currentGameData?.id || parsed.gameId;
         
         if (gameId) {
-          // Finish the game session in backend
+          // Collect winner cartela IDs by checking all selected cartelas
+          const winnerCartelaIds: string[] = [];
+          
+          // Check each selected cartela for wins
+          if (parsed.selectedCartelas && Array.isArray(parsed.selectedCartelas)) {
+            for (const cartelaId of parsed.selectedCartelas) {
+              try {
+                const checkResponse = await fetch(`${API_BASE_URL}/games/${gameId}/check-cartela`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    cartelaId: cartelaId,
+                    calledNumbers: called,
+                    selectedPattern: selectedPattern
+                  })
+                });
+
+                if (checkResponse.ok) {
+                  const checkResult = await checkResponse.json();
+                  if (checkResult.win) {
+                    winnerCartelaIds.push(cartelaId);
+                    console.log(`🏆 Winner cartela found: ${cartelaId}`);
+                  }
+                }
+              } catch (error) {
+                console.warn(`⚠️ Error checking cartela ${cartelaId}:`, error);
+              }
+            }
+          }
+
+          console.log(`🎯 Total winner cartelas: ${winnerCartelaIds.length}`, winnerCartelaIds);
+
+          // Finish the game session in backend with winner cartela IDs
           const response = await fetch(`${API_BASE_URL}/games/${gameId}/finish-session`, {
             method: 'PUT',
             headers: {
@@ -796,7 +831,10 @@ const GamePageOptimized = (): JSX.Element => {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              winMoney: playerWin || 0
+              winMoney: playerWin || 0,
+              winnerCartelaIds: winnerCartelaIds,
+              calledNumbers: called,
+              selectedPattern: selectedPattern
             })
           });
 
@@ -1031,13 +1069,16 @@ const GamePageOptimized = (): JSX.Element => {
         schedulePlay(() => {
           try {
             const soundUrl = result.win 
-              ? '/sounds/winner.wav'
-              : '/sounds/notwinner.wav';
+              ? '/sounds/winner.mp3'
+              : '/sounds/notwinner.mp3';
+            console.log(`🔊 Playing ${result.win ? 'winner' : 'not winner'} sound:`, soundUrl);
             const audio = new Audio(soundUrl);
             audio.volume = 0.7;
-            audio.play().catch(() => {});
+            audio.play().catch((error) => {
+              console.warn(`⚠️ Could not play ${result.win ? 'winner' : 'not winner'} sound:`, error);
+            });
           } catch (error) {
-            // Silent fail
+            console.warn('⚠️ Error creating audio for winner sound:', error);
           }
         });
       } else {
@@ -1397,27 +1438,7 @@ const GamePageOptimized = (): JSX.Element => {
             >
               🔀 Shuffle
             </button>
-            {isCallingNumber && (
-              <button
-                style={{
-                  ...btnStyle,
-                  fontSize: "clamp(12px, 2.5vw, 16px)",
-                  padding: "clamp(8px, 2vw, 12px) clamp(12px, 3vw, 24px)",
-                  margin: 0,
-                  background: "linear-gradient(180deg, #DC2626 0%, #B91C1C 100%)",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap" as const
-                }}
-                onClick={() => {
-                  console.log('🔄 Manual reset of calling state');
-                  setIsCallingNumber(false);
-                  setAutoCall(false);
-                }}
-                title="Reset if stuck calling numbers"
-              >
-                🔄 Reset
-              </button>
-            )}
+
           </>
         )}
       </div>
