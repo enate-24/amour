@@ -11,47 +11,53 @@ export class AudioManager {
     this.preloadSounds();
   }
 
-  // Preload all number sounds (1-75)
+  // Preload all number sounds (1-75) in batches to avoid browser limits
   private async preloadSounds(): Promise<void> {
-    const preloadPromises: Promise<void>[] = [];
+    const batchSize = 10; // Load 10 files at a time
+    const timeout = 8000; // 8 seconds per file
     
-    for (let i = 1; i <= 75; i++) {
-      const promise = new Promise<void>((resolve) => {
-        const audio = new Audio();
-        audio.preload = 'auto';
-        audio.volume = 0.7;
-        audio.src = `/sounds/${i}.wav`;
-        
-        // Add timeout to prevent hanging on slow loads
-        const timeout = setTimeout(() => {
-          console.warn(`⏱️ Timeout preloading ${i}.wav`);
-          this.failedFiles.add(i);
-          resolve();
-        }, 3000);
-        
-        audio.addEventListener('canplaythrough', () => {
-          clearTimeout(timeout);
-          this.audioPool.set(i, audio);
-          resolve();
-        }, { once: true });
-        
-        audio.addEventListener('error', () => {
-          clearTimeout(timeout);
-          console.warn(`⚠️ Failed to preload ${i}.wav`);
-          this.failedFiles.add(i);
-          resolve();
-        }, { once: true });
-        
-        // Load the audio
-        audio.load();
-      });
+    for (let start = 1; start <= 75; start += batchSize) {
+      const end = Math.min(start + batchSize - 1, 75);
+      const batchPromises: Promise<void>[] = [];
       
-      preloadPromises.push(promise);
+      for (let i = start; i <= end; i++) {
+        const promise = new Promise<void>((resolve) => {
+          const audio = new Audio();
+          audio.preload = 'auto';
+          audio.volume = 0.7;
+          audio.src = `/sounds/${i}.wav`;
+          
+          const timeoutId = setTimeout(() => {
+            console.warn(`⏱️ Timeout preloading ${i}.wav`);
+            this.failedFiles.add(i);
+            resolve();
+          }, timeout);
+          
+          audio.addEventListener('canplaythrough', () => {
+            clearTimeout(timeoutId);
+            this.audioPool.set(i, audio);
+            resolve();
+          }, { once: true });
+          
+          audio.addEventListener('error', () => {
+            clearTimeout(timeoutId);
+            console.warn(`⚠️ Failed to preload ${i}.wav`);
+            this.failedFiles.add(i);
+            resolve();
+          }, { once: true });
+          
+          audio.load();
+        });
+        
+        batchPromises.push(promise);
+      }
+      
+      await Promise.all(batchPromises);
+      console.log(`📦 Loaded batch ${start}-${end}: ${this.audioPool.size} total files loaded`);
     }
     
-    await Promise.all(preloadPromises);
     this.preloadComplete = true;
-    console.log(`✅ Preloaded ${this.audioPool.size}/75 audio files`);
+    console.log(`✅ Preloading complete: ${this.audioPool.size}/75 audio files ready`);
     if (this.failedFiles.size > 0) {
       console.warn(`⚠️ ${this.failedFiles.size} files failed to preload`);
     }
