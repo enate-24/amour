@@ -428,13 +428,14 @@ router.put('/:id/call-number', authenticateToken, [
         return res.status(400).json({ error: 'Game is not active' });
       }
 
-      // For user_session games, since cartelas are only validated and not stored in database,
-      // we validate ownership by checking if the game was created by this user
-      if (game.winner_pattern === 'user_session') {
-        // Since cartelas are validated at creation time but not stored per game,
-        // we trust the game's existence as validation for the session owner
-        console.log('✅ User session game ownership validated for number calling');
+      // Check if user owns this game or is admin
+      if (game.user_id !== req.user.id && req.user.role !== 'admin') {
+        await client.query('ROLLBACK');
+        console.log(`❌ User ${req.user.id} attempted to call number for game ${gameId} owned by ${game.user_id}`);
+        return res.status(403).json({ error: 'You do not have permission to call numbers for this game' });
       }
+
+      console.log(`✅ User ${req.user.id} authorized to call numbers for game ${gameId}`);
 
       // Called numbers are managed in localStorage only, not in database
       console.log(`📊 Client calledNumbers: ${clientCalledNumbers.length}`);
@@ -551,31 +552,13 @@ router.put('/:id/finish-session', authenticateToken, [
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    // For user_session games, since cartelas are only validated and not stored in database,
-    // we validate ownership by checking if the game was created by this user
-    if (gameResult.winner_pattern === 'user_session') {
-      // Get the user who created this game (from cartelas or game data)
-      // Since we don't store cartelas per game anymore, check if user has any association
-      const creatorQuery = `
-        SELECT created_at, bet_money FROM games
-        WHERE id = $1 AND bet_money > 0
-      `;
-      const gameInfo = await db.get(creatorQuery, [gameId]);
-
-      if (!gameInfo) {
-        console.log('Game not found or invalid');
-        return res.status(403).json({ error: 'You do not have permission to finish this game' });
-      }
-
-      // Since cartelas are validated at creation time but not stored per game,
-      // we trust the game's existence as validation for the session owner
-      console.log('✅ User session game ownership validated');
-    } else {
-      // For non-user-session games, require admin
-      if (req.user.role !== 'admin') {
-        return res.status(403).json({ error: 'Admin privileges required to finish this type of game' });
-      }
+    // Check if user owns this game or is admin
+    if (gameResult.user_id !== req.user.id && req.user.role !== 'admin') {
+      console.log(`❌ User ${req.user.id} attempted to finish game ${gameId} owned by ${gameResult.user_id}`);
+      return res.status(403).json({ error: 'You do not have permission to finish this game' });
     }
+
+    console.log(`✅ User ${req.user.id} authorized to finish game ${gameId}`);
 
     if (!['started', 'active'].includes(gameResult.status)) {
       return res.status(400).json({ error: 'Game is not active' });
@@ -1296,13 +1279,13 @@ router.put('/:id/shuffle', authenticateToken, [
       return res.status(400).json({ error: 'Cannot shuffle finished game' });
     }
 
-    // For user_session games, since cartelas are only validated and not stored in database,
-    // we validate ownership by checking if the game was created by this user
-    if (gameResult.winner_pattern === 'user_session') {
-      // Since cartelas are validated at creation time but not stored per game,
-      // we trust the game's existence as validation for the session owner
-      console.log('✅ User session game ownership validated for shuffling');
+    // Check if user owns this game or is admin
+    if (gameResult.user_id !== req.user.id && req.user.role !== 'admin') {
+      console.log(`❌ User ${req.user.id} attempted to shuffle game ${gameId} owned by ${gameResult.user_id}`);
+      return res.status(403).json({ error: 'You do not have permission to shuffle this game' });
     }
+
+    console.log(`✅ User ${req.user.id} authorized to shuffle game ${gameId}`);
 
     // Generate new shuffled sequence for this game
     const numbers = Array.from({ length: 75 }, (_, i) => i + 1);
