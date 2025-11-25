@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { logGameState } from "../utils/gameDebug";
+import { AudioManager } from "../utils/AudioManager";
 
 // Memoize static data outside component to prevent recreation
 const BINGO_NUMBERS = Array.from({ length: 75 }, (_, i) => i + 1);
@@ -94,7 +95,8 @@ const NumberButton = memo(({
   );
 });
 
-// Improved audio manager with queue system
+// OLD - TO BE DELETED
+/* // Improved audio manager with queue system
 class AudioManager {
   private currentAudio: HTMLAudioElement | null = null;
   private failedFiles = new Set<number>();
@@ -220,7 +222,7 @@ class AudioManager {
     this.failedFiles.clear();
     console.log('🧹 Audio manager cleaned up');
   }
-}
+} */
 
 const GamePageOptimized = (): JSX.Element => {
   const navigate = useNavigate();
