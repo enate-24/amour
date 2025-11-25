@@ -114,9 +114,14 @@ class AudioManager {
     // If already playing, stop current sound first
     if (this.isPlaying && this.currentAudio) {
       console.log('🛑 Stopping previous sound to prevent stacking');
-      this.currentAudio.pause();
-      this.currentAudio.currentTime = 0;
+      try {
+        this.currentAudio.pause();
+        this.currentAudio.currentTime = 0;
+      } catch (e) {
+        // Ignore pause errors
+      }
       this.currentAudio = null;
+      this.isPlaying = false;
     }
 
     try {
@@ -170,8 +175,12 @@ class AudioManager {
   // Stop any currently playing sound
   stopCurrent(): void {
     if (this.currentAudio) {
-      this.currentAudio.pause();
-      this.currentAudio.currentTime = 0;
+      try {
+        this.currentAudio.pause();
+        this.currentAudio.currentTime = 0;
+      } catch (e) {
+        // Ignore pause errors
+      }
       this.currentAudio = null;
       this.isPlaying = false;
       console.log('🛑 Stopped current audio');
