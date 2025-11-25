@@ -462,15 +462,23 @@ router.put('/:id/call-number', authenticateToken, [
         return res.status(500).json({ error: 'Game sequence not found.' });
       }
 
-      // Use client-provided called numbers (from localStorage) to determine next number
-      // Called numbers are NOT stored in database
-      const validCalledCount = Math.min(clientCalledNumbers.length, numberSequence.length);
-      const nextNumberIndex = validCalledCount;
+      // Find next uncalled number from the sequence
+      // Skip numbers that are already called to prevent duplicates
+      const calledSet = new Set(clientCalledNumbers);
+      let numberToCall = null;
+      
+      for (let i = 0; i < numberSequence.length; i++) {
+        const candidateNumber = numberSequence[i];
+        if (!calledSet.has(candidateNumber)) {
+          numberToCall = candidateNumber;
+          break;
+        }
+      }
 
-      console.log(`🎲 Next number index: ${nextNumberIndex}, sequence length: ${numberSequence.length}, client called: ${clientCalledNumbers.length}`);
+      console.log(`🎲 Looking for next uncalled number. Called count: ${clientCalledNumbers.length}, Found: ${numberToCall}`);
 
-      // Check if all numbers have been called (prevent calling beyond 75)
-      if (nextNumberIndex >= numberSequence.length) {
+      // Check if all numbers have been called
+      if (numberToCall === null) {
         console.error('🎉 All numbers have been called for game', gameId);
         await client.query('COMMIT');
         return res.status(400).json({
@@ -479,7 +487,6 @@ router.put('/:id/call-number', authenticateToken, [
         });
       }
 
-      const numberToCall = numberSequence[nextNumberIndex];
       const updatedCalledNumbers = [...clientCalledNumbers, numberToCall];
 
       // Note: Called numbers are NOT saved to database - they are managed in localStorage only
@@ -510,9 +517,9 @@ router.put('/:id/call-number', authenticateToken, [
         },
         debug: {
           clientCalledNumbersLength: clientCalledNumbers.length,
-          nextNumberIndex: nextNumberIndex,
           numberToCall: numberToCall,
-          numberSequenceFirst5: numberSequence.slice(0, 5)
+          numberSequenceFirst5: numberSequence.slice(0, 5),
+          remainingNumbers: numberSequence.filter(n => !calledSet.has(n)).length
         }
       });
 
