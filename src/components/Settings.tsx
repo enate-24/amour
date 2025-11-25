@@ -12,6 +12,7 @@ const Settings: React.FC = () => {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [saveMessage, setSaveMessage] = useState<string>("");
+  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
 
   const patternOptions = [
     "One Line",
@@ -24,6 +25,38 @@ const Settings: React.FC = () => {
   useEffect(() => {
     loadSettings();
   }, []);
+
+  // Auto-save when pattern changes
+  useEffect(() => {
+    if (!isLoading && !isInitialLoad && selectedPattern) {
+      console.log('🔄 Pattern changed to:', selectedPattern, '- Auto-saving...');
+      saveSettings();
+    }
+  }, [selectedPattern]);
+
+  // Auto-save when bet amount changes (with debounce)
+  useEffect(() => {
+    if (!isLoading && !isInitialLoad && betAmount > 0) {
+      const timeoutId = setTimeout(() => {
+        console.log('🔄 Bet amount changed to:', betAmount, '- Auto-saving...');
+        saveSettings();
+      }, 1000); // 1 second debounce
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [betAmount]);
+
+  // Auto-save when house cut changes (with debounce)
+  useEffect(() => {
+    if (!isLoading && !isInitialLoad && houseCutPercentage >= 0) {
+      const timeoutId = setTimeout(() => {
+        console.log('🔄 House cut changed to:', houseCutPercentage, '- Auto-saving...');
+        saveSettings();
+      }, 1000); // 1 second debounce
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [houseCutPercentage]);
 
   const loadSettings = async () => {
     try {
@@ -50,6 +83,11 @@ const Settings: React.FC = () => {
         setBetAmount(data.betAmount || 5);
         setHouseCutPercentage(data.houseCutPercentage || 10);
         console.log('✅ Settings loaded from backend:', data);
+      } else if (response.status === 401) {
+        console.error('❌ Authentication failed - token may be expired');
+        // Clear invalid token and redirect to login
+        localStorage.removeItem('auth_token');
+        navigate('/');
       } else {
         console.warn('Failed to load settings from backend');
       }
@@ -57,6 +95,7 @@ const Settings: React.FC = () => {
       console.error('Error loading settings:', error);
     } finally {
       setIsLoading(false);
+      setIsInitialLoad(false);
     }
   };
 
@@ -96,12 +135,46 @@ const Settings: React.FC = () => {
         // Also update localStorage for backward compatibility
         localStorage.setItem('bingo-settings', JSON.stringify(settings));
         
+        // Update active game's pattern if there is one
+        try {
+          const gameData = localStorage.getItem('currentGame');
+          if (gameData) {
+            const game = JSON.parse(gameData);
+            if (game.gameId) {
+              console.log('🎮 Updating active game pattern to:', selectedPattern);
+              const updateResponse = await fetch(`${API_BASE_URL}/games/${game.gameId}/pattern`, {
+                method: 'PATCH',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ winnerPattern: selectedPattern })
+              });
+              
+              if (updateResponse.ok) {
+                console.log('✅ Active game pattern updated successfully');
+              } else {
+                console.warn('⚠️ Could not update active game pattern (game may not exist)');
+              }
+            }
+          }
+        } catch (gameUpdateError) {
+          console.warn('Could not update active game pattern:', gameUpdateError);
+          // Don't fail the settings save if game update fails
+        }
+        
         setSaveMessage("Settings saved successfully!");
 
         // Clear success message after 3 seconds
         setTimeout(() => {
           setSaveMessage("");
         }, 3000);
+      } else if (response.status === 401) {
+        console.error('❌ Authentication failed - token may be expired');
+        setSaveMessage("Session expired. Redirecting to login...");
+        // Clear invalid token and redirect to login
+        localStorage.removeItem('auth_token');
+        setTimeout(() => navigate('/'), 2000);
       } else {
         const errorData = await response.json();
         setSaveMessage(`Error: ${errorData.error || 'Failed to save settings'}`);
@@ -233,21 +306,17 @@ const Settings: React.FC = () => {
 
         {/* Footer */}
         <div className="p-6 border-t bg-gray-50">
-          <div className="flex justify-between items-center">
-            <div className="text-sm text-gray-600">
-              Settings are saved to the database and will persist across sessions.
+          <div className="flex justify-center items-center">
+            <div className="text-sm text-gray-600 text-center">
+              {isSaving ? (
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span>Auto-saving settings...</span>
+                </div>
+              ) : (
+                "Settings are automatically saved and will persist across sessions."
+              )}
             </div>
-            <button
-              onClick={saveSettings}
-              disabled={isSaving}
-              className={`px-6 py-2 rounded-lg transition-colors ${
-                isSaving
-                  ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
-              }`}
-            >
-              {isSaving ? 'Saving...' : 'Save Settings'}
-            </button>
           </div>
         </div>
       </div>

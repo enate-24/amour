@@ -222,6 +222,24 @@ const GamePageOptimized = (): JSX.Element => {
           return;
         }
 
+        // Clean up any duplicate numbers in localStorage
+        const storedCalled = localStorage.getItem('calledNumbers');
+        if (storedCalled) {
+          try {
+            const parsed = JSON.parse(storedCalled);
+            if (Array.isArray(parsed)) {
+              const uniqueCalled = [...new Set(parsed)];
+              if (uniqueCalled.length !== parsed.length) {
+                console.warn(`⚠️ Found ${parsed.length - uniqueCalled.length} duplicate numbers in localStorage, cleaning up`);
+                localStorage.setItem('calledNumbers', JSON.stringify(uniqueCalled));
+                setCalled(uniqueCalled);
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing stored called numbers:', e);
+          }
+        }
+
         // First, try to fetch active game from backend
         const response = await fetch(`${API_BASE_URL}/games/active`, {
           headers: {
@@ -340,6 +358,9 @@ const GamePageOptimized = (): JSX.Element => {
           const pattern = data.selectedPattern || "Two Lines";
           setSelectedPattern(pattern);
           console.log('✅ Loaded pattern from settings:', pattern);
+          
+          // Pattern is sent with each winner check request, no need to update game database
+          console.log('🎮 Pattern loaded and will be used for winner checks:', pattern);
         }
       } catch (error) {
         console.error('Error loading pattern from settings:', error);
@@ -347,6 +368,27 @@ const GamePageOptimized = (): JSX.Element => {
     };
 
     loadPattern();
+
+    // Also reload pattern when window gains focus or becomes visible (user returns from settings)
+    const handleFocus = () => {
+      console.log('🔄 Window focused - reloading pattern from settings...');
+      loadPattern();
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('🔄 Page became visible - reloading pattern from settings...');
+        loadPattern();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [API_BASE_URL]);
   
   // Game configuration
@@ -553,6 +595,11 @@ const GamePageOptimized = (): JSX.Element => {
               // Show popup after 1 second delay
               setTimeout(() => {
                 setCalled(prev => {
+                  // Prevent duplicates by checking if number already exists
+                  if (prev.includes(calledNumber)) {
+                    console.warn(`⚠️ Number ${calledNumber} already called, skipping duplicate`);
+                    return prev;
+                  }
                   const newCalled = [...prev, calledNumber];
                   localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
                   return newCalled;
@@ -635,7 +682,13 @@ const GamePageOptimized = (): JSX.Element => {
         
         if (result.gameCompleted) {
           setAutoCall(false);
-          setCalled(result.game.calledNumbers || called);
+          // Remove duplicates from game calledNumbers before setting
+          const gameCalledNumbers = (result.game.calledNumbers || called) as number[];
+          const uniqueCalledNumbers = [...new Set(gameCalledNumbers)];
+          if (uniqueCalledNumbers.length !== gameCalledNumbers.length) {
+            console.warn(`⚠️ Removed ${gameCalledNumbers.length - uniqueCalledNumbers.length} duplicates from completed game`);
+          }
+          setCalled(uniqueCalledNumbers);
           return;
         }
 
@@ -647,6 +700,11 @@ const GamePageOptimized = (): JSX.Element => {
           // Show popup after 1 second delay
           setTimeout(() => {
             setCalled(prev => {
+              // Prevent duplicates by checking if number already exists
+              if (prev.includes(calledNumber)) {
+                console.warn(`⚠️ Number ${calledNumber} already called, skipping duplicate`);
+                return prev;
+              }
               const newCalled = [...prev, calledNumber];
               localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
               return newCalled;

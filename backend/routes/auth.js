@@ -66,11 +66,9 @@ router.post('/register', [
     await users.create(userData);
 
     // Generate JWT token
-    const token = jwt.sign(
-      { id: userData.id, email: userData.email, role: userData.role, balance_type: userData.balance_type },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
-    );
+    const tokenOptions = { id: userData.id, email: userData.email, role: userData.role, balance_type: userData.balance_type };
+    const signOptions = process.env.JWT_EXPIRES_IN ? { expiresIn: process.env.JWT_EXPIRES_IN } : {};
+    const token = jwt.sign(tokenOptions, process.env.JWT_SECRET, signOptions);
 
     res.status(201).json({
       message: 'User registered successfully',
@@ -145,11 +143,9 @@ router.post('/login', async (req, res) => {
     }
 
     // Generate JWT token
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, balance_type: user.balance_type },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
-    );
+    const tokenOptions = { id: user.id, email: user.email, role: user.role, balance_type: user.balance_type };
+    const signOptions = process.env.JWT_EXPIRES_IN ? { expiresIn: process.env.JWT_EXPIRES_IN } : {};
+    const token = jwt.sign(tokenOptions, process.env.JWT_SECRET, signOptions);
 
     // Log admin login
     if (user.role === 'admin') {
@@ -305,6 +301,65 @@ router.put('/change-password', [
   } catch (error) {
     console.error('Password change error:', error);
     res.status(500).json({ error: 'Password change failed' });
+  }
+});
+
+// Refresh token endpoint - extends token expiration
+router.post('/refresh-token', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ error: 'Token required' });
+    }
+
+    // Verify current token (even if expired, we can still decode it)
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (error) {
+      // If token is expired, try to decode without verification to check if it's valid format
+      if (error.name === 'TokenExpiredError') {
+        decoded = jwt.decode(token);
+      } else {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+    }
+
+    // Get user from database
+    const user = await users.findById(decoded.id);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    if (!user.is_active) {
+      return res.status(401).json({ error: 'Account is deactivated' });
+    }
+
+    // Generate new token with extended expiration
+    const tokenOptions = { id: user.id, email: user.email, role: user.role, balance_type: user.balance_type };
+    const signOptions = process.env.JWT_EXPIRES_IN ? { expiresIn: process.env.JWT_EXPIRES_IN } : {};
+    const newToken = jwt.sign(tokenOptions, process.env.JWT_SECRET, signOptions);
+
+    console.log('✅ Token refreshed for user:', user.email);
+
+    res.json({
+      token: newToken,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        balance: user.balance,
+        total_games_played: user.totalGamesPlayed,
+        total_winnings: user.totalWinnings,
+        is_active: user.is_active,
+        created_at: user.createdAt,
+        updated_at: user.updatedAt
+      }
+    });
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    res.status(401).json({ error: 'Failed to refresh token' });
   }
 });
 

@@ -1,6 +1,6 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
-const { cartelas, games } = require('../data/database.js');
+const { cartelas, games, userSettings } = require('../data/database.js');
 const { checkWinningPatterns, validateCartela, convertCartelaToGrid, countCompletedLines } = require('../utils/patternDetection');
 
 const router = express.Router();
@@ -80,11 +80,47 @@ router.post('/', [
       });
     }
 
-    // Get the winner pattern from the game (this is what the user selected when creating the game)
-    const selectedPattern = game.winner_pattern || "Two Lines";
-    const selectedPatterns = [selectedPattern];
+    // Get the winner pattern - priority order:
+    // 1. Patterns from request body (frontend sends current selection)
+    // 2. User settings from database
+    // 3. Game pattern from database
+    // 4. Default to "Two Lines"
+    let selectedPatterns;
     
-    console.log(`🎯 Winner check for cartela: ${cartelaId}, game: ${gameId}, checking pattern: ${selectedPattern}`);
+    if (patterns && Array.isArray(patterns) && patterns.length > 0) {
+      selectedPatterns = patterns;
+      console.log(`✅ Using patterns from request: ${JSON.stringify(selectedPatterns)}`);
+    } else {
+      console.log(`⚠️ No patterns in request body, checking user settings...`);
+      
+      // Try to get current user settings
+      let userPattern = null;
+      try {
+        if (req.user && req.user.id) {
+          const userSettingsData = await userSettings.findByUserId(req.user.id);
+          if (userSettingsData && userSettingsData.selectedPattern) {
+            userPattern = userSettingsData.selectedPattern;
+            console.log(`✅ Found user settings pattern: ${userPattern}`);
+          } else {
+            console.log(`⚠️ No user settings found for user ${req.user.id}`);
+          }
+        } else {
+          console.log(`⚠️ No authenticated user found in request`);
+        }
+      } catch (settingsError) {
+        console.warn('Error fetching user settings:', settingsError);
+      }
+      
+      // Use user pattern, game pattern, or default
+      const finalPattern = userPattern || game.winner_pattern || "Two Lines";
+      selectedPatterns = [finalPattern];
+      console.log(`⚠️ Using fallback pattern: ${finalPattern} (source: ${userPattern ? 'user settings' : game.winner_pattern ? 'game' : 'default'})`);
+    }
+    
+    console.log(`🎯 Winner check for cartela: ${cartelaId}, game: ${gameId}`);
+    console.log(`🎯 Game winner_pattern from DB: ${game.winner_pattern}`);
+    console.log(`🎯 Patterns from request body: ${JSON.stringify(patterns)}`);
+    console.log(`🎯 Final selected patterns array: ${JSON.stringify(selectedPatterns)}`);
 
     // Parse and validate cartela numbers
     let cartelaNumbers;
@@ -192,12 +228,16 @@ router.post('/', [
     }
 
     // Check winning patterns
+    console.log(`🔍 About to check patterns with selectedPatterns: ${JSON.stringify(selectedPatterns)}`);
     const winningPatterns = checkWinningPatterns(calledNumbers, formattedCartela, selectedPatterns);
     const isWinner = winningPatterns.length > 0;
 
     console.log(`🎯 Winner check result for cartela ${cartela.card_id}: ${isWinner ? 'WINNER' : 'NOT WINNER'}`);
+    console.log(`🎯 Winning patterns returned: ${JSON.stringify(winningPatterns)}`);
     if (winningPatterns.length > 0) {
       console.log(`🏆 Winning patterns: ${winningPatterns.join(', ')}`);
+    } else {
+      console.log(`❌ No winning patterns detected - check logs above for details`);
     }
 
     // Get completed lines for highlighting in UI

@@ -344,6 +344,51 @@ router.put('/:id/start', authenticateToken, [
   }
 });
 
+// Update game winner pattern (authenticated users can update their own games)
+router.patch('/:id/pattern', authenticateToken, [
+  param('id').isUUID().withMessage('Invalid game ID'),
+  body('winnerPattern').isString().isIn(['One Line', 'Two Lines', 'Three Lines', 'Full House']).withMessage('Invalid winner pattern')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id } = req.params;
+    const { winnerPattern } = req.body;
+
+    // Get the game
+    const game = await db.get('SELECT * FROM games WHERE id = $1', [id]);
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    // Verify the user owns this game
+    if (game.user_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'You can only update your own games' });
+    }
+
+    // Update the winner pattern
+    await db.run(
+      'UPDATE games SET winner_pattern = $1, updated_at = $2 WHERE id = $3',
+      [winnerPattern, new Date().toISOString(), id]
+    );
+
+    console.log(`✅ Updated game ${id} winner pattern to: ${winnerPattern}`);
+
+    res.json({
+      success: true,
+      message: 'Game pattern updated successfully',
+      gameId: id,
+      winnerPattern: winnerPattern
+    });
+  } catch (error) {
+    console.error('Error updating game pattern:', error);
+    res.status(500).json({ error: 'Failed to update game pattern' });
+  }
+});
+
 // Call next number (authenticated users)
 router.put('/:id/call-number', authenticateToken, [
   param('id').isUUID().withMessage('Invalid game ID'),

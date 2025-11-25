@@ -24,6 +24,10 @@ const NewGame: React.FC = () => {
   const [housePercentage, setHousePercentage] = useState(25);
   const [showHouseOptions, setShowHouseOptions] = useState(false);
   const [hideHouseCut, setHideHouseCut] = useState(true);
+  const [selectedPattern, setSelectedPattern] = useState<string>("Two Lines");
+  const [isLoadingPattern, setIsLoadingPattern] = useState(true);
+
+  const patternOptions = ["One Line", "Two Lines", "Three Lines", "Full House"];
 
   // Load persisted data on component mount
   React.useEffect(() => {
@@ -87,6 +91,67 @@ const NewGame: React.FC = () => {
   React.useEffect(() => {
     localStorage.setItem('betAmount', betBirr.toString());
   }, [betBirr]);
+
+  // Load pattern from settings
+  React.useEffect(() => {
+    const loadPattern = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+          setIsLoadingPattern(false);
+          return;
+        }
+
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+        const response = await fetch(`${API_BASE_URL}/settings`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const pattern = data.selectedPattern || "Two Lines";
+          setSelectedPattern(pattern);
+          console.log('✅ Loaded pattern from settings:', pattern);
+        }
+      } catch (error) {
+        console.error('Error loading pattern from settings:', error);
+      } finally {
+        setIsLoadingPattern(false);
+      }
+    };
+
+    loadPattern();
+  }, []);
+
+  // Save pattern to settings when it changes
+  const handlePatternChange = async (newPattern: string) => {
+    setSelectedPattern(newPattern);
+    
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+
+      const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${API_BASE_URL}/settings/pattern`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ selectedPattern: newPattern })
+      });
+
+      if (response.ok) {
+        console.log('✅ Pattern saved to settings:', newPattern);
+      }
+    } catch (error) {
+      console.error('Error saving pattern:', error);
+    }
+  };
+
   const [isIdModalOpen, setIsIdModalOpen] = useState(false);
   const [currentIdInput, setCurrentIdInput] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -419,33 +484,6 @@ const NewGame: React.FC = () => {
 
 
 
-        {/* Game Statistics Display */}
-        {selectedCards.length > 0 && (
-          <div className="bg-slate-800 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6 border border-slate-600">
-            <h3 className="text-sm sm:text-base font-bold text-white mb-2 sm:mb-3">Game Summary</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
-              <div className="bg-blue-600 rounded-lg p-3 sm:p-4 text-center">
-                <div className="text-blue-100 font-medium">Total Bet Money</div>
-                <div className="text-white font-bold text-lg sm:text-xl">
-                  {(selectedCards.length * betBirr).toLocaleString()} Birr
-                </div>
-                <div className="text-blue-200 text-xs">
-                  {selectedCards.length} cards × {betBirr} Birr
-                </div>
-              </div>
-              <div className="bg-green-600 rounded-lg p-3 sm:p-4 text-center">
-                <div className="text-green-100 font-medium">Win Money</div>
-                <div className="text-white font-bold text-lg sm:text-xl">
-                  {((selectedCards.length * betBirr) - ((selectedCards.length * betBirr * housePercentage) / 100)).toLocaleString()} Birr
-                </div>
-                <div className="text-green-200 text-xs">
-                  Potential Win Amount
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4 sm:mb-6">
           <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
         <span className="text-xs sm:text-base">Bet Birr:</span>
@@ -503,7 +541,54 @@ const NewGame: React.FC = () => {
             )}
           </div>
 
+          {/* Pattern Selector */}
+          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
+            <span className="text-yellow-400">👑</span>
+            <span>Pattern:</span>
+            {isLoadingPattern ? (
+              <span className="bg-slate-700 px-2 py-1 rounded text-xs sm:text-sm animate-pulse">Loading...</span>
+            ) : (
+              <div className="relative">
+                <select
+                  value={selectedPattern}
+                  onChange={(e) => handlePatternChange(e.target.value)}
+                  className="appearance-none bg-gradient-to-r from-yellow-600 to-yellow-700 text-white px-2 py-1 pr-5 sm:px-3 sm:pr-6 rounded border border-yellow-500 focus:border-yellow-400 focus:outline-none cursor-pointer text-xs sm:text-sm font-semibold shadow-lg"
+                  title="Select winning pattern"
+                >
+                  {patternOptions.map((pattern) => (
+                    <option key={pattern} value={pattern}>
+                      {pattern}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center px-1 pointer-events-none">
+                  <svg className="w-2 h-2 sm:w-3 sm:h-3 text-yellow-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+            )}
+          </div>
 
+          {/* Bet and Win Money Display */}
+          {selectedCards.length > 0 && (
+            <>
+              <div className="flex items-center gap-1 text-xs sm:text-sm">
+                <span className="text-blue-400">💰</span>
+                <span className="text-slate-300">Bet:</span>
+                <span className="bg-blue-600 px-2 py-1 rounded font-bold text-white">
+                  {(selectedCards.length * betBirr).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-xs sm:text-sm">
+                <span className="text-green-400">🏆</span>
+                <span className="text-slate-300">Win:</span>
+                <span className="bg-green-600 px-2 py-1 rounded font-bold text-white">
+                  {((selectedCards.length * betBirr) - ((selectedCards.length * betBirr * housePercentage) / 100)).toLocaleString()}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">

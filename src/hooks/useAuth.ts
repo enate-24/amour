@@ -34,6 +34,82 @@ export const useAuth = () => {
     return parts.length === 3 && parts.every(part => part.length > 0);
   };
 
+  // Helper function to decode JWT and check expiration
+  const getTokenExpiration = (token: string): number | null => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.exp ? payload.exp * 1000 : null; // Convert to milliseconds
+    } catch {
+      return null;
+    }
+  };
+
+  // Function to refresh token
+  const refreshToken = async (): Promise<boolean> => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token || !isValidJWT(token)) return false;
+
+      const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.token) {
+          localStorage.setItem('auth_token', data.token);
+          console.log('✅ Token refreshed successfully');
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      return false;
+    }
+  };
+
+  // Set up automatic token refresh - refresh 1 day before expiration
+  // TEMPORARILY DISABLED: Backend refresh-token endpoint not deployed yet
+  // useEffect(() => {
+  //   const setupTokenRefresh = () => {
+  //     const token = localStorage.getItem('auth_token');
+  //     if (!token || !isValidJWT(token)) return;
+
+  //     const expiration = getTokenExpiration(token);
+  //     if (!expiration) return;
+
+  //     const now = Date.now();
+  //     const timeUntilExpiration = expiration - now;
+  //     const refreshTime = timeUntilExpiration - (24 * 60 * 60 * 1000); // Refresh 1 day before expiration
+
+  //     if (refreshTime > 0) {
+  //       console.log(`⏰ Token will be refreshed in ${Math.round(refreshTime / 1000 / 60 / 60)} hours`);
+  //       const timeoutId = setTimeout(async () => {
+  //         const success = await refreshToken();
+  //         if (success) {
+  //           setupTokenRefresh(); // Set up next refresh
+  //         }
+  //       }, refreshTime);
+
+  //       return () => clearTimeout(timeoutId);
+  //     } else {
+  //       // Token expires soon, refresh immediately
+  //       refreshToken().then(success => {
+  //         if (success) setupTokenRefresh();
+  //       });
+  //     }
+  //   };
+
+  //   if (user) {
+  //     return setupTokenRefresh();
+  //   }
+  // }, [user]);
+
   useEffect(() => {
     // Check for stored token and get current user
     const token = localStorage.getItem('auth_token');
