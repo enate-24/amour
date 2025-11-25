@@ -1,6 +1,6 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
-const { cartelas, games, userSettings } = require('../data/database.js');
+const db = require('../db');
 const { checkWinningPatterns, validateCartela, convertCartelaToGrid, countCompletedLines } = require('../utils/patternDetection');
 
 const router = express.Router();
@@ -30,15 +30,15 @@ router.post('/', [
     const { cartelaId, gameId, patterns, calledNumbers: clientCalledNumbers } = req.body;
     console.log('📥 Winner check request body:', { cartelaId, gameId, patterns, clientCalledNumbers: clientCalledNumbers?.length || 0 });
 
-    // Find the cartela by ID or card_id
-    const allCartelas = await cartelas.findAll();
-    let cartela = allCartelas.find(c => c.id === cartelaId && c.is_active);
+    // Find the cartela by ID or card_id from PostgreSQL database
+    let cartela = await db.get('SELECT * FROM cartelas WHERE id = $1 AND is_active = 1', [cartelaId]);
 
     if (!cartela) {
-      cartela = allCartelas.find(c => c.card_id === cartelaId && c.is_active);
+      cartela = await db.get('SELECT * FROM cartelas WHERE card_id = $1 AND is_active = 1', [cartelaId]);
     }
 
     if (!cartela) {
+      console.error('❌ Cartela not found:', cartelaId);
       return res.status(404).json({
         success: false,
         message: 'Cartela not found',
@@ -59,9 +59,10 @@ router.post('/', [
       });
     }
 
-    // Get the game
-    const game = await games.findById(targetGameId);
+    // Get the game from PostgreSQL database
+    const game = await db.get('SELECT * FROM games WHERE id = $1', [targetGameId]);
     if (!game) {
+      console.error('❌ Game not found:', targetGameId);
       return res.status(404).json({
         success: false,
         message: 'Game not found',
@@ -93,13 +94,13 @@ router.post('/', [
     } else {
       console.log(`⚠️ No patterns in request body, checking user settings...`);
       
-      // Try to get current user settings
+      // Try to get current user settings from PostgreSQL
       let userPattern = null;
       try {
         if (req.user && req.user.id) {
-          const userSettingsData = await userSettings.findByUserId(req.user.id);
-          if (userSettingsData && userSettingsData.selectedPattern) {
-            userPattern = userSettingsData.selectedPattern;
+          const userSettingsData = await db.get('SELECT * FROM user_settings WHERE user_id = $1', [req.user.id]);
+          if (userSettingsData && userSettingsData.selected_pattern) {
+            userPattern = userSettingsData.selected_pattern;
             console.log(`✅ Found user settings pattern: ${userPattern}`);
           } else {
             console.log(`⚠️ No user settings found for user ${req.user.id}`);
@@ -271,12 +272,16 @@ router.post('/', [
     res.json(response);
 
   } catch (error) {
-    console.error('Winner check error:', error);
+    console.error('❌❌❌ Winner check error:', error);
+    console.error('❌ Error stack:', error.stack);
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Request body:', req.body);
     res.status(500).json({
       success: false,
       message: 'Internal server error during winner check',
       win: false,
-      cardType: 'error'
+      cardType: 'error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
