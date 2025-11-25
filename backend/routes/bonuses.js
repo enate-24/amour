@@ -145,6 +145,7 @@ router.get('/daily', authenticateToken, async (req, res) => {
         bonusAvailable: bonusStatus.bonusAmount,
         requirementsMet: bonusStatus.requirementsMet,
         profitNeeded: bonusStatus.profitNeeded,
+        bonusUsed: dailyBonus.bonus_used, // Map snake_case to camelCase
         requirements: DAILY_REQUIREMENTS
       }
     });

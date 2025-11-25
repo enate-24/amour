@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const types = require('pg').types;
+const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
 // Configure type parsers for PostgreSQL
@@ -828,7 +829,6 @@ const dailyBonusOperations = {
   },
 
   create: async (bonusData) => {
-    const { v4: uuidv4 } = require('uuid');
     return run(`
       INSERT INTO daily_bonuses (id, user_id, bonus_date, daily_profit, bonus_amount, bonus_type, requirements_met, bonus_claimed, bonus_used, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
