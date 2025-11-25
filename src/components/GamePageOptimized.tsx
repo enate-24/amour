@@ -623,22 +623,19 @@ const GamePageOptimized = (): JSX.Element => {
 
             const calledNumber = result.calledNumber;
             if (calledNumber) {
-              // Play sound first
+              // Play sound and show number simultaneously
               audioManagerRef.current?.playSound(calledNumber);
               
-              // Show popup after 1 second delay
-              setTimeout(() => {
-                setCalled(prev => {
-                  // Prevent duplicates by checking if number already exists
-                  if (prev.includes(calledNumber)) {
-                    console.warn(`⚠️ Number ${calledNumber} already called, skipping duplicate`);
-                    return prev;
-                  }
-                  const newCalled = [...prev, calledNumber];
-                  localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
-                  return newCalled;
-                });
-              }, 1000);
+              setCalled(prev => {
+                // Prevent duplicates by checking if number already exists
+                if (prev.includes(calledNumber)) {
+                  console.warn(`⚠️ Number ${calledNumber} already called, skipping duplicate`);
+                  return prev;
+                }
+                const newCalled = [...prev, calledNumber];
+                localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
+                return newCalled;
+              });
             }
           } else if (response.status === 400 || response.status === 429) {
             console.log('Auto-call stopped due to API response:', response.status);
@@ -728,22 +725,19 @@ const GamePageOptimized = (): JSX.Element => {
 
         const calledNumber = result.calledNumber;
         if (calledNumber) {
-          // Play sound first
+          // Play sound and show number simultaneously
           audioManagerRef.current?.playSound(calledNumber);
           
-          // Show popup after 1 second delay
-          setTimeout(() => {
-            setCalled(prev => {
-              // Prevent duplicates by checking if number already exists
-              if (prev.includes(calledNumber)) {
-                console.warn(`⚠️ Number ${calledNumber} already called, skipping duplicate`);
-                return prev;
-              }
-              const newCalled = [...prev, calledNumber];
-              localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
-              return newCalled;
-            });
-          }, 1000);
+          setCalled(prev => {
+            // Prevent duplicates by checking if number already exists
+            if (prev.includes(calledNumber)) {
+              console.warn(`⚠️ Number ${calledNumber} already called, skipping duplicate`);
+              return prev;
+            }
+            const newCalled = [...prev, calledNumber];
+            localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
+            return newCalled;
+          });
         }
       } else {
         console.error('API error:', response.status);
