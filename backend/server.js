@@ -78,7 +78,7 @@ app.use(cors({
       ...developmentOrigins,
       ...frontendUrls,
       // Fallback for backward compatibility
-      'https://abisinya-bingo.netlify.app/',
+      'https://abisinya-bingo.netlify.app',
       'https://amour-bingo.vercel.app'
     ];
 
