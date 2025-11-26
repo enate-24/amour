@@ -127,7 +127,15 @@ export const useAuth = () => {
       })
       .then(res => {
         if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          // Only clear token on 401 (unauthorized), not on other errors
+          if (res.status === 401) {
+            console.error('Token is invalid or expired (401)');
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          } else {
+            // For other errors (500, 503, etc.), keep the token and retry later
+            console.warn(`Server error ${res.status}, will retry later`);
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          }
         }
         return res.json();
       })
@@ -154,8 +162,12 @@ export const useAuth = () => {
       })
       .catch((error) => {
         console.error('Auth profile fetch failed:', error);
-        localStorage.removeItem('auth_token'); // Token invalid, remove it
-        setUser(null);
+        // Only remove token and logout on 401 errors
+        if (error.message.includes('401')) {
+          localStorage.removeItem('auth_token');
+          setUser(null);
+        }
+        // For other errors, keep user logged in (they might be offline temporarily)
       })
       .finally(() => {
         setLoading(false);
@@ -356,6 +368,7 @@ export const useAuth = () => {
       const token = localStorage.getItem('auth_token');
       
       if (!token || !isValidJWT(token)) {
+        console.warn('refreshUser: No valid token available');
         return { error: 'No valid token available' };
       }
 
@@ -367,6 +380,13 @@ export const useAuth = () => {
       });
 
       if (!response.ok) {
+        // If 401, token is invalid - but DON'T automatically logout
+        // Let the user stay logged in and they can manually refresh or re-login
+        if (response.status === 401) {
+          console.error('refreshUser: Token may be expired (401), but keeping user logged in');
+          // Don't clear token or user state - just return error
+          return { error: 'Authentication may be expired', shouldLogout: false };
+        }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
@@ -393,6 +413,7 @@ export const useAuth = () => {
       }
     } catch (error) {
       console.error('Refresh user error:', error);
+      // Don't logout on network errors, only on auth errors
       return {
         error: {
           message: error instanceof Error ? error.message : 'Failed to refresh user data'

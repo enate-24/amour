@@ -84,10 +84,9 @@ const Settings: React.FC = () => {
         setHouseCutPercentage(data.houseCutPercentage || 10);
         console.log('✅ Settings loaded from backend:', data);
       } else if (response.status === 401) {
-        console.error('❌ Authentication failed - token may be expired');
-        // Clear invalid token and redirect to login
-        localStorage.removeItem('auth_token');
-        navigate('/');
+        console.warn('⚠️ Authentication error loading settings - using defaults');
+        // Don't logout - just use default settings
+        // User can manually logout if needed
       } else {
         console.warn('Failed to load settings from backend');
       }
@@ -170,11 +169,14 @@ const Settings: React.FC = () => {
           setSaveMessage("");
         }, 3000);
       } else if (response.status === 401) {
-        console.error('❌ Authentication failed - token may be expired');
-        setSaveMessage("Session expired. Redirecting to login...");
-        // Clear invalid token and redirect to login
-        localStorage.removeItem('auth_token');
-        setTimeout(() => navigate('/'), 2000);
+        console.warn('⚠️ Authentication error saving settings');
+        setSaveMessage("Authentication error. Please try logging in again if this persists.");
+        // Don't automatically logout - let user decide
+        
+        // Clear error message after 5 seconds
+        setTimeout(() => {
+          setSaveMessage("");
+        }, 5000);
       } else {
         const errorData = await response.json();
         setSaveMessage(`Error: ${errorData.error || 'Failed to save settings'}`);

@@ -64,7 +64,7 @@ function AppContent() {
         }
       }
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, location.pathname]);
 
   // Show loading spinner while checking authentication
   if (loading) {
@@ -140,7 +140,7 @@ function AppContent() {
         />
 
         {/* Main Content */}
-        <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'lg:ml-64' : ''}`}>
+        <main className="flex-1 min-w-0 overflow-x-hidden">{/* Ensure content doesn't overflow on mobile */}
           <Routes>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/game-analytics" element={<GameAnalytics />} />

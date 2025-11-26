@@ -177,13 +177,6 @@ const NewGame: React.FC = () => {
     }
   };
 
-  // Auto-select disabled - users must manually select cartelas
-  // useEffect(() => {
-  //   if (cartelas.length > 0 && selectedCards.length === 0) {
-  //     selectAll1200Cartelas();
-  //   }
-  // }, [cartelas, selectedCards.length]);
-
   const handleBetChange = (increment: boolean) => {
     setBetBirr(prev => Math.max(5, increment ? prev + 5 : prev - 5));
   };
@@ -250,6 +243,12 @@ const NewGame: React.FC = () => {
         selectedCartelas: selectedCards // Ensure only selected cartelas are saved
       };
 
+      console.log('🎮 Attempting to save game session:', {
+        url: `${API_BASE_URL}/games/session`,
+        gameData: gameDataWithNumber,
+        token: token ? 'Present' : 'Missing'
+      });
+
       const response = await fetch(`${API_BASE_URL}/games/session`, {
         method: 'POST',
         headers: {
@@ -259,16 +258,25 @@ const NewGame: React.FC = () => {
         body: JSON.stringify(gameDataWithNumber)
       });
 
+      console.log('🎮 Game session save response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+
       if (!response.ok) {
         // Try to parse error response, but handle cases where response body is not JSON
         let errorMessage = `Failed to save game session (HTTP ${response.status})`;
         try {
           const errorData = await response.json();
+          console.error('🎮 Game session save error data:', errorData);
           errorMessage = errorData.error || errorData.message || errorMessage;
         } catch (parseError) {
           // If response body is not valid JSON, try to get text
           try {
             const errorText = await response.text();
+            console.error('🎮 Game session save error text:', errorText);
             if (errorText) {
               errorMessage = errorText;
             }
@@ -443,359 +451,358 @@ const NewGame: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen py-2 px-2 sm:py-4 sm:px-4 md:px-8 lg:px-16 xl:px-[87px] relative bg-[#001A23]">
-      {/* Clean Button - Top Right Corner */}
-      {selectedCards.length > 0 && (
-        <div className="absolute top-1 right-1 sm:top-2 sm:right-2 flex gap-1 sm:gap-2 z-10">
-
-          
-          {/* Clear Button */}
-          <button
-            onClick={() => {
-              setSelectedCards([]);
-              setRegisteredCount(0);
-              // Clear from localStorage but keep remember selection active
-              localStorage.removeItem('selectedCards');
-            }}
-            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-2 py-1 sm:px-4 sm:py-2 rounded-lg font-bold transition-all shadow-lg hover:shadow-xl transform hover:scale-105 text-xs sm:text-sm flex items-center gap-1 sm:gap-2"
-            title="Clear all selected cartelas"
-          >
-            <span className="text-sm sm:text-lg">🗑️</span>
-            <span className="hidden xs:inline">Clean ({selectedCards.length})</span>
-            <span className="xs:hidden">({selectedCards.length})</span>
-          </button>
-        </div>
-      )}
-
-      <div className="mb-4 sm:mb-6">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm mb-3 sm:mb-4">
-          <span>Games Played: <span className="text-blue-400 font-bold">{gamesPlayed}</span></span>
-          <span>Bonus Played: <span className="text-green-400 font-bold">{bonusPlayed}</span></span>
-        </div>
-
-
-
-        <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4 sm:mb-6">
-          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
-        <span className="text-xs sm:text-base">Bet Birr:</span>
-        <button
-          onClick={() => handleBetChange(false)}
-          className="p-1 bg-red-500 hover:bg-red-600 rounded transition-colors"
-          aria-label="Decrease Bet"
-        >
-          <Minus size={14} className="sm:w-4 sm:h-4" />
-        </button>
-        <span className="bg-slate-700 px-2 py-1 sm:px-4 sm:py-2 rounded font-bold min-w-[50px] sm:min-w-[60px] text-center text-sm sm:text-base">
-          {betBirr}
-        </span>
-        <button
-          onClick={() => handleBetChange(true)}
-          className="p-1 bg-green-500 hover:bg-green-600 rounded transition-colors"
-          aria-label="Increase Bet"
-        >
-          <Plus size={14} className="sm:w-4 sm:h-4" />
-        </button>
-          </div>
-
-
-
-          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
-            <span>House</span>
-            <button
-              onClick={() => setHideHouseCut(!hideHouseCut)}
-              className="p-1 text-slate-400 hover:text-slate-200 transition-colors"
-              title={hideHouseCut ? "Show house cut" : "Hide house cut"}
-            >
-              {hideHouseCut ? <EyeOff size={14} className="sm:w-4 sm:h-4" /> : <Eye size={14} className="sm:w-4 sm:h-4" />}
-            </button>
-            {!hideHouseCut && (
-              <div className="relative">
-                <select
-                  value={housePercentage}
-                  onChange={(e) => setHousePercentage(Number(e.target.value))}
-                  className="appearance-none bg-slate-700 text-white px-2 py-1 pr-5 sm:px-3 sm:pr-6 rounded border border-slate-600 focus:border-blue-400 focus:outline-none cursor-pointer text-xs sm:text-sm"
-                >
-                  <option value={10}>10%</option>
-                  <option value={15}>15%</option>
-                  <option value={20}>20%</option>
-                  <option value={25}>25%</option>
-                  <option value={30}>30%</option>
-                  <option value={35}>35%</option>
-                  <option value={40}>40%</option>
-                </select>
-                <div className="absolute inset-y-0 right-0 flex items-center px-1 pointer-events-none">
-                  <svg className="w-2 h-2 sm:w-3 sm:h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Pattern Selector */}
-          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
-            <span className="text-yellow-400">👑</span>
-            <span>Pattern:</span>
-            {isLoadingPattern ? (
-              <span className="bg-slate-700 px-2 py-1 rounded text-xs sm:text-sm animate-pulse">Loading...</span>
-            ) : (
-              <div className="relative">
-                <select
-                  value={selectedPattern}
-                  onChange={(e) => handlePatternChange(e.target.value)}
-                  className="appearance-none bg-[#1D4ED8] text-white px-2 py-1 pr-5 sm:px-3 sm:pr-6 rounded border border-blue-500 focus:border-blue-400 focus:outline-none cursor-pointer text-xs sm:text-sm font-semibold shadow-lg"
-                  title="Select winning pattern"
-                >
-                  {patternOptions.map((pattern) => (
-                    <option key={pattern} value={pattern}>
-                      {pattern}
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute inset-y-0 right-0 flex items-center px-1 pointer-events-none">
-                  <svg className="w-2 h-2 sm:w-3 sm:h-3 text-yellow-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Bet and Win Money Display */}
+    <div className="min-h-screen bg-[#001A23] flex flex-col">
+      {/* Sticky Header Section */}
+      <div className="sticky top-0 z-20 bg-[#001A23] border-b border-slate-700 shadow-lg">
+        <div className="py-2 px-2 sm:py-4 sm:px-4 md:px-8 lg:px-16 xl:px-[87px] relative">
+          {/* Clean Button - Top Right Corner */}
           {selectedCards.length > 0 && (
-            <>
-              <div className="flex items-center gap-1 text-xs sm:text-sm">
-                <span className="text-blue-400">💰</span>
-                <span className="text-slate-300">Bet:</span>
-                <span className="bg-blue-600 px-2 py-1 rounded font-bold text-white">
-                  {(selectedCards.length * betBirr).toLocaleString()}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 text-xs sm:text-sm">
-                <span className="text-green-400">🏆</span>
-                <span className="text-slate-300">Win:</span>
-                <span className="bg-green-600 px-2 py-1 rounded font-bold text-white">
-                  {((selectedCards.length * betBirr) - ((selectedCards.length * betBirr * housePercentage) / 100)).toLocaleString()}
-                </span>
-              </div>
-            </>
+            <div className="absolute top-1 right-1 sm:top-2 sm:right-2 flex gap-1 sm:gap-2 z-10">
+              {/* Clear Button */}
+              <button
+                onClick={() => {
+                  setSelectedCards([]);
+                  setRegisteredCount(0);
+                  // Clear from localStorage but keep remember selection active
+                  localStorage.removeItem('selectedCards');
+                }}
+                className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-2 py-1 sm:px-4 sm:py-2 rounded-lg font-bold transition-all shadow-lg hover:shadow-xl transform hover:scale-105 text-xs sm:text-sm flex items-center gap-1 sm:gap-2"
+                title="Clear all selected cartelas"
+              >
+                <span className="text-sm sm:text-lg">🗑️</span>
+                <span className="hidden xs:inline">Clean ({selectedCards.length})</span>
+                <span className="xs:hidden">({selectedCards.length})</span>
+              </button>
+            </div>
           )}
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
-          <button
-        className="bg-blue-600 hover:bg-blue-700 px-3 py-2 sm:px-4 sm:py-2.5 md:px-6 md:py-3 rounded-lg font-medium transition-colors text-xs sm:text-sm md:text-base"
-        onClick={() => alert(`Selected Cards: ${selectedCards.join(', ')}`)}
-          >
-        <span className="hidden sm:inline">Cartela Check ↗</span>
-        <span className="sm:hidden">Check ↗</span>
-          </button>
-          <button
-        className="bg-blue-600 hover:bg-blue-700 px-3 py-2 sm:px-4 sm:py-2.5 md:px-6 md:py-3 rounded-lg font-medium transition-colors text-xs sm:text-sm md:text-base"
-        onClick={() => {
-          setIsIdModalOpen(true);
-          setCurrentIdInput('');
-          setRegistrationStatus({type: '', message: ''});
-        }}
-          >
-        <span className="hidden sm:inline">Enter ID (Fast)</span>
-        <span className="sm:hidden">Enter ID</span>
-          </button>
-          
-          {/* House Bonus Button */}
-          <HouseBonusButton />
-          
-          {/* Cartela Selection Status */}
-          <div className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold ${
-            selectedCards.length >= 3 
-              ? 'bg-green-100 text-green-800 border border-green-300' 
-              : 'bg-yellow-100 text-yellow-800 border border-yellow-300'
-          }`}>
-            {selectedCards.length >= 3 
-              ? `✅ ${selectedCards.length} cartelas selected` 
-              : `⚠️ ${selectedCards.length}/3 cartelas (need ${3 - selectedCards.length} more)`
-            }
-          </div>
-          
-          <button
-        className={`px-4 py-2 sm:px-6 sm:py-2.5 md:px-8 md:py-3 rounded-lg font-bold transition-colors text-xs sm:text-sm md:text-base ${
-          selectedCards.length >= 3 && !isSavingGame
-            ? 'bg-green-600 hover:bg-green-700 cursor-pointer'
-            : 'bg-gray-600 cursor-not-allowed opacity-50'
-        }`}
-        onClick={handleStartGame}
-        disabled={isSavingGame || selectedCards.length < 3}
-        title={selectedCards.length < 3 ? `Select at least 3 cartelas to start (${selectedCards.length}/3 selected)` : ''}
-          >
-        {isSavingGame 
-          ? 'Saving...' 
-          : selectedCards.length < 3 
-            ? `Start Game (${selectedCards.length}/3)` 
-            : 'Start Game'
-        }
-          </button>
-        </div>
+          <div className="mb-4 sm:mb-6">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm mb-3 sm:mb-4">
+              <span>Games Played: <span className="text-blue-400 font-bold">{gamesPlayed}</span></span>
+              <span>Bonus Played: <span className="text-green-400 font-bold">{bonusPlayed}</span></span>
+            </div>
 
-        {/* Sticky ID Modal */}
-        {isIdModalOpen && (
-          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-[95%] max-w-md sm:w-full sm:mx-4 md:top-8">
-            <div className="bg-slate-800 rounded-lg border-2 border-blue-400 shadow-2xl">
-              <div className="p-3 sm:p-4">
-                <div className="flex items-center justify-between mb-3 sm:mb-4">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <h3 className="text-base sm:text-lg font-bold text-white truncate">
-                      Enter Cartela ID
-                    </h3>
-                    {registeredCount > 0 && (
-                      <span className="px-2 py-1 bg-green-600 text-green-100 rounded-full text-xs font-bold shrink-0">
-                        {registeredCount} registered
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setIsIdModalOpen(false)}
-                    className="text-slate-400 hover:text-white transition-colors text-lg sm:text-xl shrink-0 ml-2"
-                    title="Close"
-                  >
-                    ✕
-                  </button>
-                </div>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4 sm:mb-6">
+              <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
+                <span className="text-xs sm:text-base">Bet Birr:</span>
+                <button
+                  onClick={() => handleBetChange(false)}
+                  className="p-1 bg-red-500 hover:bg-red-600 rounded transition-colors"
+                  aria-label="Decrease Bet"
+                >
+                  <Minus size={14} className="sm:w-4 sm:h-4" />
+                </button>
+                <span className="bg-slate-700 px-2 py-1 sm:px-4 sm:py-2 rounded font-bold min-w-[50px] sm:min-w-[60px] text-center text-sm sm:text-base">
+                  {betBirr}
+                </span>
+                <button
+                  onClick={() => handleBetChange(true)}
+                  className="p-1 bg-green-500 hover:bg-green-600 rounded transition-colors"
+                  aria-label="Increase Bet"
+                >
+                  <Plus size={14} className="sm:w-4 sm:h-4" />
+                </button>
+              </div>
 
-                <div className="space-y-4">
-                  <input
-                    type="text"
-                    value={currentIdInput}
-                    onChange={(e) => setCurrentIdInput(e.target.value)}
-                    placeholder="Enter Cartela ID..."
-                    className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-blue-400 focus:outline-none"
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        handleIdRegistration();
-                      }
-                    }}
-                    autoFocus
-                  />
-
-                  {registrationStatus.message && (
-                    <div className={`p-3 rounded text-sm ${
-                      registrationStatus.type === 'success'
-                        ? 'bg-green-600 text-green-100'
-                        : 'bg-red-600 text-red-100'
-                    }`}>
-                      {registrationStatus.message}
-                    </div>
-                  )}
-
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <button
-                      onClick={handleIdRegistration}
-                      disabled={isRegistering || !currentIdInput.trim()}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed px-4 py-2 rounded font-medium transition-colors text-sm sm:text-base"
+              <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
+                <span>House</span>
+                <button
+                  onClick={() => setHideHouseCut(!hideHouseCut)}
+                  className="p-1 text-slate-400 hover:text-slate-200 transition-colors"
+                  title={hideHouseCut ? "Show house cut" : "Hide house cut"}
+                >
+                  {hideHouseCut ? <EyeOff size={14} className="sm:w-4 sm:h-4" /> : <Eye size={14} className="sm:w-4 sm:h-4" />}
+                </button>
+                {!hideHouseCut && (
+                  <div className="relative">
+                    <select
+                      value={housePercentage}
+                      onChange={(e) => setHousePercentage(Number(e.target.value))}
+                      className="appearance-none bg-slate-700 text-white px-2 py-1 pr-5 sm:px-3 sm:pr-6 rounded border border-slate-600 focus:border-blue-400 focus:outline-none cursor-pointer text-xs sm:text-sm"
                     >
-                      {isRegistering ? 'Registering...' : 'Register'}
-                    </button>
-                    <div className="flex gap-2">
-                      {registeredCount > 0 && (
-                        <button
-                          onClick={() => {
-                            setIsIdModalOpen(false);
-                            setRegisteredCount(0);
-                          }}
-                          className="px-3 py-2 bg-green-600 hover:bg-green-700 rounded font-medium transition-colors text-sm sm:text-base flex-1 sm:flex-none"
-                        >
-                          <span className="hidden sm:inline">Finish </span>({registeredCount})
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setIsIdModalOpen(false)}
-                        className="px-3 py-2 bg-slate-600 hover:bg-slate-700 rounded font-medium transition-colors text-sm sm:text-base"
-                      >
-                        Cancel
-                      </button>
+                      <option value={10}>10%</option>
+                      <option value={15}>15%</option>
+                      <option value={20}>20%</option>
+                      <option value={25}>25%</option>
+                      <option value={30}>30%</option>
+                      <option value={35}>35%</option>
+                      <option value={40}>40%</option>
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center px-1 pointer-events-none">
+                      <svg className="w-2 h-2 sm:w-3 sm:h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Pattern Selector */}
+              <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
+                <span className="text-yellow-400">👑</span>
+                <span>Pattern:</span>
+                {isLoadingPattern ? (
+                  <span className="bg-slate-700 px-2 py-1 rounded text-xs sm:text-sm animate-pulse">Loading...</span>
+                ) : (
+                  <div className="relative">
+                    <select
+                      value={selectedPattern}
+                      onChange={(e) => handlePatternChange(e.target.value)}
+                      className="appearance-none bg-[#1D4ED8] text-white px-2 py-1 pr-5 sm:px-3 sm:pr-6 rounded border border-blue-500 focus:border-blue-400 focus:outline-none cursor-pointer text-xs sm:text-sm font-semibold shadow-lg"
+                      title="Select winning pattern"
+                    >
+                      {patternOptions.map((pattern) => (
+                        <option key={pattern} value={pattern}>
+                          {pattern}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center px-1 pointer-events-none">
+                      <svg className="w-2 h-2 sm:w-3 sm:h-3 text-yellow-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Bet and Win Money Display */}
+              {selectedCards.length > 0 && (
+                <>
+                  <div className="flex items-center gap-1 text-xs sm:text-sm">
+                    <span className="text-blue-400">💰</span>
+                    <span className="text-slate-300">Bet:</span>
+                    <span className="bg-blue-600 px-2 py-1 rounded font-bold text-white">
+                      {(selectedCards.length * betBirr).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs sm:text-sm">
+                    <span className="text-green-400">🏆</span>
+                    <span className="text-slate-300">Win:</span>
+                    <span className="bg-green-600 px-2 py-1 rounded font-bold text-white">
+                      {((selectedCards.length * betBirr) - ((selectedCards.length * betBirr * housePercentage) / 100)).toLocaleString()}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
+              <button
+                className="bg-blue-600 hover:bg-blue-700 px-3 py-2 sm:px-4 sm:py-2.5 md:px-6 md:py-3 rounded-lg font-medium transition-colors text-xs sm:text-sm md:text-base"
+                onClick={() => alert(`Selected Cards: ${selectedCards.join(', ')}`)}
+              >
+                <span className="hidden sm:inline">Cartela Check ↗</span>
+                <span className="sm:hidden">Check ↗</span>
+              </button>
+              <button
+                className="bg-blue-600 hover:bg-blue-700 px-3 py-2 sm:px-4 sm:py-2.5 md:px-6 md:py-3 rounded-lg font-medium transition-colors text-xs sm:text-sm md:text-base"
+                onClick={() => {
+                  setIsIdModalOpen(true);
+                  setCurrentIdInput('');
+                  setRegistrationStatus({type: '', message: ''});
+                }}
+              >
+                <span className="hidden sm:inline">Enter ID (Fast)</span>
+                <span className="sm:hidden">Enter ID</span>
+              </button>
+              
+              {/* House Bonus Button */}
+              <HouseBonusButton />
+              
+              {/* Cartela Selection Status */}
+              <div className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold ${
+                selectedCards.length >= 3 
+                  ? 'bg-green-100 text-green-800 border border-green-300' 
+                  : 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+              }`}>
+                {selectedCards.length >= 3 
+                  ? `✅ ${selectedCards.length} cartelas selected` 
+                  : `⚠️ ${selectedCards.length}/3 cartelas (need ${3 - selectedCards.length} more)`
+                }
+              </div>
+              
+              <button
+                className={`px-4 py-2 sm:px-6 sm:py-2.5 md:px-8 md:py-3 rounded-lg font-bold transition-colors text-xs sm:text-sm md:text-base ${
+                  selectedCards.length >= 3 && !isSavingGame
+                    ? 'bg-green-600 hover:bg-green-700 cursor-pointer'
+                    : 'bg-gray-600 cursor-not-allowed opacity-50'
+                }`}
+                onClick={handleStartGame}
+                disabled={isSavingGame || selectedCards.length < 3}
+                title={selectedCards.length < 3 ? `Select at least 3 cartelas to start (${selectedCards.length}/3 selected)` : ''}
+              >
+                {isSavingGame 
+                  ? 'Saving...' 
+                  : selectedCards.length < 3 
+                    ? `Start Game (${selectedCards.length}/3)` 
+                    : 'Start Game'
+                }
+              </button>
+            </div>
+
+            <div className="mb-3 sm:mb-4">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className="text-white font-medium text-xs sm:text-sm md:text-base">
+                  Selected Cards ({selectedCards.length})
+                  {selectedCards.length >= 1200 && (
+                    <span className="ml-2 px-2 py-1 bg-green-600 text-white rounded-full text-xs font-bold">
+                      ALL 1200 ACTIVE! 🎯
+                    </span>
+                  )}
+                </span>
+                <label className={`flex items-center gap-1 sm:gap-2 px-2 py-1 sm:px-3 rounded-lg transition-colors ${
+                  rememberSelection
+                    ? 'bg-green-600 text-green-100'
+                    : 'bg-slate-700 text-slate-300'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={rememberSelection}
+                    onChange={(e) => setRememberSelection(e.target.checked)}
+                    className="rounded w-3 h-3 sm:w-4 sm:h-4"
+                  />
+                  <span className="text-xs sm:text-sm font-medium">
+                    <span className="hidden sm:inline">{rememberSelection ? '✅ Remember Active' : 'Remember Selection'}</span>
+                    <span className="sm:hidden">{rememberSelection ? '✅ Remember' : 'Remember'}</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Scrollable Cartela Grid Section */}
+      <div className="flex-1 overflow-y-auto px-2 sm:px-4 md:px-8 lg:px-16 xl:px-[87px] py-4">
+        {/* Loading State */}
+        {loading && (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p className="text-slate-400">Loading cartelas...</p>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="text-center py-12">
+            <p className="text-red-400 text-lg mb-4">Error: {error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Cartela Grid */}
+        {!loading && !error && (
+          <div className="grid grid-cols-6 xs:grid-cols-8 sm:grid-cols-12 md:grid-cols-16 lg:grid-cols-20 xl:grid-cols-24 2xl:grid-cols-28 gap-0.5 sm:gap-1 pb-4">
+            {cartelas.sort((a, b) => {
+              const aNum = parseInt(a.card_id) || 0;
+              const bNum = parseInt(b.card_id) || 0;
+              return aNum - bNum;
+            }).map((cartela, index) => (
+              <button
+                key={`${cartela.card_id}-${index}`}
+                onClick={() => handleCartelaSelect(cartela.card_id)}
+                className={`aspect-square p-0.5 rounded transition-all duration-200 active:scale-95 sm:hover:scale-105 ${
+                  selectedCards.includes(cartela.card_id)
+                    ? 'bg-blue-600 text-white shadow-lg transform scale-105'
+                    : 'bg-[#c5c9c8] active:bg-[#b0b5b4] sm:hover:bg-[#b0b5b4] text-black border border-gray-300'
+                }`}
+              >
+                <div className="text-center h-full flex items-center justify-center">
+                  <div className="text-[8px] xs:text-[9px] sm:text-[10px] md:text-[11px] font-semibold leading-tight">{cartela.card_id}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Sticky ID Modal */}
+      {isIdModalOpen && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-[95%] max-w-md sm:w-full sm:mx-4 md:top-8">
+          <div className="bg-slate-800 rounded-lg border-2 border-blue-400 shadow-2xl">
+            <div className="p-3 sm:p-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <h3 className="text-base sm:text-lg font-bold text-white truncate">
+                    Enter Cartela ID
+                  </h3>
+                  {registeredCount > 0 && (
+                    <span className="px-2 py-1 bg-green-600 text-green-100 rounded-full text-xs font-bold shrink-0">
+                      {registeredCount} registered
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => setIsIdModalOpen(false)}
+                  className="text-slate-400 hover:text-white transition-colors text-lg sm:text-xl shrink-0 ml-2"
+                  title="Close"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  value={currentIdInput}
+                  onChange={(e) => setCurrentIdInput(e.target.value)}
+                  placeholder="Enter Cartela ID..."
+                  className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-blue-400 focus:outline-none"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleIdRegistration();
+                    }
+                  }}
+                  autoFocus
+                />
+
+                {registrationStatus.message && (
+                  <div className={`p-3 rounded text-sm ${
+                    registrationStatus.type === 'success'
+                      ? 'bg-green-600 text-green-100'
+                      : 'bg-red-600 text-red-100'
+                  }`}>
+                    {registrationStatus.message}
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    onClick={handleIdRegistration}
+                    disabled={isRegistering || !currentIdInput.trim()}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed px-4 py-2 rounded font-medium transition-colors text-sm sm:text-base"
+                  >
+                    {isRegistering ? 'Registering...' : 'Register'}
+                  </button>
+                  <div className="flex gap-2">
+                    {registeredCount > 0 && (
+                      <button
+                        onClick={() => {
+                          setIsIdModalOpen(false);
+                          setRegisteredCount(0);
+                        }}
+                        className="px-3 py-2 bg-green-600 hover:bg-green-700 rounded font-medium transition-colors text-sm sm:text-base flex-1 sm:flex-none"
+                      >
+                        <span className="hidden sm:inline">Finish </span>({registeredCount})
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setIsIdModalOpen(false)}
+                      className="px-3 py-2 bg-slate-600 hover:bg-slate-700 rounded font-medium transition-colors text-sm sm:text-base"
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        )}
-
-        <div className="mb-3 sm:mb-4">
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className="text-white font-medium text-xs sm:text-sm md:text-base">
-              Selected Cards ({selectedCards.length})
-              {selectedCards.length >= 1200 && (
-                <span className="ml-2 px-2 py-1 bg-green-600 text-white rounded-full text-xs font-bold">
-                  ALL 1200 ACTIVE! 🎯
-                </span>
-              )}
-            </span>
-            <label className={`flex items-center gap-1 sm:gap-2 px-2 py-1 sm:px-3 rounded-lg transition-colors ${
-              rememberSelection
-                ? 'bg-green-600 text-green-100'
-                : 'bg-slate-700 text-slate-300'
-            }`}>
-              <input
-                type="checkbox"
-                checked={rememberSelection}
-                onChange={(e) => setRememberSelection(e.target.checked)}
-                className="rounded w-3 h-3 sm:w-4 sm:h-4"
-              />
-              <span className="text-xs sm:text-sm font-medium">
-                <span className="hidden sm:inline">{rememberSelection ? '✅ Remember Active' : 'Remember Selection'}</span>
-                <span className="sm:hidden">{rememberSelection ? '✅ Remember' : 'Remember'}</span>
-              </span>
-            </label>
-          </div>
-
-          {/* Show selected cartela cards */}
-
-        </div>
-      </div>
-
-      {/* Loading State */}
-      {loading && (
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-slate-400">Loading cartelas...</p>
-        </div>
-      )}
-
-      {/* Error State */}
-      {error && (
-        <div className="text-center py-12">
-          <p className="text-red-400 text-lg mb-4">Error: {error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Cartela Grid */}
-      {!loading && !error && (
-        <div className="grid grid-cols-6 xs:grid-cols-8 sm:grid-cols-12 md:grid-cols-16 lg:grid-cols-20 xl:grid-cols-24 2xl:grid-cols-28 gap-0.5 sm:gap-1">
-          {cartelas.sort((a, b) => {
-            const aNum = parseInt(a.card_id) || 0;
-            const bNum = parseInt(b.card_id) || 0;
-            return aNum - bNum;
-          }).map((cartela, index) => (
-            <button
-              key={`${cartela.card_id}-${index}`}
-              onClick={() => handleCartelaSelect(cartela.card_id)}
-              className={`aspect-square p-0.5 rounded transition-all duration-200 active:scale-95 sm:hover:scale-105 ${
-                selectedCards.includes(cartela.card_id)
-                  ? 'bg-blue-600 text-white shadow-lg transform scale-105'
-                  : 'bg-[#c5c9c8] active:bg-[#b0b5b4] sm:hover:bg-[#b0b5b4] text-black border border-gray-300'
-              }`}
-            >
-              <div className="text-center h-full flex items-center justify-center">
-                <div className="text-[8px] xs:text-[9px] sm:text-[10px] md:text-[11px] font-semibold leading-tight">{cartela.card_id}</div>
-              </div>
-            </button>
-          ))}
         </div>
       )}
     </div>

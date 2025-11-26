@@ -1,15 +1,8 @@
 // API configuration - Use Vite proxy for all API calls
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
-// Helper function to handle 401 errors globally
-const handle401Error = () => {
-  console.error('❌ 401 Unauthorized - Token expired or invalid');
-  localStorage.removeItem('auth_token');
-  // Redirect to login page
-  window.location.href = '/';
-};
-
-// Enhanced fetch wrapper with 401 handling
+// Enhanced fetch wrapper with auth token
+// NOTE: Does NOT automatically logout on 401 - let components handle auth errors
 const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
   const token = localStorage.getItem('auth_token');
   
@@ -24,10 +17,10 @@ const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     headers,
   });
 
-  // Handle 401 errors globally
+  // Log 401 errors but don't automatically logout
+  // Let the calling component decide how to handle it
   if (response.status === 401) {
-    handle401Error();
-    throw new Error('Authentication failed - redirecting to login');
+    console.warn('⚠️ 401 Unauthorized - Token may be expired. Component should handle this.');
   }
 
   return response;

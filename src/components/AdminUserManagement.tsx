@@ -1,6 +1,72 @@
  import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Users, Search, Lock, Ban, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, Users, Search, Lock, Ban, CheckCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+// Temporarily inline network utilities to fix import issue
+const fetchWithRetry = async (url: string, options: RequestInit & { timeout?: number; retries?: number } = {}) => {
+  const { timeout = 30000, retries = 2, ...fetchOptions } = options;
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      
+      const response = await fetch(url, {
+        ...fetchOptions,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      return response;
+      
+    } catch (error) {
+      const isLastAttempt = attempt === retries;
+      
+      if (error instanceof Error) {
+        console.warn(`Fetch attempt ${attempt + 1} failed:`, error.message);
+        
+        if (isLastAttempt) {
+          throw error;
+        }
+        
+        // Wait before retrying
+        if (!isLastAttempt) {
+          const delay = Math.pow(2, attempt) * 1000;
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      } else {
+        throw new Error('Unknown network error');
+      }
+    }
+  }
+  
+  throw new Error('All retry attempts failed');
+};
+
+const getNetworkErrorMessage = (error: any): string => {
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') {
+      return 'Request timeout - the server took too long to respond. Please try again.';
+    } else if (error.message.includes('ERR_QUIC_PROTOCOL_ERROR') || error.message.includes('Failed to fetch')) {
+      return 'Network connection error. The backend server may be unavailable. Please check your connection and try again.';
+    }
+    return error.message;
+  }
+  return 'An unexpected error occurred';
+};
+
+const checkServerHealth = async (baseUrl: string): Promise<boolean> => {
+  try {
+    const response = await fetchWithRetry(`${baseUrl}/health`, {
+      method: 'GET',
+      timeout: 10000,
+      retries: 1
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('Server health check failed:', error);
+    return false;
+  }
+};
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -50,24 +116,37 @@ const AdminUserManagement: React.FC = () => {
   const [passwordUserId, setPasswordUserId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [showTroubleshootModal, setShowTroubleshootModal] = useState(false);
 
   const { user: currentUser } = useAuth();
+
+  // Check backend connectivity with retry
+  const checkBackendStatus = async () => {
+    setBackendStatus('checking');
+    const isOnline = await checkServerHealth(API_BASE_URL);
+    setBackendStatus(isOnline ? 'online' : 'offline');
+  };
 
   // Fetch users
   const fetchUsers = async () => {
     try {
       setLoading(true);
+      setError(''); // Clear previous errors
+      
       const token = localStorage.getItem('auth_token');
       if (!token) {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`${API_BASE_URL}/admin/users`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/admin/users`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 30000,
+        retries: 2
       });
 
       if (!response.ok) {
@@ -76,14 +155,23 @@ const AdminUserManagement: React.FC = () => {
 
       const data = await response.json();
       setUsers(data.users || []);
+      setBackendStatus('online'); // Update status on successful fetch
+      
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch users');
+      console.error('Fetch users error:', err);
+      setError(getNetworkErrorMessage(err));
+      
+      // Update backend status if it's a network error
+      if (err && typeof err === 'object' && 'isNetworkError' in err) {
+        setBackendStatus('offline');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    checkBackendStatus();
     fetchUsers();
   }, []);
 
@@ -297,13 +385,15 @@ const AdminUserManagement: React.FC = () => {
       console.log('🔗 API URL:', `${API_BASE_URL}/admin/users/${userId}/ban`);
       console.log('📦 Request body:', { banned: shouldBan });
 
-      const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/ban`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/admin/users/${userId}/ban`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ banned: shouldBan })
+        body: JSON.stringify({ banned: shouldBan }),
+        timeout: 30000,
+        retries: 2
       });
 
       console.log('📥 Response status:', response.status);
@@ -324,7 +414,7 @@ const AdminUserManagement: React.FC = () => {
 
     } catch (err) {
       console.error('❌ Ban/unban exception:', err);
-      setError(err instanceof Error ? err.message : `Failed to ${action} user`);
+      setError(getNetworkErrorMessage(err));
     }
   };
 
@@ -367,14 +457,37 @@ const AdminUserManagement: React.FC = () => {
           <div className="flex items-center space-x-3">
             <Users className="h-8 w-8 text-yellow-400" />
             <h1 className="text-3xl font-bold text-white">User Management</h1>
+            {/* Backend Status Indicator */}
+            <div className="flex items-center space-x-2">
+              <div className={`w-2 h-2 rounded-full ${
+                backendStatus === 'online' ? 'bg-green-400' :
+                backendStatus === 'offline' ? 'bg-red-400' : 'bg-yellow-400'
+              }`}></div>
+              <span className={`text-xs ${
+                backendStatus === 'online' ? 'text-green-400' :
+                backendStatus === 'offline' ? 'text-red-400' : 'text-yellow-400'
+              }`}>
+                {backendStatus === 'online' ? 'Backend Online' :
+                 backendStatus === 'offline' ? 'Backend Offline' : 'Checking...'}
+              </span>
+            </div>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Create User</span>
-          </button>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => checkBackendStatus()}
+              className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+              title="Check backend status"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Create User</span>
+            </button>
+          </div>
         </div>
 
         {/* Search and Filters */}
@@ -390,6 +503,46 @@ const AdminUserManagement: React.FC = () => {
             />
           </div>
         </div>
+
+        {/* Backend Status Warning */}
+        {backendStatus === 'offline' && (
+          <div className="mb-6 p-4 bg-orange-600/20 border border-orange-600 rounded-lg text-orange-400">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                <span className="font-medium">Backend Server Unavailable</span>
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setShowTroubleshootModal(true)}
+                  className="bg-slate-600 hover:bg-slate-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
+                >
+                  Troubleshoot
+                </button>
+                <button
+                  onClick={async () => {
+                    await checkBackendStatus();
+                    await fetchUsers();
+                  }}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
+                >
+                  Retry Connection
+                </button>
+              </div>
+            </div>
+            <p className="mt-1 text-sm">
+              The backend server at {API_BASE_URL} is not responding. This may be due to:
+            </p>
+            <ul className="mt-2 text-sm list-disc list-inside space-y-1">
+              <li>Server maintenance or deployment</li>
+              <li>Network connectivity issues</li>
+              <li>Server overload (Render free tier limitations)</li>
+            </ul>
+            <p className="mt-2 text-sm">
+              Please wait a moment and try the "Retry Connection" button, or contact support if the issue persists.
+            </p>
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (
@@ -683,6 +836,78 @@ const AdminUserManagement: React.FC = () => {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Troubleshooting Modal */}
+        {showTroubleshootModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+              <div className="p-6">
+                <h3 className="text-lg font-medium text-white mb-4">Network Connection Troubleshooting</h3>
+
+                <div className="space-y-4 text-sm text-slate-300">
+                  <div>
+                    <h4 className="font-medium text-white mb-2">Common Issues & Solutions:</h4>
+                    
+                    <div className="space-y-3">
+                      <div className="p-3 bg-slate-700 rounded-lg">
+                        <h5 className="font-medium text-orange-400 mb-1">ERR_QUIC_PROTOCOL_ERROR</h5>
+                        <p className="mb-2">This Chrome-specific error occurs with HTTP/3 protocol issues.</p>
+                        <p className="font-medium">Solutions:</p>
+                        <ul className="list-disc list-inside mt-1 space-y-1">
+                          <li>Try refreshing the page (Ctrl+F5 or Cmd+Shift+R)</li>
+                          <li>Clear browser cache and cookies</li>
+                          <li>Try in an incognito/private window</li>
+                          <li>Try a different browser (Firefox, Safari, Edge)</li>
+                        </ul>
+                      </div>
+
+                      <div className="p-3 bg-slate-700 rounded-lg">
+                        <h5 className="font-medium text-blue-400 mb-1">Server Unavailable</h5>
+                        <p className="mb-2">The backend server may be temporarily down.</p>
+                        <p className="font-medium">Possible causes:</p>
+                        <ul className="list-disc list-inside mt-1 space-y-1">
+                          <li>Server maintenance or deployment</li>
+                          <li>Render free tier sleep mode (takes ~30s to wake up)</li>
+                          <li>High server load or resource limits</li>
+                          <li>Network connectivity issues</li>
+                        </ul>
+                      </div>
+
+                      <div className="p-3 bg-slate-700 rounded-lg">
+                        <h5 className="font-medium text-green-400 mb-1">Quick Fixes</h5>
+                        <ul className="list-disc list-inside space-y-1">
+                          <li>Wait 30-60 seconds and try again</li>
+                          <li>Check your internet connection</li>
+                          <li>Disable VPN if using one</li>
+                          <li>Try from a different network (mobile hotspot)</li>
+                          <li>Contact support if issue persists</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-600 pt-4">
+                    <h4 className="font-medium text-white mb-2">Technical Details:</h4>
+                    <div className="bg-slate-900 p-3 rounded font-mono text-xs">
+                      <p>Backend URL: {API_BASE_URL}</p>
+                      <p>Status: {backendStatus}</p>
+                      <p>Browser: {navigator.userAgent.split(' ').slice(-2).join(' ')}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4">
+                  <button
+                    onClick={() => setShowTroubleshootModal(false)}
+                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           </div>

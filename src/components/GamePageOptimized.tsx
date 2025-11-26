@@ -824,22 +824,39 @@ const GamePageOptimized = (): JSX.Element => {
           console.log(`🎯 Total winner cartelas: ${winnerCartelaIds.length}`, winnerCartelaIds);
 
           // Finish the game session in backend with winner cartela IDs
+          const finishData = {
+            winMoney: playerWin || 0,
+            winnerCartelaIds: winnerCartelaIds,
+            calledNumbers: called,
+            selectedPattern: selectedPattern
+          };
+
+          console.log('🏁 Attempting to finish game session:', {
+            url: `${API_BASE_URL}/games/${gameId}/finish-session`,
+            gameId: gameId,
+            finishData: finishData,
+            token: token ? 'Present' : 'Missing'
+          });
+
           const response = await fetch(`${API_BASE_URL}/games/${gameId}/finish-session`, {
             method: 'PUT',
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-              winMoney: playerWin || 0,
-              winnerCartelaIds: winnerCartelaIds,
-              calledNumbers: called,
-              selectedPattern: selectedPattern
-            })
+            body: JSON.stringify(finishData)
+          });
+
+          console.log('🏁 Game finish response:', {
+            status: response.status,
+            statusText: response.statusText,
+            ok: response.ok,
+            headers: Object.fromEntries(response.headers.entries())
           });
 
           if (response.ok) {
-            console.log('✅ Game finished successfully');
+            const finishResult = await response.json();
+            console.log('✅ Game finished successfully:', finishResult);
             
             // Refresh daily profit calculation for house bonus (optional)
             try {
@@ -861,7 +878,23 @@ const GamePageOptimized = (): JSX.Element => {
               // Don't block game completion if bonus system is unavailable
             }
           } else {
-            console.error('Failed to finish game in backend');
+            let errorMessage = `Failed to finish game in backend (HTTP ${response.status})`;
+            try {
+              const errorData = await response.json();
+              console.error('🏁 Game finish error data:', errorData);
+              errorMessage = errorData.error || errorData.message || errorMessage;
+            } catch (parseError) {
+              try {
+                const errorText = await response.text();
+                console.error('🏁 Game finish error text:', errorText);
+                if (errorText) {
+                  errorMessage = errorText;
+                }
+              } catch (textError) {
+                console.warn('Could not parse finish error response:', parseError);
+              }
+            }
+            console.error('❌ Game finish failed:', errorMessage);
           }
         }
       }
@@ -1452,47 +1485,47 @@ const GamePageOptimized = (): JSX.Element => {
         marginTop: "clamp(15px, 3vw, 20px)",
         marginLeft: "clamp(0px, 8vw, 70px)"
       }}>
-        {/* Auto Call Timer */}
+        {/* Auto Call Timer - Compact */}
         <div style={{
           display: "flex",
           alignItems: "center",
-          gap: "clamp(10px, 2vw, 14px)",
+          gap: "6px",
           background: "linear-gradient(135deg, rgba(255, 165, 0, 0.15), rgba(255, 140, 0, 0.08))",
-          padding: "clamp(10px, 2vw, 14px) clamp(14px, 2.5vw, 18px)",
-          borderRadius: "16px",
-          border: "2px solid rgba(255, 165, 0, 0.4)",
-          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)"
+          padding: "6px 10px",
+          borderRadius: "8px",
+          border: "1px solid rgba(255, 165, 0, 0.4)",
+          boxShadow: "0 2px 6px rgba(0, 0, 0, 0.3)"
         }}>
           <div style={{
-            fontSize: "clamp(22px, 3.5vw, 28px)",
-            filter: "drop-shadow(0 2px 4px rgba(255, 165, 0, 0.3))"
+            fontSize: "14px",
+            filter: "drop-shadow(0 1px 2px rgba(255, 165, 0, 0.3))"
           }}>
             ⏱️
           </div>
           <div style={{
             display: "flex",
             flexDirection: "column",
-            gap: "6px"
+            gap: "2px"
           }}>
             <div style={{
-              fontSize: "clamp(10px, 1.8vw, 12px)",
+              fontSize: "8px",
               color: "#cbd5e1",
               fontWeight: "600",
               textTransform: "uppercase",
-              letterSpacing: "0.8px"
+              letterSpacing: "0.5px"
             }}>
-              Auto Call Speed
+              Speed
             </div>
             <div style={{
               display: "flex",
               alignItems: "center",
-              gap: "clamp(10px, 2vw, 14px)"
+              gap: "6px"
             }}>
               <div style={{
                 position: "relative" as const,
-                width: "clamp(100px, 20vw, 140px)",
-                paddingTop: "8px",
-                paddingBottom: "8px"
+                width: "80px",
+                paddingTop: "4px",
+                paddingBottom: "4px"
               }}>
                 {/* Tick marks */}
                 <div style={{
@@ -1509,12 +1542,12 @@ const GamePageOptimized = (): JSX.Element => {
                     <div
                       key={tick}
                       style={{
-                        width: "2px",
-                        height: slider === tick ? "12px" : "8px",
+                        width: "1px",
+                        height: slider === tick ? "6px" : "4px",
                         background: slider >= tick 
                           ? "rgba(255, 215, 0, 0.8)" 
                           : "rgba(100, 100, 100, 0.5)",
-                        borderRadius: "1px",
+                        borderRadius: "0.5px",
                         transition: "all 0.2s ease"
                       }}
                     />
@@ -1523,20 +1556,20 @@ const GamePageOptimized = (): JSX.Element => {
                 
                 {/* Track background */}
                 <div style={{
-                  height: "10px",
+                  height: "6px",
                   background: "rgba(30, 30, 30, 0.9)",
-                  borderRadius: "5px",
+                  borderRadius: "3px",
                   position: "relative" as const,
-                  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)"
+                  boxShadow: "inset 0 1px 2px rgba(0,0,0,0.5)"
                 }}>
                   {/* Filled track */}
                   <div style={{
                     width: `${((slider - 3) / (7 - 3)) * 100}%`,
                     height: "100%",
                     background: "linear-gradient(90deg, #FF8C00, #FFA500, #FFD700)",
-                    borderRadius: "5px",
+                    borderRadius: "3px",
                     transition: "width 0.3s ease",
-                    boxShadow: "0 0 10px rgba(255, 165, 0, 0.7)"
+                    boxShadow: "0 0 6px rgba(255, 165, 0, 0.7)"
                   }} />
                   
                   {/* Custom thumb */}
@@ -1545,12 +1578,12 @@ const GamePageOptimized = (): JSX.Element => {
                     top: "50%",
                     left: `${((slider - 3) / (7 - 3)) * 100}%`,
                     transform: "translate(-50%, -50%)",
-                    width: "20px",
-                    height: "20px",
+                    width: "12px",
+                    height: "12px",
                     background: "radial-gradient(circle at 30% 30%, #FFD700, #FFA500)",
                     borderRadius: "50%",
-                    border: "3px solid #1e293b",
-                    boxShadow: "0 0 0 2px #FFA500, 0 4px 8px rgba(0, 0, 0, 0.5)",
+                    border: "2px solid #1e293b",
+                    boxShadow: "0 0 0 1px #FFA500, 0 2px 4px rgba(0, 0, 0, 0.5)",
                     transition: "left 0.3s ease",
                     pointerEvents: "none" as const,
                     zIndex: 2
@@ -1587,15 +1620,15 @@ const GamePageOptimized = (): JSX.Element => {
               <span style={{
                 color: "#FFD700",
                 fontWeight: "bold",
-                fontSize: "clamp(18px, 3.5vw, 24px)",
-                minWidth: "clamp(35px, 7vw, 45px)",
+                fontSize: "12px",
+                minWidth: "20px",
                 textAlign: "center" as const,
                 background: "linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.1))",
-                padding: "clamp(4px, 1vw, 6px) clamp(8px, 1.5vw, 10px)",
-                borderRadius: "8px",
-                border: "2px solid rgba(255, 215, 0, 0.5)",
-                boxShadow: "0 2px 8px rgba(255, 215, 0, 0.3), inset 0 1px 2px rgba(255, 255, 255, 0.2)",
-                textShadow: "0 2px 4px rgba(0, 0, 0, 0.5)"
+                padding: "2px 4px",
+                borderRadius: "4px",
+                border: "1px solid rgba(255, 215, 0, 0.5)",
+                boxShadow: "0 1px 4px rgba(255, 215, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.2)",
+                textShadow: "0 1px 2px rgba(0, 0, 0, 0.5)"
               }}>
                 {slider}s
               </span>
