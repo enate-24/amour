@@ -238,10 +238,7 @@ export const useAuth = () => {
         console.log('Setting user state:', mappedUser);
         setUser(mappedUser);
 
-        // Force a small delay to ensure state update propagates before returning
-        // This helps with the redirect timing issue
-        await new Promise(resolve => setTimeout(resolve, 0));
-
+        // Return immediately - no need for artificial delay
         return { data, error: null };
       } else {
         throw new Error('Invalid response: missing user data or token');

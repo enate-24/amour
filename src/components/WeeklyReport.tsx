@@ -146,116 +146,116 @@ const WeeklyReport: React.FC = () => {
   }
 
   return (
-    <div className="p-6 bg-slate-900 min-h-screen text-white">
+    <div className="p-4 sm:p-6 lg:p-8 bg-slate-900 min-h-screen text-white">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold">User Reports</h1>
-          <p className="text-slate-400">
+          <h1 className="text-2xl sm:text-3xl font-bold">User Reports</h1>
+          <p className="text-sm sm:text-base text-slate-400 mt-1">
             {period === 'week' 
               ? `Weekly Report (${formatDate(data.summary.startDate)} - ${formatDate(data.summary.endDate)})`
               : `15-Day Report (${formatDate(data.summary.startDate)} - ${formatDate(data.summary.endDate)})`
             }
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           {/* Period Selector */}
           <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
             <button
               onClick={() => setPeriod('week')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md transition-colors text-sm ${
                 period === 'week'
                   ? 'bg-blue-600 text-white'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
               <Calendar size={16} />
-              Weekly
+              <span>Weekly</span>
             </button>
             <button
               onClick={() => setPeriod('15days')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md transition-colors text-sm ${
                 period === '15days'
                   ? 'bg-blue-600 text-white'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
               <CalendarDays size={16} />
-              15 Days
+              <span>15 Days</span>
             </button>
           </div>
 
           <button
             onClick={exportReport}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-sm"
           >
             <Download size={16} />
-            Export CSV
+            <span>Export CSV</span>
           </button>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-        <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <Users className="w-8 h-8 text-blue-400" />
-            <h3 className="text-sm font-semibold">Total Users</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2">
+            <Users className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 flex-shrink-0" />
+            <h3 className="text-xs sm:text-sm font-semibold">Total Users</h3>
           </div>
-          <p className="text-3xl font-bold text-blue-400">{data.summary.totalUsers}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-blue-400">{data.summary.totalUsers}</p>
           <div className="flex items-center gap-1 mt-2">
-            <span className="text-sm text-slate-400">{data.summary.activeUsersPeriod} active</span>
+            <span className="text-xs sm:text-sm text-slate-400">{data.summary.activeUsersPeriod} active</span>
           </div>
         </div>
 
-        <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <BarChart3 className="w-8 h-8 text-cyan-400" />
-            <h3 className="text-sm font-semibold">Total Games</h3>
+        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2">
+            <BarChart3 className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 flex-shrink-0" />
+            <h3 className="text-xs sm:text-sm font-semibold">Total Games</h3>
           </div>
-          <p className="text-3xl font-bold text-cyan-400">{data.summary.totalGamesPeriod}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-cyan-400">{data.summary.totalGamesPeriod}</p>
           <div className="flex items-center gap-1 mt-2">
-            <span className="text-sm text-slate-400">Games played</span>
+            <span className="text-xs sm:text-sm text-slate-400">Games played</span>
           </div>
         </div>
 
-        <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <DollarSign className="w-8 h-8 text-green-400" />
-            <h3 className="text-sm font-semibold">Total Bet</h3>
+        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2">
+            <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-400 flex-shrink-0" />
+            <h3 className="text-xs sm:text-sm font-semibold">Total Bet</h3>
           </div>
-          <p className="text-2xl font-bold text-green-400">
+          <p className="text-xl sm:text-2xl font-bold text-green-400">
             {data.summary.totalBetPeriod.toLocaleString()} BIRR
           </p>
           <div className="flex items-center gap-1 mt-2">
-            <TrendingUp className="w-4 h-4 text-green-400" />
-            <span className="text-sm text-green-400">Revenue</span>
+            <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-400" />
+            <span className="text-xs sm:text-sm text-green-400">Revenue</span>
           </div>
         </div>
 
-        <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <TrendingUp className="w-8 h-8 text-yellow-400" />
-            <h3 className="text-sm font-semibold">Player Wins</h3>
+        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2">
+            <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-400 flex-shrink-0" />
+            <h3 className="text-xs sm:text-sm font-semibold">Player Wins</h3>
           </div>
-          <p className="text-2xl font-bold text-yellow-400">
+          <p className="text-xl sm:text-2xl font-bold text-yellow-400">
             {data.summary.totalPlayerWinPeriod.toLocaleString()} BIRR
           </p>
           <div className="flex items-center gap-1 mt-2">
-            <span className="text-sm text-slate-400">Paid out</span>
+            <span className="text-xs sm:text-sm text-slate-400">Paid out</span>
           </div>
         </div>
 
-        <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <BarChart3 className="w-8 h-8 text-purple-400" />
-            <h3 className="text-sm font-semibold">House Profit</h3>
+        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2">
+            <BarChart3 className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400 flex-shrink-0" />
+            <h3 className="text-xs sm:text-sm font-semibold">House Profit</h3>
           </div>
-          <p className="text-2xl font-bold text-purple-400">
+          <p className="text-xl sm:text-2xl font-bold text-purple-400">
             {data.summary.totalHouseProfitPeriod.toLocaleString()} BIRR
           </p>
           <div className="flex items-center gap-1 mt-2">
-            <span className="text-sm text-slate-400">Net profit</span>
+            <span className="text-xs sm:text-sm text-slate-400">Net profit</span>
           </div>
         </div>
       </div>
@@ -263,69 +263,69 @@ const WeeklyReport: React.FC = () => {
       {/* Users Table */}
       <div className="bg-slate-800 rounded-lg overflow-hidden">
         <div className="p-4 border-b border-slate-700">
-          <h2 className="text-xl font-semibold">
+          <h2 className="text-lg sm:text-xl font-semibold">
             {period === 'week' ? 'Weekly User Statistics' : '15-Day User Statistics'}
           </h2>
-          <p className="text-sm text-slate-400">
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">
             All users with their betting activity from {formatDate(data.summary.startDate)} to {formatDate(data.summary.endDate)}
           </p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[900px]">
             <thead className="bg-slate-700">
               <tr>
-                <th className="px-4 py-3 text-left">#</th>
-                <th className="px-4 py-3 text-left">Username</th>
-                <th className="px-4 py-3 text-left">Email</th>
-                <th className="px-4 py-3 text-left">Shop Name</th>
-                <th className="px-4 py-3 text-center">Games</th>
-                <th className="px-4 py-3 text-center">Cartelas</th>
-                <th className="px-4 py-3 text-right">Total Bet</th>
-                <th className="px-4 py-3 text-right">Player Win</th>
-                <th className="px-4 py-3 text-right">House Profit</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm">#</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm">Username</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm">Email</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm">Shop Name</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-xs sm:text-sm">Games</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-xs sm:text-sm">Cartelas</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-xs sm:text-sm">Total Bet</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-xs sm:text-sm">Player Win</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-xs sm:text-sm">House Profit</th>
               </tr>
             </thead>
             <tbody>
               {data.users.map((user, index) => (
                 <tr key={user.id} className={`${index % 2 === 0 ? 'bg-slate-800' : 'bg-slate-750'} hover:bg-slate-700/50 transition-colors`}>
-                  <td className="px-4 py-3 text-slate-400 font-medium">
+                  <td className="px-2 sm:px-4 py-2 sm:py-3 text-slate-400 font-medium text-xs sm:text-sm">
                     {index + 1}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="text-white font-bold text-sm">
+                  <td className="px-2 sm:px-4 py-2 sm:py-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-white font-bold text-xs sm:text-sm">
                           {user.username.charAt(0).toUpperCase()}
                         </span>
                       </div>
-                      <span className="font-medium text-white">{user.username}</span>
+                      <span className="font-medium text-white text-xs sm:text-sm truncate">{user.username}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-slate-300">{user.email}</td>
-                  <td className="px-4 py-3 text-slate-300">{user.shopname || '-'}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`font-bold ${user.periodGamesPlayed > 0 ? 'text-blue-400' : 'text-slate-500'}`}>
+                  <td className="px-2 sm:px-4 py-2 sm:py-3 text-slate-300 text-xs sm:text-sm truncate">{user.email}</td>
+                  <td className="px-2 sm:px-4 py-2 sm:py-3 text-slate-300 text-xs sm:text-sm">{user.shopname || '-'}</td>
+                  <td className="px-2 sm:px-4 py-2 sm:py-3 text-center">
+                    <span className={`font-bold text-xs sm:text-sm ${user.periodGamesPlayed > 0 ? 'text-blue-400' : 'text-slate-500'}`}>
                       {user.periodGamesPlayed}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`font-bold ${user.periodCartelasPlayed > 0 ? 'text-cyan-400' : 'text-slate-500'}`}>
+                  <td className="px-2 sm:px-4 py-2 sm:py-3 text-center">
+                    <span className={`font-bold text-xs sm:text-sm ${user.periodCartelasPlayed > 0 ? 'text-cyan-400' : 'text-slate-500'}`}>
                       {user.periodCartelasPlayed}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={`font-bold ${user.periodTotalBet > 0 ? 'text-green-400' : 'text-slate-500'}`}>
-                      {user.periodTotalBet.toLocaleString()} BIRR
+                  <td className="px-2 sm:px-4 py-2 sm:py-3 text-right">
+                    <span className={`font-bold text-xs sm:text-sm ${user.periodTotalBet > 0 ? 'text-green-400' : 'text-slate-500'}`}>
+                      {user.periodTotalBet.toLocaleString()}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={`font-bold ${user.periodPlayerWin > 0 ? 'text-yellow-400' : 'text-slate-500'}`}>
-                      {user.periodPlayerWin.toLocaleString()} BIRR
+                  <td className="px-2 sm:px-4 py-2 sm:py-3 text-right">
+                    <span className={`font-bold text-xs sm:text-sm ${user.periodPlayerWin > 0 ? 'text-yellow-400' : 'text-slate-500'}`}>
+                      {user.periodPlayerWin.toLocaleString()}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={`font-bold ${user.periodHouseProfit > 0 ? 'text-purple-400' : user.periodHouseProfit < 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                      {user.periodHouseProfit.toLocaleString()} BIRR
+                  <td className="px-2 sm:px-4 py-2 sm:py-3 text-right">
+                    <span className={`font-bold text-xs sm:text-sm ${user.periodHouseProfit > 0 ? 'text-purple-400' : user.periodHouseProfit < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                      {user.periodHouseProfit.toLocaleString()}
                     </span>
                   </td>
                 </tr>
@@ -333,19 +333,19 @@ const WeeklyReport: React.FC = () => {
             </tbody>
             <tfoot className="bg-slate-700 font-bold">
               <tr>
-                <td colSpan={4} className="px-4 py-3 text-right text-white">TOTALS:</td>
-                <td className="px-4 py-3 text-center text-cyan-400">{data.summary.totalGamesPeriod}</td>
-                <td className="px-4 py-3 text-center text-cyan-400">
+                <td colSpan={4} className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">TOTALS:</td>
+                <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-cyan-400 text-xs sm:text-sm">{data.summary.totalGamesPeriod}</td>
+                <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-cyan-400 text-xs sm:text-sm">
                   {data.users.reduce((sum, u) => sum + u.periodCartelasPlayed, 0)}
                 </td>
-                <td className="px-4 py-3 text-right text-green-400">
-                  {data.summary.totalBetPeriod.toLocaleString()} BIRR
+                <td className="px-2 sm:px-4 py-2 sm:py-3 text-right text-green-400 text-xs sm:text-sm">
+                  {data.summary.totalBetPeriod.toLocaleString()}
                 </td>
-                <td className="px-4 py-3 text-right text-yellow-400">
-                  {data.summary.totalPlayerWinPeriod.toLocaleString()} BIRR
+                <td className="px-2 sm:px-4 py-2 sm:py-3 text-right text-yellow-400 text-xs sm:text-sm">
+                  {data.summary.totalPlayerWinPeriod.toLocaleString()}
                 </td>
-                <td className="px-4 py-3 text-right text-purple-400">
-                  {data.summary.totalHouseProfitPeriod.toLocaleString()} BIRR
+                <td className="px-2 sm:px-4 py-2 sm:py-3 text-right text-purple-400 text-xs sm:text-sm">
+                  {data.summary.totalHouseProfitPeriod.toLocaleString()}
                 </td>
               </tr>
             </tfoot>

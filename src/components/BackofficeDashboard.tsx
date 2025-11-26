@@ -113,73 +113,73 @@ const BackofficeDashboard: React.FC = () => {
   });
 
   return (
-    <div className="p-6 bg-slate-900 min-h-screen text-white">
+    <div className="p-4 sm:p-6 lg:p-8 bg-slate-900 min-h-screen text-white">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Backoffice Dashboard</h1>
-          <p className="text-slate-400">Today's Overview - {new Date().toLocaleDateString()}</p>
+          <h1 className="text-2xl sm:text-3xl font-bold">Backoffice Dashboard</h1>
+          <p className="text-sm sm:text-base text-slate-400">Today's Overview - {new Date().toLocaleDateString()}</p>
         </div>
         <div className="flex items-center gap-2 text-green-400">
           <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-          <span className="font-medium">System Online</span>
+          <span className="text-sm sm:text-base font-medium">System Online</span>
         </div>
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <DollarSign className="w-8 h-8 text-green-400" />
-            <h3 className="text-lg font-semibold">Today's Revenue</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2">
+            <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-400 flex-shrink-0" />
+            <h3 className="text-base sm:text-lg font-semibold">Today's Revenue</h3>
           </div>
-          <p className="text-3xl font-bold text-green-400">
+          <p className="text-2xl sm:text-3xl font-bold text-green-400">
             {todayStats.totalRevenue.toLocaleString()} BIRR
           </p>
-          <p className="text-sm text-slate-400">+15.2% from yesterday</p>
+          <p className="text-xs sm:text-sm text-slate-400">+15.2% from yesterday</p>
         </div>
 
-        <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <TrendingUp className="w-8 h-8 text-blue-400" />
-            <h3 className="text-lg font-semibold">Today's Profit</h3>
+        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2">
+            <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 flex-shrink-0" />
+            <h3 className="text-base sm:text-lg font-semibold">Today's Profit</h3>
           </div>
-          <p className="text-3xl font-bold text-blue-400">
+          <p className="text-2xl sm:text-3xl font-bold text-blue-400">
             {todayStats.totalProfit.toLocaleString()} BIRR
           </p>
-          <p className="text-sm text-slate-400">Margin: 23.6%</p>
+          <p className="text-xs sm:text-sm text-slate-400">Margin: 23.6%</p>
         </div>
 
-        <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <GamepadIcon className="w-8 h-8 text-purple-400" />
-            <h3 className="text-lg font-semibold">Games Today</h3>
+        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2">
+            <GamepadIcon className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400 flex-shrink-0" />
+            <h3 className="text-base sm:text-lg font-semibold">Games Today</h3>
           </div>
-          <p className="text-3xl font-bold text-purple-400">{todayStats.totalGames}</p>
-          <p className="text-sm text-slate-400">Avg: 1.6 games/hour</p>
+          <p className="text-2xl sm:text-3xl font-bold text-purple-400">{todayStats.totalGames}</p>
+          <p className="text-xs sm:text-sm text-slate-400">Avg: 1.6 games/hour</p>
         </div>
 
-        <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <Users className="w-8 h-8 text-yellow-400" />
-            <h3 className="text-lg font-semibold">Active Users</h3>
+        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2">
+            <Users className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-400 flex-shrink-0" />
+            <h3 className="text-base sm:text-lg font-semibold">Active Users</h3>
           </div>
-          <p className="text-3xl font-bold text-yellow-400">{todayStats.activeUsers}</p>
-          <p className="text-sm text-slate-400">Peak: {todayStats.peakHour}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-yellow-400">{todayStats.activeUsers}</p>
+          <p className="text-xs sm:text-sm text-slate-400">Peak: {todayStats.peakHour}</p>
         </div>
       </div>
 
       {/* User Management Section */}
-      <div className="bg-slate-800 rounded-lg border border-slate-700 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Users className="w-8 h-8 text-blue-400" />
-            <h2 className="text-2xl font-bold">User Management</h2>
+      <div className="bg-slate-800 rounded-lg border border-slate-700 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Users className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 flex-shrink-0" />
+            <h2 className="text-xl sm:text-2xl font-bold">User Management</h2>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={fetchUsers}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              className="px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base rounded-lg transition-colors"
             >
               Refresh
             </button>
@@ -187,25 +187,25 @@ const BackofficeDashboard: React.FC = () => {
         </div>
 
         {/* User Filters */}
-        <div className="flex flex-col lg:flex-row gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-6">
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
               <input
                 type="text"
-                placeholder="Search users by username or email..."
+                placeholder="Search users..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white"
+                className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white text-sm sm:text-base"
               />
             </div>
           </div>
 
-          <div className="w-full lg:w-48">
+          <div className="w-full sm:w-40 lg:w-48">
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white"
+              className="w-full p-2.5 sm:p-3 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white text-sm sm:text-base"
             >
               <option value="all">All Roles</option>
               <option value="admin">Admin</option>
@@ -214,11 +214,11 @@ const BackofficeDashboard: React.FC = () => {
             </select>
           </div>
 
-          <div className="w-full lg:w-48">
+          <div className="w-full sm:w-40 lg:w-48">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white"
+              className="w-full p-2.5 sm:p-3 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white text-sm sm:text-base"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -228,102 +228,103 @@ const BackofficeDashboard: React.FC = () => {
         </div>
 
         {/* User Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-slate-700 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-blue-400">{users.length}</div>
-            <div className="text-sm text-slate-400">Total Users</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
+          <div className="bg-slate-700 p-3 sm:p-4 rounded-lg">
+            <div className="text-xl sm:text-2xl font-bold text-blue-400">{users.length}</div>
+            <div className="text-xs sm:text-sm text-slate-400">Total Users</div>
           </div>
-          <div className="bg-slate-700 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-green-400">{users.filter(u => u.is_active).length}</div>
-            <div className="text-sm text-slate-400">Active Users</div>
+          <div className="bg-slate-700 p-3 sm:p-4 rounded-lg">
+            <div className="text-xl sm:text-2xl font-bold text-green-400">{users.filter(u => u.is_active).length}</div>
+            <div className="text-xs sm:text-sm text-slate-400">Active Users</div>
           </div>
-          <div className="bg-slate-700 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-yellow-400">{users.filter(u => u.role === 'admin').length}</div>
-            <div className="text-sm text-slate-400">Admins</div>
+          <div className="bg-slate-700 p-3 sm:p-4 rounded-lg">
+            <div className="text-xl sm:text-2xl font-bold text-yellow-400">{users.filter(u => u.role === 'admin').length}</div>
+            <div className="text-xs sm:text-sm text-slate-400">Admins</div>
           </div>
-          <div className="bg-slate-700 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-purple-400">{users.filter(u => u.role === 'cashier').length}</div>
-            <div className="text-sm text-slate-400">Cashiers</div>
+          <div className="bg-slate-700 p-3 sm:p-4 rounded-lg">
+            <div className="text-xl sm:text-2xl font-bold text-purple-400">{users.filter(u => u.role === 'cashier').length}</div>
+            <div className="text-xs sm:text-sm text-slate-400">Cashiers</div>
           </div>
         </div>
 
         {/* Users Table */}
         <div className="bg-slate-700 rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[800px]">
               <thead className="bg-slate-600">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">User</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Balance</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Games Played</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Winnings</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Cartelas</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Joined</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Actions</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">User</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Role</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Balance</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Games</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Winnings</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Cartelas</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Status</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Joined</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-slate-700 divide-y divide-slate-600">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-6 py-4 text-center text-slate-400">
+                    <td colSpan={9} className="px-3 sm:px-6 py-4 text-center text-slate-400">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
-                      Loading users...
+                      <p className="text-sm">Loading users...</p>
                     </td>
                   </tr>
                 ) : filteredUsers.length > 0 ? (
                   filteredUsers.map((user) => (
-                    <tr key={user.id} className="hover:bg-slate-600">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                    <tr key={user.id} className="hover:bg-slate-600 transition-colors">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div>
-                            <div className="text-sm font-medium text-white">{user.username}</div>
-                            <div className="text-sm text-slate-400">{user.email}</div>
+                          <div className="min-w-0">
+                            <div className="text-xs sm:text-sm font-medium text-white truncate">{user.username}</div>
+                            <div className="text-xs text-slate-400 truncate">{user.email}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1 sm:gap-2">
                           {getRoleIcon(user.role)}
-                          <span className={`px-2 py-1 text-xs rounded ${getRoleColor(user.role)}`}>
+                          <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs rounded ${getRoleColor(user.role)}`}>
                             {user.role}
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {(user.balance || 0).toLocaleString()} BIRR
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-white">
+                        {(user.balance || 0).toLocaleString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-slate-300">
                         {user.total_games_played}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-400">
-                        {(user.total_winnings || 0).toLocaleString()} BIRR
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-green-400">
+                        {(user.total_winnings || 0).toLocaleString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-slate-300">
                         <div className="flex flex-col">
                           <span>{user.cartelaCount || 0} total</span>
                           <span className="text-xs text-green-400">{user.activeCartelaCount || 0} active</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs rounded ${
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
+                        <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs rounded ${
                           user.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                         }`}>
                           {user.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-slate-400">
                         {new Date(user.created_at).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm font-medium">
                         <button
                           onClick={() => handleToggleUserStatus(user.id, user.is_active)}
-                          className={`px-3 py-1 rounded text-xs transition-colors ${
+                          className={`p-2 rounded text-xs transition-colors ${
                             user.is_active
                               ? 'bg-red-600 hover:bg-red-700 text-white'
                               : 'bg-green-600 hover:bg-green-700 text-white'
                           }`}
+                          title={user.is_active ? 'Deactivate' : 'Activate'}
                         >
                           {user.is_active ? <UserX size={14} /> : <UserCheck size={14} />}
                         </button>
@@ -332,7 +333,7 @@ const BackofficeDashboard: React.FC = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={9} className="px-6 py-4 text-center text-slate-400">
+                    <td colSpan={9} className="px-3 sm:px-6 py-4 text-center text-slate-400 text-sm">
                       No users found matching the current filters
                     </td>
                   </tr>

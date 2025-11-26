@@ -31,7 +31,7 @@ const AuthPage: React.FC = () => {
 
       // Show success message
       setSuccessMessage('Login successful! Redirecting...');
-      console.log('Login successful, reloading page', result);
+      console.log('Login successful', result);
 
       // Clear form on success
       setFormData({
@@ -39,10 +39,8 @@ const AuthPage: React.FC = () => {
         password: ''
       });
 
-      // Force immediate page reload to ensure fresh state
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 100);
+      // No need to reload - React Router will handle navigation automatically
+      // The App.tsx useEffect will redirect based on user role
 
     } catch (err) {
       console.error('Authentication error:', err);
