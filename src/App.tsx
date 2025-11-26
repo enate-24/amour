@@ -45,32 +45,37 @@ function AppContent() {
     }
   }, [user, loading, location.pathname, navigate]);
 
-  // Redirect based on user status on initial login only
+  // Redirect based on user status - runs whenever user or path changes
   useEffect(() => {
-    if (user && !loading) {
-      const currentPath = location.pathname;
-      const userRole = user.role || 'user';
+    if (!user || loading) {
+      console.log('Skipping redirect - user:', !!user, 'loading:', loading);
+      return;
+    }
 
-      console.log('Checking redirect for user:', userRole, 'on path:', currentPath);
+    const currentPath = location.pathname;
+    const userRole = user.role || 'user';
 
-      if (userRole === 'admin') {
-        // Admin should only access backoffice routes
-        if (!currentPath.startsWith('/backoffice')) {
-          console.log('Redirecting admin to backoffice dashboard');
-          navigate('/backoffice/dashboard', { replace: true });
-        }
+    console.log('🔄 Redirect check - User:', user.username, 'Role:', userRole, 'Path:', currentPath);
+
+    if (userRole === 'admin') {
+      // Admin should only access backoffice routes
+      if (!currentPath.startsWith('/backoffice')) {
+        console.log('➡️ Redirecting admin to backoffice dashboard');
+        navigate('/backoffice/dashboard', { replace: true });
+      }
+    } else {
+      // Regular user - redirect from root or any non-user path to game
+      const validUserPaths = ['/dashboard', '/game', '/game-analytics', '/select-cartela', '/newgame', '/card-list', '/settings', '/new-account'];
+      const isValidUserPath = validUserPaths.some(path => currentPath === path);
+      
+      if (currentPath === '/' || !isValidUserPath) {
+        console.log('➡️ Redirecting regular user to /game from:', currentPath);
+        navigate('/game', { replace: true });
       } else {
-        // Regular user - redirect from root or any non-user path to game
-        const validUserPaths = ['/dashboard', '/game', '/game-analytics', '/select-cartela', '/newgame', '/card-list', '/settings', '/new-account'];
-        const isValidUserPath = validUserPaths.some(path => currentPath === path);
-        
-        if (currentPath === '/' || !isValidUserPath) {
-          console.log('Redirecting regular user to game page from:', currentPath);
-          navigate('/game', { replace: true });
-        }
+        console.log('✅ User on valid path:', currentPath);
       }
     }
-  }, [user, loading, navigate, location.pathname]);
+  }, [user, loading, location.pathname, navigate]);
 
   // Show loading spinner while checking authentication
   if (loading) {
@@ -86,12 +91,15 @@ function AppContent() {
 
   // Show login page if not authenticated
   if (!user) {
+    console.log('No user, showing AuthPage');
     return (
       <Routes>
         <Route path="*" element={<AuthPage />} />
       </Routes>
     );
   }
+
+  console.log('User authenticated:', user.username, 'role:', user.role, 'on path:', location.pathname);
 
   // Get user role
   const userRole = user?.role || 'user';
