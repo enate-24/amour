@@ -39,9 +39,11 @@ const AuthPage: React.FC = () => {
         password: ''
       });
 
-      // Keep loading state true to show "Processing..." while redirect happens
-      // The App.tsx useEffect will redirect based on user role
-      // Don't set loading to false here - let the redirect happen
+      // The App.tsx useEffect will handle the redirect
+      // Keep loading state for a brief moment to show success message
+      setTimeout(() => {
+        setLoading(false);
+      }, 100);
 
     } catch (err) {
       console.error('Authentication error:', err);

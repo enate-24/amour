@@ -51,14 +51,22 @@ function AppContent() {
       const currentPath = location.pathname;
       const userRole = user.role || 'user';
 
-      // Only redirect if we're on the root path (/) or login path
-      // This prevents automatic redirection on page refresh
-      if (currentPath === '/' || currentPath === '/login') {
+      // Define valid paths for each role
+      const adminPaths = ['/backoffice/dashboard', '/backoffice/weekly-report', '/backoffice/user-management', '/backoffice'];
+      const userPaths = ['/dashboard', '/game', '/game-analytics', '/select-cartela', '/newgame', '/card-list', '/settings', '/new-account'];
+
+      // Check if user is on an invalid path for their role
+      const isOnInvalidPath = userRole === 'admin' 
+        ? !adminPaths.some(path => currentPath.startsWith(path))
+        : !userPaths.some(path => currentPath === path);
+
+      // Redirect if on root/login path OR on invalid path for role
+      if (currentPath === '/' || currentPath === '/login' || isOnInvalidPath) {
         if (userRole === 'admin') {
           console.log('Redirecting admin to backoffice dashboard');
           navigate('/backoffice/dashboard', { replace: true });
         } else {
-          // For regular users, always redirect to game page after login
+          // For regular users, redirect to game page after login
           console.log('Redirecting regular user to game page');
           navigate('/game', { replace: true });
         }
