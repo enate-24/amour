@@ -39,8 +39,9 @@ const AuthPage: React.FC = () => {
         password: ''
       });
 
-      // No need to reload - React Router will handle navigation automatically
+      // Keep loading state true to show "Processing..." while redirect happens
       // The App.tsx useEffect will redirect based on user role
+      // Don't set loading to false here - let the redirect happen
 
     } catch (err) {
       console.error('Authentication error:', err);

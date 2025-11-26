@@ -237,6 +237,9 @@ export const useAuth = () => {
 
         console.log('Setting user state:', mappedUser);
         setUser(mappedUser);
+        
+        // Ensure loading is false so App.tsx can redirect
+        setLoading(false);
 
         // Return immediately - no need for artificial delay
         return { data, error: null };
