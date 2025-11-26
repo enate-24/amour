@@ -31,7 +31,7 @@ const AuthPage: React.FC = () => {
 
       // Show success message
       setSuccessMessage('Login successful! Redirecting...');
-      console.log('Login successful, user state will update and trigger redirect');
+      console.log('Login successful, forcing page reload to ensure clean state');
 
       // Clear form on success
       setFormData({
@@ -39,8 +39,11 @@ const AuthPage: React.FC = () => {
         password: ''
       });
 
-      // Don't set loading to false - the component will unmount when user state updates
-      // and App.tsx redirects to the appropriate page
+      // Force a page reload to ensure clean state after login
+      // This prevents any stale state issues
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 500);
 
     } catch (err) {
       console.error('Authentication error:', err);
