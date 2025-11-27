@@ -88,10 +88,13 @@ router.get('/daily', authenticateToken, async (req, res) => {
 
     const dailyProfit = todayGames.reduce((total, game) => {
       try {
-        const houseCut = (game.betMoney * game.cartelasSelected * (game.houseCutPercentage || 10)) / 100;
-        return total + houseCut;
+        // House profit = Total bet amount - Win money paid out
+        const totalBet = game.betMoney * game.cartelasSelected;
+        const winMoney = parseFloat(game.winMoney) || 0;
+        const houseProfit = totalBet - winMoney;
+        return total + houseProfit;
       } catch (error) {
-        console.warn('⚠️ Error calculating house cut for game:', error.message);
+        console.warn('⚠️ Error calculating house profit for game:', error.message);
         return total;
       }
     }, 0);
@@ -376,8 +379,11 @@ router.post('/refresh-profit', authenticateToken, async (req, res) => {
     });
 
     const dailyProfit = todayGames.reduce((total, game) => {
-      const houseCut = (game.betMoney * game.cartelasSelected * (game.houseCutPercentage || 10)) / 100;
-      return total + houseCut;
+      // House profit = Total bet amount - Win money paid out
+      const totalBet = game.betMoney * game.cartelasSelected;
+      const winMoney = parseFloat(game.winMoney) || 0;
+      const houseProfit = totalBet - winMoney;
+      return total + houseProfit;
     }, 0);
 
     // Check if dailyBonuses operations are available
