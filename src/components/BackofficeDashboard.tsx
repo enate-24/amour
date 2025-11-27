@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, TrendingUp, Users, Gamepad as GamepadIcon, Search, UserCheck, UserX, Shield, Crown } from 'lucide-react';
+import { Users, Search, UserCheck, UserX, Shield, Crown, TrendingUp, DollarSign } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -17,26 +17,30 @@ interface User {
   activeCartelaCount?: number;
 }
 
+interface UserStats {
+  userId: string;
+  username: string;
+  dailyGames: number;
+  dailyHouseProfit: number;
+  weeklyProfit: number;
+  houseBonus: number;
+  isActive: boolean;
+  date: string;
+}
+
 const BackofficeDashboard: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
+  const [userStats, setUserStats] = useState<UserStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-
-  const todayStats = {
-    totalRevenue: 15725,
-    totalProfit: 3717.5,
-    totalGames: 19,
-    activeUsers: 42,
-    totalBets: 287,
-    winRate: 23.8,
-    avgBetAmount: 54.8,
-    peakHour: '14:00-15:00'
-  };
+  const [statsSearchTerm, setStatsSearchTerm] = useState('');
 
   useEffect(() => {
     fetchUsers();
+    fetchUserStats();
   }, []);
 
   const fetchUsers = async () => {
@@ -59,6 +63,87 @@ const BackofficeDashboard: React.FC = () => {
       console.error('Error fetching users:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUserStats = async () => {
+    try {
+      setStatsLoading(true);
+      
+      // Try the new user-stats endpoint first
+      let response = await fetch(`${API_BASE_URL}/admin/user-stats`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setUserStats(data.stats || []);
+        return;
+      }
+
+      // Fallback: Use weekly-report endpoint to calculate stats
+      console.log('user-stats endpoint not available, using weekly-report fallback');
+      response = await fetch(`${API_BASE_URL}/admin/weekly-report?period=week`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const reportUsers = data.users || [];
+        
+        // Transform weekly report data to user stats format
+        const calculatedStats: UserStats[] = reportUsers.map((user: any) => {
+          // Estimate daily as 1/7 of weekly (rough approximation)
+          const dailyEstimate = Math.round(user.periodHouseProfit / 7);
+          
+          return {
+            userId: user.id,
+            username: user.username,
+            dailyGames: Math.round(user.periodGamesPlayed / 7),
+            dailyHouseProfit: dailyEstimate,
+            weeklyProfit: Math.round(user.periodHouseProfit),
+            houseBonus: Math.round(user.periodHouseProfit * 0.05),
+            isActive: true, // Assume active if in report
+            date: new Date().toISOString()
+          };
+        });
+        
+        setUserStats(calculatedStats);
+      } else {
+        console.error('Error fetching stats:', response.status);
+        // Last fallback: show users with zero stats
+        const allUsers = await fetch(`${API_BASE_URL}/admin/users`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (allUsers.ok) {
+          const userData = await allUsers.json();
+          const zeroStats: UserStats[] = (userData.users || []).map((user: any) => ({
+            userId: user.id,
+            username: user.username,
+            dailyGames: 0,
+            dailyHouseProfit: 0,
+            weeklyProfit: 0,
+            houseBonus: 0,
+            isActive: user.is_active,
+            date: new Date().toISOString()
+          }));
+          setUserStats(zeroStats);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+    } finally {
+      setStatsLoading(false);
     }
   };
 
@@ -112,6 +197,10 @@ const BackofficeDashboard: React.FC = () => {
     return matchesSearch && matchesRole && matchesStatus;
   });
 
+  const filteredStats = userStats.filter(stat => 
+    stat.username.toLowerCase().includes(statsSearchTerm.toLowerCase())
+  );
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 bg-slate-900 min-h-screen text-white">
       {/* Header */}
@@ -126,46 +215,115 @@ const BackofficeDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-2 sm:gap-3 mb-2">
-            <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-400 flex-shrink-0" />
-            <h3 className="text-base sm:text-lg font-semibold">Today's Revenue</h3>
+
+
+      {/* User Statistics Table */}
+      <div className="bg-slate-800 rounded-lg border border-slate-700 p-4 sm:p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-green-400 flex-shrink-0" />
+            <h2 className="text-xl sm:text-2xl font-bold">User Statistics</h2>
           </div>
-          <p className="text-2xl sm:text-3xl font-bold text-green-400">
-            {todayStats.totalRevenue.toLocaleString()} BIRR
-          </p>
-          <p className="text-xs sm:text-sm text-slate-400">+15.2% from yesterday</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchUserStats}
+              className="px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm sm:text-base rounded-lg transition-colors"
+            >
+              Refresh Stats
+            </button>
+          </div>
         </div>
 
-        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-2 sm:gap-3 mb-2">
-            <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 flex-shrink-0" />
-            <h3 className="text-base sm:text-lg font-semibold">Today's Profit</h3>
+        {/* Stats Search */}
+        <div className="mb-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search by username..."
+              value={statsSearchTerm}
+              onChange={(e) => setStatsSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-slate-700 border border-slate-600 rounded-lg focus:border-green-500 focus:outline-none text-white text-sm sm:text-base"
+            />
           </div>
-          <p className="text-2xl sm:text-3xl font-bold text-blue-400">
-            {todayStats.totalProfit.toLocaleString()} BIRR
-          </p>
-          <p className="text-xs sm:text-sm text-slate-400">Margin: 23.6%</p>
         </div>
 
-        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-2 sm:gap-3 mb-2">
-            <GamepadIcon className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400 flex-shrink-0" />
-            <h3 className="text-base sm:text-lg font-semibold">Games Today</h3>
+        {/* Statistics Table */}
+        <div className="bg-slate-700 rounded-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead className="bg-slate-600">
+                <tr>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">#</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">User</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Status</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Date</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Daily Total Games</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Daily House Profit</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Weekly Profit</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">House Bonus</th>
+                </tr>
+              </thead>
+              <tbody className="bg-slate-700 divide-y divide-slate-600">
+                {statsLoading ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 sm:px-6 py-4 text-center text-slate-400">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
+                      <p className="text-sm">Loading statistics...</p>
+                    </td>
+                  </tr>
+                ) : filteredStats.length > 0 ? (
+                  filteredStats.map((stat, index) => (
+                    <tr key={stat.userId} className="hover:bg-slate-600 transition-colors">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-slate-300 font-medium">
+                        {index + 1}
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
+                        <div className="text-xs sm:text-sm font-medium text-white">{stat.username}</div>
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
+                        <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs rounded ${
+                          stat.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {stat.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-slate-400">
+                        {new Date(stat.date).toLocaleDateString()}
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-blue-400 font-semibold">
+                        {stat.dailyGames}
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-green-400 font-semibold">
+                        <div className="flex items-center gap-1">
+                          <DollarSign size={14} />
+                          {stat.dailyHouseProfit.toLocaleString()}
+                        </div>
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-emerald-400 font-semibold">
+                        <div className="flex items-center gap-1">
+                          <DollarSign size={14} />
+                          {stat.weeklyProfit.toLocaleString()}
+                        </div>
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-yellow-400 font-semibold">
+                        <div className="flex items-center gap-1">
+                          <DollarSign size={14} />
+                          {stat.houseBonus.toLocaleString()}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="px-3 sm:px-6 py-4 text-center text-slate-400 text-sm">
+                      No statistics found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          <p className="text-2xl sm:text-3xl font-bold text-purple-400">{todayStats.totalGames}</p>
-          <p className="text-xs sm:text-sm text-slate-400">Avg: 1.6 games/hour</p>
-        </div>
-
-        <div className="bg-slate-800 p-4 sm:p-6 rounded-lg border border-slate-700">
-          <div className="flex items-center gap-2 sm:gap-3 mb-2">
-            <Users className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-400 flex-shrink-0" />
-            <h3 className="text-base sm:text-lg font-semibold">Active Users</h3>
-          </div>
-          <p className="text-2xl sm:text-3xl font-bold text-yellow-400">{todayStats.activeUsers}</p>
-          <p className="text-xs sm:text-sm text-slate-400">Peak: {todayStats.peakHour}</p>
         </div>
       </div>
 
