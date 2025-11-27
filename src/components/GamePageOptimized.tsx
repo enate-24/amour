@@ -27,8 +27,8 @@ const NumberGrid = memo(({
   return (
     <div style={{
       display: "grid",
-      gridTemplateColumns: "repeat(15, 1fr)",
-      gap: "clamp(3px, 0.8vw, 6px)",
+      gridTemplateColumns: "repeat(15, minmax(0, 1fr))",
+      gap: "clamp(2px, 0.8vw, 6px)",
       width: "100%",
       maxWidth: "100%"
     }}>
@@ -71,10 +71,10 @@ const NumberButton = memo(({
       ? "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)"
       : "linear-gradient(180deg, #8B0000 0%, #600000 100%)",
     color: isCalled ? "#000" : "#fff",
-    border: isCalled ? "2px solid #FFD700" : "2px solid #400000",
+    border: isCalled ? "2px solid #FFD700" : "1px solid #400000",
     borderRadius: "clamp(2px, 0.5vw, 4px)",
     fontWeight: "bold" as const,
-    fontSize: "clamp(10px, 2vw, 18px)",
+    fontSize: "clamp(8px, 1.8vw, 18px)",
     cursor: "default" as const,
     transition: "all 0.2s ease",
     transform: isCalled ? "scale(1.05)" : "scale(1)",
@@ -84,8 +84,9 @@ const NumberButton = memo(({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "clamp(25px, 4vw, 35px)",
-    animation: isShuffling ? "shake 0.5s ease-in-out infinite" : "none"
+    minHeight: "clamp(20px, 3.5vw, 35px)",
+    animation: isShuffling ? "shake 0.5s ease-in-out infinite" : "none",
+    padding: "2px"
   }), [isCalled, isShuffling]);
 
   return (
@@ -1159,9 +1160,9 @@ const GamePageOptimized = (): JSX.Element => {
       minHeight: "100vh",
       background: "#0F172A",
       color: "#fff",
-      padding: "clamp(10px, 3vw, 50px) clamp(10px, 4vw, 60px)",
-      paddingRight: "clamp(10px, 6vw, 100px)",
-      boxSizing: "border-box"
+      padding: "clamp(10px, 3vw, 50px) clamp(5px, 2vw, 60px)",
+      boxSizing: "border-box",
+      overflowX: "hidden"
     }}>
       {/* Last 5 Called Numbers - Golden Balls */}
       {called.length > 0 && (
@@ -1359,7 +1360,9 @@ const GamePageOptimized = (): JSX.Element => {
         gap: "clamp(8px, 2vw, 20px)",
         flexWrap: "nowrap",
         width: "100%",
-        maxWidth: "100%"
+        maxWidth: "100%",
+        overflowX: "auto",
+        overflowY: "hidden"
       }}>
         {/* Left side - BINGO letters */}
         <div style={{
@@ -1390,8 +1393,8 @@ const GamePageOptimized = (): JSX.Element => {
         {/* Center - Numbers grid */}
         <div style={{
           flex: 1,
-          width: "100%",
-          minWidth: 0
+          minWidth: "280px",
+          maxWidth: "100%"
         }}>
           <NumberGrid 
             numbers={BINGO_NUMBERS}
