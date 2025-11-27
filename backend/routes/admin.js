@@ -1114,9 +1114,9 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
       return {
         userId: row.user_id,
         username: row.username,
-        dailyGames: parseInt(row.daily_games || 0),
-        dailyHouseProfit: dailyHouseProfit,
-        weeklyProfit: weeklyProfit,
+        dailyGames: parseInt(row.weekly_games || 0), // Show weekly games in the table
+        dailyHouseProfit: dailyHouseProfit, // Today's profit (will be 0 if no games today)
+        weeklyProfit: weeklyProfit, // Last 7 days profit
         houseBonus: houseBonus,
         isActive: row.is_active,
         date: new Date().toISOString()
