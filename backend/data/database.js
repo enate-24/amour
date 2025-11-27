@@ -512,9 +512,8 @@ const userOperations = {
       paramCount++;
     }
 
-    fields.push(`updated_at = $${paramCount}`);
-    values.push(new Date().toISOString());
-    paramCount++;
+    fields.push(`updated_at = NOW()`);
+
 
     values.push(id);
 
@@ -618,9 +617,8 @@ const gameOperations = {
       paramCount++;
     }
 
-    fields.push(`updated_at = $${paramCount}`);
-    values.push(new Date().toISOString());
-    paramCount++;
+    fields.push(`updated_at = NOW()`);
+
 
     values.push(id);
 
@@ -806,9 +804,8 @@ const userSettingsOperations = {
       paramCount++;
     }
 
-    fields.push(`updated_at = $${paramCount}`);
-    values.push(new Date().toISOString());
-    paramCount++;
+    fields.push(`updated_at = NOW()`);
+
 
     values.push(userId);
 
@@ -831,7 +828,7 @@ const dailyBonusOperations = {
   create: async (bonusData) => {
     return run(`
       INSERT INTO daily_bonuses (id, user_id, bonus_date, daily_profit, bonus_amount, bonus_type, requirements_met, bonus_claimed, bonus_used, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, NOW()), COALESCE($11, NOW()))
     `, [
       bonusData.id || uuidv4(),
       bonusData.userId,
@@ -842,8 +839,8 @@ const dailyBonusOperations = {
       bonusData.requirementsMet || false,
       bonusData.bonusClaimed || false,
       bonusData.bonusUsed || false,
-      bonusData.createdAt || new Date().toISOString(),
-      bonusData.updatedAt || new Date().toISOString()
+      bonusData.createdAt || null,
+      bonusData.updatedAt || null
     ]);
   },
 
@@ -879,14 +876,13 @@ const dailyBonusOperations = {
       paramCount++;
     }
 
-    fields.push(`updated_at = $${paramCount}`);
-    values.push(new Date().toISOString());
-    paramCount++;
+    fields.push(`updated_at = NOW()`);
+
 
     values.push(userId);
     values.push(dateStr);
 
-    const sql = `UPDATE daily_bonuses SET ${fields.join(', ')} WHERE user_id = $${paramCount-1} AND bonus_date = $${paramCount}`;
+    const sql = `UPDATE daily_bonuses SET ${fields.join(', ')} WHERE user_id = $${paramCount} AND bonus_date = $${paramCount+1}`;
     return run(sql, values);
   },
 

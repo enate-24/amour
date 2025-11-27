@@ -791,7 +791,7 @@ const GamePageOptimized = (): JSX.Element => {
           if (selectedCartelasArray && Array.isArray(selectedCartelasArray)) {
             for (const cartelaId of selectedCartelasArray) {
               try {
-                const checkResponse = await fetch(`${API_BASE_URL}/games/${gameId}/check-cartela`, {
+                const checkResponse = await fetch(`${API_BASE_URL}/winner-check`, {
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${token}`,
@@ -799,8 +799,9 @@ const GamePageOptimized = (): JSX.Element => {
                   },
                   body: JSON.stringify({
                     cartelaId: cartelaId,
+                    gameId: gameId,
                     calledNumbers: called,
-                    selectedPattern: selectedPattern
+                    patterns: [selectedPattern]
                   })
                 });
 
