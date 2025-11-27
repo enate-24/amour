@@ -1133,6 +1133,25 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
         // House bonus (could be based on various factors - using 5% of weekly profit as example)
         const houseBonus = Math.round(weeklyProfit * 0.05);
 
+        // Debug logging for Alemu
+        if (user.username.toLowerCase() === 'alemu') {
+          console.log('\n📊 ALEMU CALCULATION RESULTS:');
+          console.log(`   User cartelas: ${userCartelas.length}`);
+          console.log(`   User game IDs: ${userGameIds.length}`);
+          console.log(`   Finished games: ${userGames.length}`);
+          console.log(`   Weekly games: ${weeklyGames.length}`);
+          console.log(`   Weekly profit calculated: ${weeklyProfit.toFixed(2)}`);
+          
+          if (weeklyGames.length > 0) {
+            console.log('\n   Weekly games breakdown:');
+            weeklyGames.forEach((g, idx) => {
+              const cartelasInGame = userCartelas.filter(c => c.game_id === g.id).length;
+              const profit = g.bet_money * cartelasInGame * ((g.house_cut_percentage || 10) / 100);
+              console.log(`     Game ${idx + 1}: Bet=${g.bet_money}, Cartelas=${cartelasInGame}, HouseCut=${g.house_cut_percentage || 10}%, Profit=${profit.toFixed(2)}`);
+            });
+          }
+        }
+
         return {
           userId: user.id,
           username: user.username,

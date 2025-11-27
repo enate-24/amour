@@ -258,9 +258,9 @@ const BackofficeDashboard: React.FC = () => {
                   <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">User</th>
                   <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Status</th>
                   <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Date</th>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Daily Total Games</th>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Daily House Profit</th>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Weekly Profit</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Total Games (Week)</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">House Profit (Today)</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">House Profit (Week)</th>
                   <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">House Bonus</th>
                 </tr>
               </thead>
@@ -292,18 +292,22 @@ const BackofficeDashboard: React.FC = () => {
                         {new Date(stat.date).toLocaleDateString()}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-blue-400 font-semibold">
-                        {stat.dailyGames}
+                        {stat.dailyGames || 0}
                       </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-green-400 font-semibold">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm font-semibold">
                         <div className="flex items-center gap-1">
-                          <DollarSign size={14} />
-                          {stat.dailyHouseProfit.toLocaleString()}
+                          <DollarSign size={14} className={stat.dailyHouseProfit > 0 ? 'text-green-400' : 'text-slate-500'} />
+                          <span className={stat.dailyHouseProfit > 0 ? 'text-green-400' : 'text-slate-500'}>
+                            {stat.dailyHouseProfit.toLocaleString()}
+                          </span>
                         </div>
                       </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-emerald-400 font-semibold">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm font-semibold">
                         <div className="flex items-center gap-1">
-                          <DollarSign size={14} />
-                          {stat.weeklyProfit.toLocaleString()}
+                          <DollarSign size={14} className={stat.weeklyProfit > 0 ? 'text-emerald-400' : 'text-slate-500'} />
+                          <span className={stat.weeklyProfit > 0 ? 'text-emerald-400' : 'text-slate-500'}>
+                            {stat.weeklyProfit.toLocaleString()}
+                          </span>
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-yellow-400 font-semibold">
