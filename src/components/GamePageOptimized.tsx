@@ -291,16 +291,63 @@ const GamePageOptimized = (): JSX.Element => {
             setCalled([]);
             navigate('/newgame', { replace: true });
           }
+        } else if (response.status === 401) {
+          // Token expired or invalid - try to refresh token first
+          console.error('❌ Authentication failed (401) - Token expired or invalid');
+          console.log('🔄 Attempting to refresh token...');
+          
+          try {
+            const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (refreshResponse.ok) {
+              const refreshData = await refreshResponse.json();
+              console.log('✅ Token refreshed successfully');
+              localStorage.setItem('auth_token', refreshData.token);
+              
+              // Retry fetching active game with new token
+              console.log('🔄 Retrying active game fetch with new token...');
+              window.location.reload();
+              return;
+            } else {
+              console.error('❌ Token refresh failed');
+              localStorage.removeItem('auth_token');
+              navigate('/login', { replace: true });
+            }
+          } catch (refreshError) {
+            console.error('❌ Token refresh error:', refreshError);
+            localStorage.removeItem('auth_token');
+            navigate('/login', { replace: true });
+          }
+        } else if (response.status === 404) {
+          // No active game found - redirect to new game
+          console.log('No active game found (404), redirecting to play bingo page');
+          setCalled([]);
+          navigate('/newgame', { replace: true });
         } else {
-          // API error - redirect to new game
-          console.error('Error fetching active game:', response.status);
+          // Other API error - log details but don't redirect immediately
+          console.error('⚠️ Error fetching active game:', response.status);
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Error details:', errorData);
+          
+          // Only redirect after logging the error
           setCalled([]);
           navigate('/newgame', { replace: true });
         }
         
       } catch (error) {
-        console.error('Error checking active game:', error);
-        // On error, redirect to new game page
+        console.error('❌ Error checking active game:', error);
+        if (error instanceof Error) {
+          console.error('Error type:', error.name);
+          console.error('Error message:', error.message);
+        }
+        
+        // On network error, redirect to new game page
         setCalled([]);
         navigate('/newgame', { replace: true });
       }
@@ -679,6 +726,13 @@ const GamePageOptimized = (): JSX.Element => {
 
   const handleShuffle = useCallback(() => {
     console.log('🔀 Shuffle button clicked - playing shuffle sound and animation');
+    console.log('📊 Current game state before shuffle:', {
+      gameId: currentGameData?.id,
+      gameStatus: currentGameData?.status,
+      selectedCartelas,
+      calledCount: called.length,
+      hasAuthToken: !!localStorage.getItem('auth_token')
+    });
     
     // Start shaking animation
     setIsShuffling(true);
@@ -699,11 +753,16 @@ const GamePageOptimized = (): JSX.Element => {
     
     // Reload page after 6 seconds
     console.log('⏱️ Page will reload in 6 seconds...');
+    console.log('🔍 Check browser console after reload for authentication errors');
     setTimeout(() => {
       console.log('🔄 Reloading page now...');
+      console.log('📊 Game state at reload:', {
+        gameId: currentGameData?.id,
+        hasAuthToken: !!localStorage.getItem('auth_token')
+      });
       window.location.reload();
     }, 6000);
-  }, []);
+  }, [currentGameData, selectedCartelas, called.length]);
 
   const handleFinish = useCallback(async () => {
     setIsGameFinished(true);
