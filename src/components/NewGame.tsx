@@ -356,17 +356,8 @@ const NewGame: React.FC = () => {
     };
 
     try {
-      // Save to database first
+      // Save to database - no fallback to localStorage
       const gameSessionResult = await saveGameSession(gameData);
-
-      // Update game data with database gameId for consistent API calls
-      const gameDataWithId = {
-        ...gameData,
-        gameId: gameSessionResult.gameId
-      };
-
-      // Save game data to localStorage for GamePage (as backup)
-      localStorage.setItem('currentGame', JSON.stringify(gameDataWithId));
 
       // Clear selection if remember is not active
       if (!rememberSelection) {
@@ -382,15 +373,9 @@ const NewGame: React.FC = () => {
 
     } catch (error) {
       console.error('Failed to save game session:', error);
-
-      // Fallback to localStorage only if database save fails
-      localStorage.setItem('currentGame', JSON.stringify(gameData));
-
-      // Play start sound even on fallback
-      playStartSound();
-
-      // Navigate to GamePage even if database save fails (fallback to localStorage)
-      navigate('/game');
+      
+      // Show error to user - do not start game if database save fails
+      alert(`Failed to start game: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
     }
   };
 

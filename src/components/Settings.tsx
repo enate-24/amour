@@ -134,14 +134,21 @@ const Settings: React.FC = () => {
         // Also update localStorage for backward compatibility
         localStorage.setItem('bingo-settings', JSON.stringify(settings));
         
-        // Update active game's pattern if there is one
+        // Update active game's pattern if there is one - fetch from database
         try {
-          const gameData = localStorage.getItem('currentGame');
-          if (gameData) {
-            const game = JSON.parse(gameData);
-            if (game.gameId) {
+          // Fetch active game from database
+          const activeGameResponse = await fetch(`${API_BASE_URL}/games/active`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (activeGameResponse.ok) {
+            const activeGameResult = await activeGameResponse.json();
+            if (activeGameResult.game && activeGameResult.game.id) {
               console.log('🎮 Updating active game pattern to:', selectedPattern);
-              const updateResponse = await fetch(`${API_BASE_URL}/games/${game.gameId}/pattern`, {
+              const updateResponse = await fetch(`${API_BASE_URL}/games/${activeGameResult.game.id}/pattern`, {
                 method: 'PATCH',
                 headers: {
                   'Authorization': `Bearer ${token}`,
@@ -153,7 +160,7 @@ const Settings: React.FC = () => {
               if (updateResponse.ok) {
                 console.log('✅ Active game pattern updated successfully');
               } else {
-                console.warn('⚠️ Could not update active game pattern (game may not exist)');
+                console.warn('⚠️ Could not update active game pattern');
               }
             }
           }

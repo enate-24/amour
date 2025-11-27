@@ -12,12 +12,14 @@ const NumberGrid = memo(({
   numbers, 
   called, 
   isGameFinished, 
-  onNumberClick 
+  onNumberClick,
+  isShuffling 
 }: {
   numbers: number[];
   called: number[];
   isGameFinished: boolean;
   onNumberClick: (num: number) => void;
+  isShuffling: boolean;
 }) => {
   // Memoize called numbers set for O(1) lookup
   const calledSet = useMemo(() => new Set(called), [called]);
@@ -40,6 +42,7 @@ const NumberGrid = memo(({
             isCalled={isCalled}
             isGameFinished={isGameFinished}
             onClick={onNumberClick}
+            isShuffling={isShuffling}
           />
         );
       })}
@@ -52,12 +55,14 @@ const NumberButton = memo(({
   number, 
   isCalled, 
   isGameFinished, 
-  onClick 
+  onClick,
+  isShuffling 
 }: {
   number: number;
   isCalled: boolean;
   isGameFinished: boolean;
   onClick: (num: number) => void;
+  isShuffling: boolean;
 }) => {
   const buttonStyle = useMemo(() => ({
     width: "100%",
@@ -79,8 +84,9 @@ const NumberButton = memo(({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "clamp(25px, 4vw, 35px)"
-  }), [isCalled]);
+    minHeight: "clamp(25px, 4vw, 35px)",
+    animation: isShuffling ? "shake 0.5s ease-in-out infinite" : "none"
+  }), [isCalled, isShuffling]);
 
   return (
     <button
@@ -241,7 +247,7 @@ const GamePageOptimized = (): JSX.Element => {
   const [inputId, setInputId] = useState("");
   const [isGameFinished, setIsGameFinished] = useState(false);
   
-  // Check for active game on component mount
+  // Check for active game on component mount - database only, no localStorage fallback
   useEffect(() => {
     const checkActiveGame = async () => {
       try {
@@ -249,32 +255,12 @@ const GamePageOptimized = (): JSX.Element => {
         
         if (!token) {
           console.log('No auth token, redirecting to play bingo page');
-          // Clear called numbers when no auth
-          localStorage.removeItem('calledNumbers');
           setCalled([]);
           navigate('/newgame', { replace: true });
           return;
         }
 
-        // Clean up any duplicate numbers in localStorage
-        const storedCalled = localStorage.getItem('calledNumbers');
-        if (storedCalled) {
-          try {
-            const parsed = JSON.parse(storedCalled);
-            if (Array.isArray(parsed)) {
-              const uniqueCalled = [...new Set(parsed)];
-              if (uniqueCalled.length !== parsed.length) {
-                console.warn(`⚠️ Found ${parsed.length - uniqueCalled.length} duplicate numbers in localStorage, cleaning up`);
-                localStorage.setItem('calledNumbers', JSON.stringify(uniqueCalled));
-                setCalled(uniqueCalled);
-              }
-            }
-          } catch (e) {
-            console.error('Error parsing stored called numbers:', e);
-          }
-        }
-
-        // First, try to fetch active game from backend
+        // Fetch active game from backend database only
         const response = await fetch(`${API_BASE_URL}/games/active`, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -286,7 +272,7 @@ const GamePageOptimized = (): JSX.Element => {
           const result = await response.json();
           
           if (result.game && ['started', 'active'].includes(result.game.status)) {
-            // Active game found in backend
+            // Active game found in backend database
             console.log('Active game found in backend:', result.game);
             
             setCurrentGameData(result.game);
@@ -296,77 +282,27 @@ const GamePageOptimized = (): JSX.Element => {
             
             // Always clear called numbers on page refresh
             console.log('🔄 Clearing called numbers on page refresh');
-            localStorage.removeItem('calledNumbers');
             setCalled([]);
-            
-            // Update localStorage with backend data
-            const gameData = {
-              gameId: result.game.id,
-              selectedCartelas: result.game.selected_cartelas || [],
-              betAmount: parseFloat(result.game.bet_money) || 5,
-              playerWin: parseFloat(result.game.win_money) || 0,
-              housePercentage: result.game.house_cut_percentage || 25
-            };
-            localStorage.setItem('currentGame', JSON.stringify(gameData));
             
             return;
           } else {
-            // No active game in backend, clear called numbers
-            console.log('No active game in backend, clearing called numbers');
-            localStorage.removeItem('calledNumbers');
-            setCalled([]);
-          }
-        }
-        
-        // If no active game in backend, check localStorage as fallback
-        const currentGame = localStorage.getItem('currentGame');
-        
-        if (!currentGame) {
-          // No active game found anywhere, clear called numbers and redirect to NewGame
-          console.log('No active game found, clearing called numbers and redirecting to play bingo page');
-          localStorage.removeItem('calledNumbers');
-          setCalled([]);
-          navigate('/newgame', { replace: true });
-          return;
-        }
-        
-        try {
-          const gameData = JSON.parse(currentGame);
-          if (!gameData.selectedCartelas || gameData.selectedCartelas.length < 3) {
-            // Invalid game data or insufficient cartelas, redirect to NewGame
-            console.log('Insufficient cartelas selected (need 3 minimum), redirecting to play bingo page');
-            localStorage.removeItem('calledNumbers');
-            localStorage.removeItem('currentGame'); // Clear invalid game data
+            // No active game in backend database
+            console.log('No active game in backend, redirecting to play bingo page');
             setCalled([]);
             navigate('/newgame', { replace: true });
-            return;
           }
-          
-          // Valid game found in localStorage, set up the game state
-          // But clear called numbers since we're starting fresh
-          console.log('Starting fresh game, clearing called numbers');
-          localStorage.removeItem('calledNumbers');
-          setCalled([]);
-          setSelectedCartelas(gameData.selectedCartelas.length);
-          setBetAmount(gameData.betAmount || 5);
-          setPlayerWin(gameData.playerWin || 0);
-          
-        } catch (error) {
-          console.error('Error parsing current game data:', error);
-          localStorage.removeItem('calledNumbers');
+        } else {
+          // API error - redirect to new game
+          console.error('Error fetching active game:', response.status);
           setCalled([]);
           navigate('/newgame', { replace: true });
         }
         
       } catch (error) {
         console.error('Error checking active game:', error);
-        // On error, fall back to localStorage check
-        const currentGame = localStorage.getItem('currentGame');
-        if (!currentGame) {
-          localStorage.removeItem('calledNumbers');
-          setCalled([]);
-          navigate('/newgame', { replace: true });
-        }
+        // On error, redirect to new game page
+        setCalled([]);
+        navigate('/newgame', { replace: true });
       }
     };
     
@@ -433,6 +369,7 @@ const GamePageOptimized = (): JSX.Element => {
   
   // UI state
   const [isCallingNumber, setIsCallingNumber] = useState(false);
+  const [isShuffling, setIsShuffling] = useState(false);
   
   // Modal state
   const [cartelaCheckResult, setCartelaCheckResult] = useState<{
@@ -582,20 +519,13 @@ const GamePageOptimized = (): JSX.Element => {
         
         try {
           const token = localStorage.getItem('auth_token');
-          const gameData = localStorage.getItem('currentGame');
           
-          if (!token || !gameData) {
+          if (!token || !currentGameData?.id) {
             setAutoCall(false);
             return;
           }
           
-          const parsed = JSON.parse(gameData);
-          const gameId = currentGameData?.id || parsed.gameId;
-          
-          if (!gameId) {
-            setAutoCall(false);
-            return;
-          }
+          const gameId = currentGameData.id;
 
           // Add timeout to prevent hanging requests
           const controller = new AbortController();
@@ -633,7 +563,6 @@ const GamePageOptimized = (): JSX.Element => {
                   return prev;
                 }
                 const newCalled = [...prev, calledNumber];
-                localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
                 return newCalled;
               });
             }
@@ -677,20 +606,13 @@ const GamePageOptimized = (): JSX.Element => {
     
     try {
       const token = localStorage.getItem('auth_token');
-      const gameData = localStorage.getItem('currentGame');
       
-      if (!gameData || !token) {
+      if (!token || !currentGameData?.id) {
         console.error('Missing token or game data');
         return;
       }
       
-      const parsed = JSON.parse(gameData);
-      const gameId = currentGameData?.id || parsed.gameId;
-      
-      if (!gameId) {
-        console.error('Missing game ID');
-        return;
-      }
+      const gameId = currentGameData.id;
 
       // Add timeout to prevent hanging requests
       const controller = new AbortController();
@@ -735,7 +657,6 @@ const GamePageOptimized = (): JSX.Element => {
               return prev;
             }
             const newCalled = [...prev, calledNumber];
-            localStorage.setItem('calledNumbers', JSON.stringify(newCalled));
             return newCalled;
           });
         }
@@ -757,20 +678,29 @@ const GamePageOptimized = (): JSX.Element => {
   }, [isGameFinished, selectedCartelas, isCallingNumber, called, currentGameData, API_BASE_URL]);
 
   const handleShuffle = useCallback(() => {
+    console.log('🔀 Shuffle button clicked - playing shuffle sound and animation');
+    
+    // Start shaking animation
+    setIsShuffling(true);
+    
     // Play shuffle sound from LOCAL file without blocking
     const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
     schedulePlay(() => {
       try {
         const shuffleAudio = new Audio('/sounds/shuffle-audio-TfqyAnvz.mp3');
         shuffleAudio.volume = 0.7;
-        shuffleAudio.play().catch(() => {});
+        shuffleAudio.play().catch((error) => {
+          console.warn('Shuffle audio play failed:', error);
+        });
       } catch (error) {
-        // Silent fail
+        console.warn('Shuffle audio error:', error);
       }
     });
     
     // Reload page after 6 seconds
+    console.log('⏱️ Page will reload in 6 seconds...');
     setTimeout(() => {
+      console.log('🔄 Reloading page now...');
       window.location.reload();
     }, 6000);
   }, []);
@@ -779,21 +709,28 @@ const GamePageOptimized = (): JSX.Element => {
     setIsGameFinished(true);
     setAutoCall(false);
     
+    // Navigate immediately to new game page first
+    console.log('🏁 Finish button pressed - navigating to new game page immediately');
+    navigate('/newgame', { replace: true });
+    
+    // Then finish the game in the background
     try {
       const token = localStorage.getItem('auth_token');
-      const gameData = localStorage.getItem('currentGame');
       
-      if (token && gameData) {
-        const parsed = JSON.parse(gameData);
-        const gameId = currentGameData?.id || parsed.gameId;
+      if (token && currentGameData?.id) {
+        const gameId = currentGameData.id;
         
         if (gameId) {
           // Collect winner cartela IDs by checking all selected cartelas
           const winnerCartelaIds: string[] = [];
           
           // Check each selected cartela for wins
-          if (parsed.selectedCartelas && Array.isArray(parsed.selectedCartelas)) {
-            for (const cartelaId of parsed.selectedCartelas) {
+          const selectedCartelasArray = typeof currentGameData.selected_cartelas === 'string' 
+            ? JSON.parse(currentGameData.selected_cartelas)
+            : currentGameData.selected_cartelas;
+            
+          if (selectedCartelasArray && Array.isArray(selectedCartelasArray)) {
+            for (const cartelaId of selectedCartelasArray) {
               try {
                 const checkResponse = await fetch(`${API_BASE_URL}/games/${gameId}/check-cartela`, {
                   method: 'POST',
@@ -901,14 +838,7 @@ const GamePageOptimized = (): JSX.Element => {
     } catch (error) {
       console.error('Error finishing game:', error);
     }
-    
-    // Clean up localStorage
-    localStorage.removeItem('currentGame');
-    localStorage.removeItem('calledNumbers');
-    
-    // Navigate immediately to new game page
-    navigate('/newgame', { replace: true });
-  }, [navigate, currentGameData, playerWin, selectedCartelas, betAmount, API_BASE_URL]);
+  }, [navigate, currentGameData, playerWin, selectedCartelas, betAmount, API_BASE_URL, called, selectedPattern]);
 
   const handleCheckCartela = useCallback(async () => {
     if (!inputId.trim()) {
@@ -919,20 +849,13 @@ const GamePageOptimized = (): JSX.Element => {
     
     try {
       const token = localStorage.getItem('auth_token');
-      const gameData = localStorage.getItem('currentGame');
       
-      if (!gameData || !token) {
+      if (!token || !currentGameData?.id) {
         setCheckingCartela(false);
         return;
       }
       
-      const parsed = JSON.parse(gameData);
-      const gameId = currentGameData?.id || parsed.gameId;
-      
-      if (!gameId) {
-        setCheckingCartela(false);
-        return;
-      }
+      const gameId = currentGameData.id;
 
       // Get selected cartelas from current game data or fetch from backend
       let selectedCartelas: string[] = [];
@@ -1003,19 +926,8 @@ const GamePageOptimized = (): JSX.Element => {
         return;
       }
 
-      // Get called numbers from localStorage or state
+      // Use called numbers from state only (database is source of truth)
       let calledNumbersToSend = called;
-      if (calledNumbersToSend.length === 0) {
-        const storedCalled = localStorage.getItem('calledNumbers');
-        if (storedCalled) {
-          try {
-            calledNumbersToSend = JSON.parse(storedCalled);
-            console.log(`📥 Loaded ${calledNumbersToSend.length} called numbers from localStorage`);
-          } catch (e) {
-            console.error('Error parsing stored called numbers:', e);
-          }
-        }
-      }
 
       console.log(`🎯 Checking cartela ${inputId.trim()} with ${calledNumbersToSend.length} called numbers`);
       console.log(`🎮 Game ID:`, gameId);
@@ -1261,6 +1173,39 @@ const GamePageOptimized = (): JSX.Element => {
               opacity: 1;
             }
           }
+          
+          @keyframes shake {
+            0%, 100% {
+              transform: translateX(0) rotate(0deg);
+            }
+            10% {
+              transform: translateX(-2px) rotate(-2deg);
+            }
+            20% {
+              transform: translateX(2px) rotate(2deg);
+            }
+            30% {
+              transform: translateX(-2px) rotate(-1deg);
+            }
+            40% {
+              transform: translateX(2px) rotate(1deg);
+            }
+            50% {
+              transform: translateX(-1px) rotate(-2deg);
+            }
+            60% {
+              transform: translateX(1px) rotate(2deg);
+            }
+            70% {
+              transform: translateX(-2px) rotate(-1deg);
+            }
+            80% {
+              transform: translateX(2px) rotate(1deg);
+            }
+            90% {
+              transform: translateX(-1px) rotate(-2deg);
+            }
+          }
         `}
       </style>
 
@@ -1384,6 +1329,7 @@ const GamePageOptimized = (): JSX.Element => {
             called={called}
             isGameFinished={isGameFinished}
             onNumberClick={handleNumberClick}
+            isShuffling={isShuffling}
           />
         </div>
       </div>
