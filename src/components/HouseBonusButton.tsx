@@ -53,7 +53,27 @@ const HouseBonusButton: React.FC = () => {
   };
 
   const useHouseBonus = async () => {
-    if (!bonusData || !bonusData.requirementsMet || bonusData.bonusUsed) return;
+    // Double-check requirements before allowing click
+    if (!bonusData) {
+      console.error('❌ No bonus data available');
+      return;
+    }
+    
+    if (!bonusData.requirementsMet) {
+      alert(`❌ Daily profit requirement not met. You need ${bonusData.profitNeeded.toFixed(1)} more Birr to unlock the house bonus.`);
+      return;
+    }
+    
+    if (bonusData.bonusUsed) {
+      alert('❌ House bonus already used today');
+      return;
+    }
+
+    console.log('✅ Using house bonus:', {
+      dailyProfit: bonusData.dailyProfit,
+      requirementsMet: bonusData.requirementsMet,
+      bonusAvailable: bonusData.bonusAvailable
+    });
 
     setClaiming(true);
     try {
@@ -125,8 +145,15 @@ const HouseBonusButton: React.FC = () => {
     return null;
   }
 
+  // Don't show button at all if daily profit is less than 1000
+  if (bonusData.dailyProfit < bonusData.requirements.MIN_DAILY_PROFIT) {
+    return null;
+  }
+
   // Show button based on requirement status
-  if (bonusData.requirementsMet) {
+  const isEligible = bonusData.requirementsMet && bonusData.dailyProfit >= bonusData.requirements.MIN_DAILY_PROFIT;
+  
+  if (isEligible) {
     // Requirements met - show active button
     return (
       <button

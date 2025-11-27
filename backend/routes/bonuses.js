@@ -119,10 +119,14 @@ router.get('/daily', authenticateToken, async (req, res) => {
         console.log('✅ Created new bonus record');
       } else {
         console.log('🔄 Updating existing bonus record...');
-        // Update daily profit
-        await dailyBonuses.update(userId, today, { dailyProfit: dailyProfit });
-        dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
-        console.log('✅ Updated bonus record');
+        // Only update profit if bonus hasn't been used (to preserve deduction)
+        if (!dailyBonus.bonus_used) {
+          await dailyBonuses.update(userId, today, { dailyProfit: dailyProfit });
+          dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
+          console.log('✅ Updated bonus record with new profit');
+        } else {
+          console.log('⚠️ Bonus already used, keeping deducted profit:', dailyBonus.daily_profit);
+        }
       }
     } catch (bonusError) {
       console.error('❌ Error with bonus record:', bonusError);
@@ -132,16 +136,22 @@ router.get('/daily', authenticateToken, async (req, res) => {
       });
     }
 
-    // Calculate current bonus eligibility
-    const bonusStatus = calculateBonusEligibility(dailyProfit);
-    console.log('🎯 Bonus status:', bonusStatus);
+    // Calculate current bonus eligibility using the stored profit (which may have deduction)
+    const effectiveProfit = dailyBonus.bonus_used ? dailyBonus.daily_profit : dailyProfit;
+    const bonusStatus = calculateBonusEligibility(effectiveProfit);
+    console.log('🎯 Bonus status:', {
+      calculatedProfit: dailyProfit,
+      effectiveProfit: effectiveProfit,
+      bonusUsed: dailyBonus.bonus_used,
+      ...bonusStatus
+    });
 
     console.log('✅ Sending successful response');
     res.json({
       success: true,
       dailyBonus: {
         ...dailyBonus,
-        dailyProfit: dailyProfit,
+        dailyProfit: effectiveProfit,
         bonusAvailable: bonusStatus.bonusAmount,
         requirementsMet: bonusStatus.requirementsMet,
         profitNeeded: bonusStatus.profitNeeded,
@@ -182,8 +192,15 @@ router.post('/use', authenticateToken, async (req, res) => {
 
     // Check if daily profit meets requirement
     const bonusStatus = calculateBonusEligibility(dailyBonus.daily_profit);
+    console.log('🔍 Checking bonus eligibility:', {
+      dailyProfit: dailyBonus.daily_profit,
+      required: DAILY_REQUIREMENTS.MIN_DAILY_PROFIT,
+      requirementsMet: bonusStatus.requirementsMet,
+      profitNeeded: bonusStatus.profitNeeded
+    });
     
     if (!bonusStatus.requirementsMet) {
+      console.log('❌ Requirements not met, rejecting bonus use');
       return res.status(400).json({ 
         error: 'Daily profit requirement not met',
         required: DAILY_REQUIREMENTS.MIN_DAILY_PROFIT,
@@ -191,6 +208,8 @@ router.post('/use', authenticateToken, async (req, res) => {
         needed: bonusStatus.profitNeeded
       });
     }
+    
+    console.log('✅ Requirements met, proceeding with bonus use');
 
     // Update bonus record - mark as used and deduct from daily profit
     const newDailyProfit = dailyBonus.daily_profit - DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT;
