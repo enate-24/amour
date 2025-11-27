@@ -789,8 +789,10 @@ const GamePageOptimized = (): JSX.Element => {
             : currentGameData.selected_cartelas;
             
           if (selectedCartelasArray && Array.isArray(selectedCartelasArray)) {
+            console.log(`🔍 Checking ${selectedCartelasArray.length} cartelas for winners...`);
             for (const cartelaId of selectedCartelasArray) {
               try {
+                console.log(`🎯 Checking cartela ${cartelaId} with pattern: ${selectedPattern}`);
                 const checkResponse = await fetch(`${API_BASE_URL}/winner-check`, {
                   method: 'POST',
                   headers: {
@@ -807,15 +809,22 @@ const GamePageOptimized = (): JSX.Element => {
 
                 if (checkResponse.ok) {
                   const checkResult = await checkResponse.json();
+                  console.log(`📊 Check result for ${cartelaId}:`, checkResult);
                   if (checkResult.win) {
                     winnerCartelaIds.push(cartelaId);
                     console.log(`🏆 Winner cartela found: ${cartelaId}`);
+                  } else {
+                    console.log(`❌ Cartela ${cartelaId} is not a winner`);
                   }
+                } else {
+                  console.error(`❌ Winner check failed for ${cartelaId}: ${checkResponse.status}`);
                 }
               } catch (error) {
                 console.warn(`⚠️ Error checking cartela ${cartelaId}:`, error);
               }
             }
+          } else {
+            console.warn('⚠️ No cartelas to check or invalid format:', selectedCartelasArray);
           }
 
           console.log(`🎯 Total winner cartelas: ${winnerCartelaIds.length}`, winnerCartelaIds);

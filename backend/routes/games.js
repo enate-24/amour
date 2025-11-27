@@ -566,9 +566,15 @@ router.put('/:id/finish-session', authenticateToken, [
     }
 
     console.log(`✅ User ${req.user.id} authorized to finish game ${gameId}`);
+    console.log(`📊 Game status: ${gameResult.status}`);
 
-    if (!['started', 'active'].includes(gameResult.status)) {
-      return res.status(400).json({ error: 'Game is not active' });
+    if (!['started', 'active', 'waiting'].includes(gameResult.status)) {
+      console.log(`❌ Cannot finish game with status: ${gameResult.status}`);
+      return res.status(400).json({ 
+        error: 'Game is not active', 
+        currentStatus: gameResult.status,
+        allowedStatuses: ['started', 'active', 'waiting']
+      });
     }
 
     // Update game status in database
