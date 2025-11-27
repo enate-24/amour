@@ -247,16 +247,19 @@ const GamePageOptimized = (): JSX.Element => {
   });
   const [inputId, setInputId] = useState("");
   const [isGameFinished, setIsGameFinished] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   
   // Check for active game on component mount - database only, no localStorage fallback
   useEffect(() => {
     const checkActiveGame = async () => {
+      setIsInitialLoading(true);
       try {
         const token = localStorage.getItem('auth_token');
         
         if (!token) {
           console.log('No auth token, redirecting to play bingo page');
           setCalled([]);
+          setIsInitialLoading(false);
           navigate('/newgame', { replace: true });
           return;
         }
@@ -284,12 +287,14 @@ const GamePageOptimized = (): JSX.Element => {
             // Always clear called numbers on page refresh
             console.log('🔄 Clearing called numbers on page refresh');
             setCalled([]);
+            setIsInitialLoading(false);
             
             return;
           } else {
             // No active game in backend database
             console.log('No active game in backend, redirecting to play bingo page');
             setCalled([]);
+            setIsInitialLoading(false);
             navigate('/newgame', { replace: true });
           }
         } else if (response.status === 401) {
@@ -313,22 +318,26 @@ const GamePageOptimized = (): JSX.Element => {
               
               // Retry fetching active game with new token
               console.log('🔄 Retrying active game fetch with new token...');
+              setIsInitialLoading(false);
               window.location.reload();
               return;
             } else {
               console.error('❌ Token refresh failed');
               localStorage.removeItem('auth_token');
+              setIsInitialLoading(false);
               navigate('/login', { replace: true });
             }
           } catch (refreshError) {
             console.error('❌ Token refresh error:', refreshError);
             localStorage.removeItem('auth_token');
+            setIsInitialLoading(false);
             navigate('/login', { replace: true });
           }
         } else if (response.status === 404) {
           // No active game found - redirect to new game
           console.log('No active game found (404), redirecting to play bingo page');
           setCalled([]);
+          setIsInitialLoading(false);
           navigate('/newgame', { replace: true });
         } else {
           // Other API error - log details but don't redirect immediately
@@ -338,6 +347,7 @@ const GamePageOptimized = (): JSX.Element => {
           
           // Only redirect after logging the error
           setCalled([]);
+          setIsInitialLoading(false);
           navigate('/newgame', { replace: true });
         }
         
@@ -350,6 +360,7 @@ const GamePageOptimized = (): JSX.Element => {
         
         // On network error, redirect to new game page
         setCalled([]);
+        setIsInitialLoading(false);
         navigate('/newgame', { replace: true });
       }
     };
@@ -476,7 +487,6 @@ const GamePageOptimized = (): JSX.Element => {
   // Refs
   const autoCallIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioManagerRef = useRef<AudioManager | null>(null);
-  const gameFetchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   // Initialize audio manager with LOCAL sounds
   useEffect(() => {
@@ -509,45 +519,8 @@ const GamePageOptimized = (): JSX.Element => {
     };
   }, []);
 
-  // Minimal polling to reduce system load
-  useEffect(() => {
-    if (!selectedCartelas || selectedCartelas < 3 || isGameFinished) {
-      return;
-    }
-
-    // Poll every 5 minutes to minimize system load
-    const intervalId = setInterval(async () => {
-      // Only poll if document is visible and game is active
-      if (document.hidden || isGameFinished) return;
-      
-      try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) return;
-
-        const response = await fetch(`${API_BASE_URL}/games/active`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          setCurrentGameData(result.game);
-        }
-      } catch (error) {
-        // Silent fail
-      }
-    }, 300000); // 5 minutes to reduce system load
-
-    gameFetchIntervalRef.current = intervalId;
-
-    return () => {
-      if (gameFetchIntervalRef.current) {
-        clearInterval(gameFetchIntervalRef.current);
-      }
-    };
-  }, [selectedCartelas, isGameFinished, API_BASE_URL]);
+  // Remove polling - game data is already loaded on mount and updated via API calls
+  // No need for continuous polling which slows down the system
 
   // Optimized auto-call with better error handling
   useEffect(() => {
@@ -1154,6 +1127,38 @@ const GamePageOptimized = (): JSX.Element => {
     boxShadow: "0 2px 4px rgba(0,0,0,0.5)",
     transition: "all 0.2s ease",
   }), []);
+
+  // Show loading screen while checking for active game
+  if (isInitialLoading) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        background: "#0F172A",
+        color: "#fff",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "20px"
+      }}>
+        <div style={{
+          width: "60px",
+          height: "60px",
+          border: "4px solid rgba(255, 215, 0, 0.2)",
+          borderTop: "4px solid #FFD700",
+          borderRadius: "50%",
+          animation: "spin 1s linear infinite"
+        }} />
+        <p style={{ fontSize: "18px", color: "#FFD700" }}>Loading game...</p>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <div style={{

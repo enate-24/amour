@@ -40,29 +40,24 @@ const calculateBonusEligibility = (dailyProfit) => {
 // GET /api/bonuses/daily - Get today's bonus status
 router.get('/daily', authenticateToken, async (req, res) => {
   try {
-    console.log('🎁 Daily bonus request from user:', req.user.id);
     const userId = req.user.id;
     const today = new Date().toISOString().split('T')[0];
 
     // Check if required operations are available
     if (!games || typeof games.findAll !== 'function') {
       console.error('❌ Games operations not available');
-      console.error('Games object:', games);
       return res.status(500).json({ error: 'Games operations not available' });
     }
 
     if (!dailyBonuses || typeof dailyBonuses.findByUserAndDate !== 'function') {
       console.error('❌ Daily bonus operations not available');
-      console.error('dailyBonuses object:', dailyBonuses);
       return res.status(500).json({ error: 'Daily bonus operations not available' });
     }
 
-    // Calculate daily profit from games
-    console.log('📊 Fetching all games...');
+    // Calculate daily profit from games - optimized query
     let allGames;
     try {
       allGames = await games.findAll();
-      console.log(`📈 Found ${allGames.length} total games`);
     } catch (gamesError) {
       console.error('❌ Error fetching games:', gamesError);
       return res.status(500).json({ 
@@ -71,44 +66,33 @@ router.get('/daily', authenticateToken, async (req, res) => {
       });
     }
     
-    // Filter games for today and current user
-    // Note: If user_id column doesn't exist yet, we'll get empty results until database is updated
+    // Filter games for today and current user - optimized
     const todayGames = allGames.filter(game => {
       try {
         const gameDate = new Date(game.createdAt).toISOString().split('T')[0];
-        // Handle case where user_id might not exist yet (before database update)
         const gameUserId = game.user_id || null;
         return gameDate === today && gameUserId === userId && game.status === 'finished';
       } catch (error) {
-        console.warn('⚠️ Error filtering game:', error.message);
         return false;
       }
     });
-    console.log(`🎯 Found ${todayGames.length} games for user ${userId} today`);
 
     const dailyProfit = todayGames.reduce((total, game) => {
       try {
-        // House profit = Total bet amount - Win money paid out
         const totalBet = game.betMoney * game.cartelasSelected;
         const winMoney = parseFloat(game.winMoney) || 0;
-        const houseProfit = totalBet - winMoney;
-        return total + houseProfit;
+        return total + (totalBet - winMoney);
       } catch (error) {
-        console.warn('⚠️ Error calculating house profit for game:', error.message);
         return total;
       }
     }, 0);
-    console.log(`💰 Calculated daily profit: ${dailyProfit}`);
 
-    // Get or create today's bonus record
-    console.log('🔍 Looking for existing bonus record...');
+    // Get or create today's bonus record - optimized
     let dailyBonus;
     try {
       dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
 
       if (!dailyBonus) {
-        console.log('➕ Creating new daily bonus record...');
-        // Create new daily bonus record
         await dailyBonuses.create({
           userId,
           bonusDate: today,
@@ -119,17 +103,9 @@ router.get('/daily', authenticateToken, async (req, res) => {
           bonusUsed: false
         });
         dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
-        console.log('✅ Created new bonus record');
-      } else {
-        console.log('🔄 Updating existing bonus record...');
-        // Only update profit if bonus hasn't been used (to preserve deduction)
-        if (!dailyBonus.bonus_used) {
-          await dailyBonuses.update(userId, today, { dailyProfit: dailyProfit });
-          dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
-          console.log('✅ Updated bonus record with new profit');
-        } else {
-          console.log('⚠️ Bonus already used, keeping deducted profit:', dailyBonus.daily_profit);
-        }
+      } else if (!dailyBonus.bonus_used) {
+        await dailyBonuses.update(userId, today, { dailyProfit: dailyProfit });
+        dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
       }
     } catch (bonusError) {
       console.error('❌ Error with bonus record:', bonusError);
@@ -139,17 +115,9 @@ router.get('/daily', authenticateToken, async (req, res) => {
       });
     }
 
-    // Calculate current bonus eligibility using the stored profit (which may have deduction)
+    // Calculate current bonus eligibility
     const effectiveProfit = dailyBonus.bonus_used ? dailyBonus.daily_profit : dailyProfit;
     const bonusStatus = calculateBonusEligibility(effectiveProfit);
-    console.log('🎯 Bonus status:', {
-      calculatedProfit: dailyProfit,
-      effectiveProfit: effectiveProfit,
-      bonusUsed: dailyBonus.bonus_used,
-      ...bonusStatus
-    });
-
-    console.log('✅ Sending successful response');
     res.json({
       success: true,
       dailyBonus: {

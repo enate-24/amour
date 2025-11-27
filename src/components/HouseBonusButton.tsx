@@ -108,30 +108,19 @@ const HouseBonusButton: React.FC = () => {
   useEffect(() => {
     fetchBonusData();
     
-    // Only set up interval if initial fetch was successful
-    let interval: NodeJS.Timeout | null = null;
-    
-    const setupInterval = () => {
-      interval = setInterval(async () => {
-        try {
-          await fetchBonusData();
-        } catch (error) {
-          console.warn('⚠️ Bonus data fetch failed, stopping auto-refresh');
-          if (interval) {
-            clearInterval(interval);
-            interval = null;
-          }
-        }
-      }, 30000);
+    // Refresh only when window gains focus (user returns to page)
+    const handleFocus = () => {
+      if (!document.hidden) {
+        fetchBonusData();
+      }
     };
     
-    // Set up interval after a short delay to allow initial fetch to complete
-    setTimeout(setupInterval, 1000);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
     
     return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
     };
   }, []);
 
