@@ -1043,136 +1043,88 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
   try {
     console.log('=== USER STATS ENDPOINT CALLED ===');
 
-    // Get all users, games, and cartelas
-    const allUsers = await users.findAll();
-    const allGames = await games.findAll();
-    const allCartelas = await cartelas.findAll();
-
-    console.log(`Found ${allUsers.length} users, ${allGames.length} games, ${allCartelas.length} cartelas`);
-
     // Calculate date ranges
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const thisWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     console.log(`Today: ${today.toISOString()}, Week start: ${thisWeek.toISOString()}`);
-    
-    // Find Alemu specifically for debugging
-    const alemu = allUsers.find(u => u.username.toLowerCase() === 'alemu');
-    if (alemu) {
-      console.log('\n🔍 CHECKING USER ALEMU:');
-      console.log(`   User ID: ${alemu.id}`);
-      
-      const alemuCartelas = allCartelas.filter(c => c.user_id === alemu.id);
-      console.log(`   Total cartelas: ${alemuCartelas.length}`);
-      
-      if (alemuCartelas.length > 0) {
-        const alemuGameIds = [...new Set(alemuCartelas.map(c => c.game_id).filter(Boolean))];
-        console.log(`   Participated in ${alemuGameIds.length} games`);
-        
-        const alemuGames = allGames.filter(g => alemuGameIds.includes(g.id));
-        const finishedGames = alemuGames.filter(g => g.status === 'finished');
-        console.log(`   Finished games: ${finishedGames.length}`);
-        
-        const dailyGames = finishedGames.filter(g => new Date(g.created_at) >= today);
-        console.log(`   Daily finished games: ${dailyGames.length}`);
-        
-        if (dailyGames.length > 0) {
-          console.log('\n   Daily games breakdown:');
-          dailyGames.forEach((game, idx) => {
-            const cartelasInGame = alemuCartelas.filter(c => c.game_id === game.id).length;
-            const profit = game.bet_money * cartelasInGame * ((game.house_cut_percentage || 10) / 100);
-            console.log(`     Game ${idx + 1}: ${game.game_number} - Bet: ${game.bet_money}, Cartelas: ${cartelasInGame}, Profit: ${profit.toFixed(2)}`);
-          });
-        }
-        
-        const dailyProfit = dailyGames.reduce((sum, g) => {
-          const cartelasInGame = alemuCartelas.filter(c => c.game_id === g.id).length;
-          return sum + (g.bet_money * cartelasInGame * ((g.house_cut_percentage || 10) / 100));
-        }, 0);
-        console.log(`   💰 Daily House Profit: ${dailyProfit.toFixed(2)}`);
+
+    // Query database directly for accurate statistics
+    const statsQuery = `
+      SELECT
+        u.id as user_id,
+        u.username,
+        u.is_active,
+        -- Daily stats (today)
+        COUNT(DISTINCT CASE 
+          WHEN g.created_at >= $1 AND g.created_at < $2 AND g.status = 'finished' 
+          THEN g.id 
+        END) as daily_games,
+        COALESCE(SUM(CASE 
+          WHEN g.created_at >= $1 AND g.created_at < $2 AND g.status = 'finished'
+          THEN g.bet_money * (COALESCE(g.house_cut_percentage, 10.0) / 100.0)
+          ELSE 0 
+        END), 0) as daily_house_profit,
+        -- Weekly stats (last 7 days)
+        COUNT(DISTINCT CASE 
+          WHEN g.created_at >= $3 AND g.status = 'finished' 
+          THEN g.id 
+        END) as weekly_games,
+        COALESCE(SUM(CASE 
+          WHEN g.created_at >= $3 AND g.status = 'finished'
+          THEN g.bet_money * (COALESCE(g.house_cut_percentage, 10.0) / 100.0)
+          ELSE 0 
+        END), 0) as weekly_profit
+      FROM users u
+      LEFT JOIN cartelas c ON u.id = c.user_id
+      LEFT JOIN games g ON c.game_id = g.id
+      GROUP BY u.id, u.username, u.is_active
+      ORDER BY weekly_profit DESC, u.username ASC
+    `;
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    console.log('Executing stats query...');
+    const statsResults = await db.all(statsQuery, [
+      today.toISOString(),
+      tomorrow.toISOString(),
+      thisWeek.toISOString()
+    ]);
+
+    console.log(`Query returned ${statsResults.length} users`);
+
+    // Format results
+    const stats = statsResults.map(row => {
+      const weeklyProfit = Math.round(parseFloat(row.weekly_profit || 0));
+      const dailyHouseProfit = Math.round(parseFloat(row.daily_house_profit || 0));
+      const houseBonus = Math.round(weeklyProfit * 0.05);
+
+      // Debug logging for Alemu
+      if (row.username.toLowerCase() === 'alemu') {
+        console.log('\n🔍 ALEMU DATA FROM DATABASE:');
+        console.log(`   User ID: ${row.user_id}`);
+        console.log(`   Daily Games: ${row.daily_games}`);
+        console.log(`   Daily House Profit: ${dailyHouseProfit}`);
+        console.log(`   Weekly Games: ${row.weekly_games}`);
+        console.log(`   Weekly Profit: ${weeklyProfit}`);
+        console.log(`   House Bonus: ${houseBonus}`);
       }
-    }
 
-    // Calculate statistics for each user (including those with no games)
-    const stats = allUsers
-      .map(user => {
-        // Get user's cartelas
-        const userCartelas = allCartelas.filter(c => c.user_id === user.id);
-        
-        // Get games where user's cartelas were used
-        const userGameIds = [...new Set(userCartelas.map(c => c.game_id).filter(Boolean))];
-        const userGames = allGames.filter(g => userGameIds.includes(g.id) && g.status === 'finished');
-        
-        // Daily stats
-        const dailyGames = userGames.filter(g => new Date(g.created_at) >= today);
-        const dailyCartelasCount = userCartelas.filter(c => {
-          const game = allGames.find(g => g.id === c.game_id);
-          return game && new Date(game.created_at) >= today;
-        }).length;
-        
-        const dailyHouseProfit = dailyGames.reduce((sum, g) => {
-          // Count how many of user's cartelas were in this game
-          const userCartelasInGame = userCartelas.filter(c => c.game_id === g.id).length;
-          return sum + (g.bet_money * userCartelasInGame * ((g.house_cut_percentage || 10) / 100));
-        }, 0);
-
-        // Weekly stats
-        const weeklyGames = userGames.filter(g => new Date(g.created_at) >= thisWeek);
-        const weeklyCartelasCount = userCartelas.filter(c => {
-          const game = allGames.find(g => g.id === c.game_id);
-          return game && new Date(game.created_at) >= thisWeek;
-        }).length;
-        
-        const weeklyProfit = weeklyGames.reduce((sum, g) => {
-          // Count how many of user's cartelas were in this game
-          const userCartelasInGame = userCartelas.filter(c => c.game_id === g.id).length;
-          return sum + (g.bet_money * userCartelasInGame * ((g.house_cut_percentage || 10) / 100));
-        }, 0);
-
-        // House bonus (could be based on various factors - using 5% of weekly profit as example)
-        const houseBonus = Math.round(weeklyProfit * 0.05);
-
-        // Debug logging for Alemu
-        if (user.username.toLowerCase() === 'alemu') {
-          console.log('\n📊 ALEMU CALCULATION RESULTS:');
-          console.log(`   User cartelas: ${userCartelas.length}`);
-          console.log(`   User game IDs: ${userGameIds.length}`);
-          console.log(`   Finished games: ${userGames.length}`);
-          console.log(`   Weekly games: ${weeklyGames.length}`);
-          console.log(`   Weekly profit calculated: ${weeklyProfit.toFixed(2)}`);
-          
-          if (weeklyGames.length > 0) {
-            console.log('\n   Weekly games breakdown:');
-            weeklyGames.forEach((g, idx) => {
-              const cartelasInGame = userCartelas.filter(c => c.game_id === g.id).length;
-              const profit = g.bet_money * cartelasInGame * ((g.house_cut_percentage || 10) / 100);
-              console.log(`     Game ${idx + 1}: Bet=${g.bet_money}, Cartelas=${cartelasInGame}, HouseCut=${g.house_cut_percentage || 10}%, Profit=${profit.toFixed(2)}`);
-            });
-          }
-        }
-
-        return {
-          userId: user.id,
-          username: user.username,
-          dailyGames: dailyGames.length,
-          dailyHouseProfit: Math.round(dailyHouseProfit),
-          weeklyProfit: Math.round(weeklyProfit),
-          houseBonus: houseBonus,
-          isActive: user.is_active,
-          date: new Date().toISOString()
-        };
-      })
-      .sort((a, b) => {
-        // Sort by daily profit first (descending), then by username (ascending)
-        if (b.dailyHouseProfit !== a.dailyHouseProfit) {
-          return b.dailyHouseProfit - a.dailyHouseProfit;
-        }
-        return a.username.localeCompare(b.username);
-      });
+      return {
+        userId: row.user_id,
+        username: row.username,
+        dailyGames: parseInt(row.daily_games || 0),
+        dailyHouseProfit: dailyHouseProfit,
+        weeklyProfit: weeklyProfit,
+        houseBonus: houseBonus,
+        isActive: row.is_active,
+        date: new Date().toISOString()
+      };
+    });
 
     console.log(`✅ Returning statistics for ${stats.length} users`);
-    console.log('Sample stats:', stats.slice(0, 3));
 
     res.json({
       success: true,
