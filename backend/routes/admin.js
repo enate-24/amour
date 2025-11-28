@@ -1141,12 +1141,24 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
 router.get('/user-daily-stats/:userId', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
-    const { days = '30' } = req.query;
-    console.log(`=== FETCHING DAILY STATS FOR USER: ${userId} (${days} days) ===`);
-
-    // Get daily statistics for the user
-    const daysAgo = new Date();
-    daysAgo.setDate(daysAgo.getDate() - parseInt(days as string));
+    const { days, startDate, endDate } = req.query;
+    
+    let fromDate, toDate;
+    
+    if (startDate && endDate) {
+      // Custom date range
+      fromDate = new Date(startDate);
+      toDate = new Date(endDate);
+      toDate.setHours(23, 59, 59, 999); // Include the entire end date
+      console.log(`=== FETCHING DAILY STATS FOR USER: ${userId} (${startDate} to ${endDate}) ===`);
+    } else {
+      // Days-based range
+      const daysCount = parseInt(days || '30');
+      toDate = new Date();
+      fromDate = new Date();
+      fromDate.setDate(toDate.getDate() - daysCount);
+      console.log(`=== FETCHING DAILY STATS FOR USER: ${userId} (${daysCount} days) ===`);
+    }
 
     const dailyStatsQuery = `
       SELECT
@@ -1158,12 +1170,17 @@ router.get('/user-daily-stats/:userId', authenticateToken, requireAdmin, async (
       FROM games g
       WHERE g.user_id = $1 
         AND g.created_at >= $2 
+        AND g.created_at <= $3
         AND g.status IN ('started', 'finished')
       GROUP BY DATE(g.created_at)
       ORDER BY DATE(g.created_at) DESC
     `;
 
-    const dailyStats = await db.all(dailyStatsQuery, [userId, daysAgo.toISOString()]);
+    const dailyStats = await db.all(dailyStatsQuery, [
+      userId, 
+      fromDate.toISOString(), 
+      toDate.toISOString()
+    ]);
 
     const formattedStats = dailyStats.map(stat => ({
       date: new Date(stat.date).toLocaleDateString(),
@@ -1177,7 +1194,11 @@ router.get('/user-daily-stats/:userId', authenticateToken, requireAdmin, async (
 
     res.json({
       success: true,
-      dailyStats: formattedStats
+      dailyStats: formattedStats,
+      dateRange: {
+        from: fromDate.toISOString().split('T')[0],
+        to: toDate.toISOString().split('T')[0]
+      }
     });
   } catch (error) {
     console.error('Error fetching user daily stats:', error);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Calendar, TrendingUp, DollarSign, Users, Download } from 'lucide-react';
+import { ArrowLeft, Calendar, TrendingUp, DollarSign, Users, Download, CalendarDays } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -20,20 +20,42 @@ interface DailyStatisticsProps {
 const DailyStatistics: React.FC<DailyStatisticsProps> = ({ userId, username, onBack }) => {
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPeriod, setSelectedPeriod] = useState('30'); // 7, 15, 30 days
+  const [selectedPeriod, setSelectedPeriod] = useState('30'); // 7, 15, 30 days, custom
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [useCustomRange, setUseCustomRange] = useState(false);
 
   useEffect(() => {
     if (userId) {
       fetchDailyStats();
     }
-  }, [userId, selectedPeriod]);
+  }, [userId, selectedPeriod, startDate, endDate, useCustomRange]);
+
+  useEffect(() => {
+    // Set default dates when component mounts
+    const today = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    
+    setEndDate(today.toISOString().split('T')[0]);
+    setStartDate(thirtyDaysAgo.toISOString().split('T')[0]);
+  }, []);
 
   const fetchDailyStats = async () => {
     if (!userId) return;
     
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/admin/user-daily-stats/${userId}?days=${selectedPeriod}`, {
+      
+      let url = `${API_BASE_URL}/admin/user-daily-stats/${userId}`;
+      
+      if (useCustomRange && startDate && endDate) {
+        url += `?startDate=${startDate}&endDate=${endDate}`;
+      } else {
+        url += `?days=${selectedPeriod}`;
+      }
+      
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
           'Content-Type': 'application/json'
@@ -52,6 +74,22 @@ const DailyStatistics: React.FC<DailyStatisticsProps> = ({ userId, username, onB
       setDailyStats([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePeriodChange = (period: string) => {
+    setSelectedPeriod(period);
+    if (period === 'custom') {
+      setUseCustomRange(true);
+    } else {
+      setUseCustomRange(false);
+      // Update default dates based on period
+      const today = new Date();
+      const daysAgo = new Date();
+      daysAgo.setDate(today.getDate() - parseInt(period));
+      
+      setEndDate(today.toISOString().split('T')[0]);
+      setStartDate(daysAgo.toISOString().split('T')[0]);
     }
   };
 
@@ -110,21 +148,46 @@ const DailyStatistics: React.FC<DailyStatisticsProps> = ({ userId, username, onB
               Daily Statistics
             </h1>
             <p className="text-sm sm:text-base text-slate-400">
-              {username ? `User: ${username}` : 'All Users'} - Last {selectedPeriod} days
+              {username ? `User: ${username}` : 'All Users'} - 
+              {useCustomRange ? `${startDate} to ${endDate}` : `Last ${selectedPeriod} days`}
             </p>
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
-          <select
-            value={selectedPeriod}
-            onChange={(e) => setSelectedPeriod(e.target.value)}
-            className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
-          >
-            <option value="7">Last 7 days</option>
-            <option value="15">Last 15 days</option>
-            <option value="30">Last 30 days</option>
-          </select>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          {/* Period Selection */}
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-5 h-5 text-slate-400" />
+            <select
+              value={selectedPeriod}
+              onChange={(e) => handlePeriodChange(e.target.value)}
+              className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
+            >
+              <option value="7">Last 7 days</option>
+              <option value="15">Last 15 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="custom">Custom Range</option>
+            </select>
+          </div>
+
+          {/* Custom Date Range */}
+          {useCustomRange && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
+              />
+              <span className="text-slate-400">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
+              />
+            </div>
+          )}
           
           <button
             onClick={exportToCSV}
