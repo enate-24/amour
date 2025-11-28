@@ -105,9 +105,11 @@ router.get('/daily', authenticateToken, async (req, res) => {
         });
         dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
       } else if (!dailyBonus.bonus_used) {
+        // Only update daily profit if bonus hasn't been used (to preserve deduction)
         await dailyBonuses.update(userId, today, { dailyProfit: dailyProfit });
         dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
       }
+      // If bonus was used, keep the stored daily_profit (which has the deduction)
     } catch (bonusError) {
       console.error('❌ Error with bonus record:', bonusError);
       return res.status(500).json({ 
