@@ -79,9 +79,10 @@ router.get('/daily', authenticateToken, async (req, res) => {
 
     const dailyProfit = todayGames.reduce((total, game) => {
       try {
-        const totalBet = game.betMoney * game.cartelasSelected;
+        // Use same calculation as admin dashboard: bet_money - win_money
+        const betMoney = parseFloat(game.betMoney) || 0;
         const winMoney = parseFloat(game.winMoney) || 0;
-        return total + (totalBet - winMoney);
+        return total + (betMoney - winMoney);
       } catch (error) {
         return total;
       }
@@ -347,10 +348,10 @@ router.post('/refresh-profit', authenticateToken, async (req, res) => {
     });
 
     const dailyProfit = todayGames.reduce((total, game) => {
-      // House profit = Total bet amount - Win money paid out
-      const totalBet = game.betMoney * game.cartelasSelected;
+      // House profit = bet_money - win_money (same as admin dashboard)
+      const betMoney = parseFloat(game.betMoney) || 0;
       const winMoney = parseFloat(game.winMoney) || 0;
-      const houseProfit = totalBet - winMoney;
+      const houseProfit = betMoney - winMoney;
       return total + houseProfit;
     }, 0);
 
