@@ -567,6 +567,9 @@ const AdminUserManagement: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                     Role
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                    House Profit
+                  </th>
 
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                     Status
@@ -599,6 +602,9 @@ const AdminUserManagement: React.FC = () => {
                       }`}>
                         {user.role}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                      {user.balance.toFixed(2)} Birr
                     </td>
 
                     <td className="px-6 py-4 whitespace-nowrap">

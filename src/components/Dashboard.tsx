@@ -196,16 +196,23 @@ const Dashboard: React.FC = () => {
       {/* Header */}
       <div className="text-center mb-6 sm:mb-8">
         <h2 className="text-xl sm:text-2xl font-bold mb-2">{user?.username || 'User'}</h2>
-        {/* Balance display removed */}
-        <div className="flex items-center justify-center gap-2">
-          <button
-            onClick={runDiagnostics}
-            className="p-2 hover:bg-slate-700 rounded text-yellow-400 transition-colors"
-            title="Run diagnostics (check console)"
-          >
-            🔍
-          </button>
-        </div>
+        {/* Show house profit (which is the user's balance) */}
+        {(!user?.role || user.role !== 'admin') && (
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2">
+            <span className="text-base sm:text-lg">
+              House Profit: {formatCurrency(user?.balance || 0)}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={runDiagnostics}
+                className="p-2 hover:bg-slate-700 rounded text-yellow-400 transition-colors"
+                title="Run diagnostics (check console)"
+              >
+                🔍
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stats Grid */}
