@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, UserCheck, UserX, Shield, Crown, TrendingUp, DollarSign } from 'lucide-react';
+import { Users, Search, UserCheck, UserX, Shield, Crown, TrendingUp, DollarSign, Download } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -170,6 +170,39 @@ const BackofficeDashboard: React.FC = () => {
     }
   };
 
+  const exportToCSV = () => {
+    // Create CSV content
+    const headers = ['#', 'User', 'Status', 'Date', 'Total Games (Week)', 'House Profit (Today)', 'House Profit (Week)', 'House Bonus'];
+    const csvRows = [headers.join(',')];
+
+    filteredStats.forEach((stat, index) => {
+      const row = [
+        index + 1,
+        stat.username,
+        stat.isActive ? 'Active' : 'Inactive',
+        new Date(stat.date).toLocaleDateString(),
+        stat.dailyGames || 0,
+        stat.dailyHouseProfit,
+        stat.weeklyProfit,
+        stat.houseBonus
+      ];
+      csvRows.push(row.join(','));
+    });
+
+    // Create blob and download
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `user-statistics-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const getRoleIcon = (role: string) => {
     switch (role) {
       case 'admin': return <Crown size={16} className="text-yellow-400" />;
@@ -225,6 +258,13 @@ const BackofficeDashboard: React.FC = () => {
             <h2 className="text-xl sm:text-2xl font-bold">User Statistics</h2>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={exportToCSV}
+              className="px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base rounded-lg transition-colors flex items-center gap-2"
+            >
+              <Download size={16} />
+              Export CSV
+            </button>
             <button
               onClick={fetchUserStats}
               className="px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm sm:text-base rounded-lg transition-colors"
