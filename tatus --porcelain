@@ -1,0 +1,186 @@
+warning: in the working copy of 'src/components/BackofficeDashboard.tsx', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/src/components/BackofficeDashboard.tsx b/src/components/BackofficeDashboard.tsx[m
+[1mindex f8c01cc..8afbbb6 100644[m
+[1m--- a/src/components/BackofficeDashboard.tsx[m
+[1m+++ b/src/components/BackofficeDashboard.tsx[m
+[36m@@ -404,179 +404,7 @@[m [mconst BackofficeDashboard: React.FC = () => {[m
+       </div>[m
+ [m
+       {/* User Management Section */}[m
+[31m-      <div className="bg-slate-800 rounded-lg border border-slate-700 p-4 sm:p-6">[m
+[31m-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">[m
+[31m-          <div className="flex items-center gap-2 sm:gap-3">[m
+[31m-            <Users className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 flex-shrink-0" />[m
+[31m-            <h2 className="text-xl sm:text-2xl font-bold">User Management</h2>[m
+[31m-          </div>[m
+[31m-          <div className="flex items-center gap-2">[m
+[31m-            <button[m
+[31m-              onClick={fetchUsers}[m
+[31m-              className="px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base rounded-lg transition-colors"[m
+[31m-            >[m
+[31m-              Refresh[m
+[31m-            </button>[m
+[31m-          </div>[m
+[31m-        </div>[m
+[31m-[m
+[31m-        {/* User Filters */}[m
+[31m-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-6">[m
+[31m-          <div className="flex-1">[m
+[31m-            <div className="relative">[m
+[31m-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />[m
+[31m-              <input[m
+[31m-                type="text"[m
+[31m-                placeholder="Search users..."[m
+[31m-                value={searchTerm}[m
+[31m-                onChange={(e) => setSearchTerm(e.target.value)}[m
+[31m-                className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white text-sm sm:text-base"[m
+[31m-              />[m
+[31m-            </div>[m
+[31m-          </div>[m
+[31m-[m
+[31m-          <div className="w-full sm:w-40 lg:w-48">[m
+[31m-            <select[m
+[31m-              value={roleFilter}[m
+[31m-              onChange={(e) => setRoleFilter(e.target.value)}[m
+[31m-              className="w-full p-2.5 sm:p-3 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white text-sm sm:text-base"[m
+[31m-            >[m
+[31m-              <option value="all">All Roles</option>[m
+[31m-              <option value="admin">Admin</option>[m
+[31m-              <option value="cashier">Cashier</option>[m
+[31m-              <option value="user">User</option>[m
+[31m-            </select>[m
+[31m-          </div>[m
+[31m-[m
+[31m-          <div className="w-full sm:w-40 lg:w-48">[m
+[31m-            <select[m
+[31m-              value={statusFilter}[m
+[31m-              onChange={(e) => setStatusFilter(e.target.value)}[m
+[31m-              className="w-full p-2.5 sm:p-3 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white text-sm sm:text-base"[m
+[31m-            >[m
+[31m-              <option value="all">All Status</option>[m
+[31m-              <option value="active">Active</option>[m
+[31m-              <option value="inactive">Inactive</option>[m
+[31m-            </select>[m
+[31m-          </div>[m
+[31m-        </div>[m
+[31m-[m
+[31m-        {/* User Stats */}[m
+[31m-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">[m
+[31m-          <div className="bg-slate-700 p-3 sm:p-4 rounded-lg">[m
+[31m-            <div className="text-xl sm:text-2xl font-bold text-blue-400">{users.length}</div>[m
+[31m-            <div className="text-xs sm:text-sm text-slate-400">Total Users</div>[m
+[31m-          </div>[m
+[31m-          <div className="bg-slate-700 p-3 sm:p-4 rounded-lg">[m
+[31m-            <div className="text-xl sm:text-2xl font-bold text-green-400">{users.filter(u => u.is_active).length}</div>[m
+[31m-            <div className="text-xs sm:text-sm text-slate-400">Active Users</div>[m
+[31m-          </div>[m
+[31m-          <div className="bg-slate-700 p-3 sm:p-4 rounded-lg">[m
+[31m-            <div className="text-xl sm:text-2xl font-bold text-yellow-400">{users.filter(u => u.role === 'admin').length}</div>[m
+[31m-            <div className="text-xs sm:text-sm text-slate-400">Admins</div>[m
+[31m-          </div>[m
+[31m-          <div className="bg-slate-700 p-3 sm:p-4 rounded-lg">[m
+[31m-            <div className="text-xl sm:text-2xl font-bold text-purple-400">{users.filter(u => u.role === 'cashier').length}</div>[m
+[31m-            <div className="text-xs sm:text-sm text-slate-400">Cashiers</div>[m
+[31m-          </div>[m
+[31m-        </div>[m
+[31m-[m
+[31m-        {/* Users Table */}[m
+[31m-        <div className="bg-slate-700 rounded-lg overflow-hidden">[m
+[31m-          <div className="overflow-x-auto">[m
+[31m-            <table className="w-full min-w-[800px]">[m
+[31m-              <thead className="bg-slate-600">[m
+[31m-                <tr>[m
+[31m-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">User</th>[m
+[31m-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Role</th>[m
+[31m-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Balance</th>[m
+[31m-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Games</th>[m
+[31m-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Winnings</th>[m
+[31m-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Cartelas</th>[m
+[31m-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Status</th>[m
+[31m-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Joined</th>[m
+[31m-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Actions</th>[m
+[31m-                </tr>[m
+[31m-              </thead>[m
+[31m-              <tbody className="bg-slate-700 divide-y divide-slate-600">[m
+[31m-                {loading ? ([m
+[31m-                  <tr>[m
+[31m-                    <td colSpan={9} className="px-3 sm:px-6 py-4 text-center text-slate-400">[m
+[31m-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>[m
+[31m-                      <p className="text-sm">Loading users...</p>[m
+[31m-                    </td>[m
+[31m-                  </tr>[m
+[31m-                ) : filteredUsers.length > 0 ? ([m
+[31m-                  filteredUsers.map((user) => ([m
+[31m-                    <tr key={user.id} className="hover:bg-slate-600 transition-colors">[m
+[31m-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">[m
+[31m-                        <div className="flex items-center">[m
+[31m-                          <div className="min-w-0">[m
+[31m-                            <div className="text-xs sm:text-sm font-medium text-white truncate">{user.username}</div>[m
+[31m-                            <div className="text-xs text-slate-400 truncate">{user.email}</div>[m
+[31m-                          </div>[m
+[31m-                        </div>[m
+[31m-                      </td>[m
+[31m-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">[m
+[31m-                        <div className="flex items-center gap-1 sm:gap-2">[m
+[31m-                          {getRoleIcon(user.role)}[m
+[31m-                          <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs rounded ${getRoleColor(user.role)}`}>[m
+[31m-                            {user.role}[m
+[31m-                          </span>[m
+[31m-                        </div>[m
+[31m-                      </td>[m
+[31m-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-white">[m
+[31m-                        {(user.balance || 0).toLocaleString()}[m
+[31m-                      </td>[m
+[31m-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-slate-300">[m
+[31m-                        {user.total_games_played}[m
+[31m-                      </td>[m
+[31m-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-green-400">[m
+[31m-                        {(user.total_winnings || 0).toLocaleString()}[m
+[31m-                      </td>[m
+[31m-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-slate-300">[m
+[31m-                        <div className="flex flex-col">[m
+[31m-                          <span>{user.cartelaCount || 0} total</span>[m
+[31m-                          <span className="text-xs text-green-400">{user.activeCartelaCount || 0} active</span>[m
+[31m-                        </div>[m
+[31m-                      </td>[m
+[31m-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">[m
+[31m-                        <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs rounded ${[m
+[31m-                          user.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'[m
+[31m-                        }`}>[m
+[31m-                          {user.is_active ? 'Active' : 'Inactive'}[m
+[31m-                        </span>[m
+[31m-                      </td>[m
+[31m-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-slate-400">[m
+[31m-                        {new Date(user.created_at).toLocaleDateString()}[m
+[31m-                      </td>[m
+[31m-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm font-medium">[m
+[31m-                        <button[m
+[31m-                          onClick={() => handleToggleUserStatus(user.id, user.is_active)}[m
+[31m-                          className={`p-2 rounded text-xs transition-colors ${[m
+[31m-                            user.is_active[m
+[31m-                              ? 'bg-red-600 hover:bg-red-700 text-white'[m
+[31m-                              : 'bg-green-600 hover:bg-green-700 text-white'[m
+[31m-                          }`}[m
+[31m-                          title={user.is_active ? 'Deactivate' : 'Activate'}[m
+[31m-                        >[m
+[31m-                          {user.is_active ? <UserX size={14} /> : <UserCheck size={14} />}[m
+[31m-                        </button>[m
+[31m-                      </td>[m
+[31m-                    </tr>[m
+[31m-                  ))[m
+[31m-                ) : ([m
+[31m-                  <tr>[m
+[31m-                    <td colSpan={9} className="px-3 sm:px-6 py-4 text-center text-slate-400 text-sm">[m
+[31m-                      No users found matching the current filters[m
+[31m-                    </td>[m
+[31m-                  </tr>[m
+[31m-                )}[m
+[31m-              </tbody>[m
+[31m-            </table>[m
+[31m-          </div>[m
+[31m-        </div>[m
+[31m-      </div>[m
+[32m+[m[41m      [m
+ [m
+ [m
+     </div>[m
