@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Search, UserCheck, UserX, Shield, Crown, TrendingUp, DollarSign, Download } from 'lucide-react';
+import DailyStatistics from './DailyStatistics';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -37,9 +38,9 @@ const BackofficeDashboard: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [statsSearchTerm, setStatsSearchTerm] = useState('');
-  const [selectedUser, setSelectedUser] = useState<string | null>(null);
-  const [userDailyData, setUserDailyData] = useState<any[]>([]);
-  const [dailyDataLoading, setDailyDataLoading] = useState(false);
+  const [showDailyStats, setShowDailyStats] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -173,36 +174,16 @@ const BackofficeDashboard: React.FC = () => {
     }
   };
 
-  const fetchUserDailyData = async (userId: string, username: string) => {
-    try {
-      setDailyDataLoading(true);
-      setSelectedUser(username);
-      
-      const response = await fetch(`${API_BASE_URL}/admin/user-daily-stats/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUserDailyData(data.dailyStats || []);
-      } else {
-        console.error('Error fetching user daily data:', response.status);
-        setUserDailyData([]);
-      }
-    } catch (error) {
-      console.error('Error fetching user daily data:', error);
-      setUserDailyData([]);
-    } finally {
-      setDailyDataLoading(false);
-    }
+  const showUserDailyStats = (userId: string, username: string) => {
+    setSelectedUserId(userId);
+    setSelectedUsername(username);
+    setShowDailyStats(true);
   };
 
-  const closeModal = () => {
-    setSelectedUser(null);
-    setUserDailyData([]);
+  const backToDashboard = () => {
+    setShowDailyStats(false);
+    setSelectedUserId(null);
+    setSelectedUsername(null);
   };
 
   const exportToCSV = () => {
@@ -268,6 +249,17 @@ const BackofficeDashboard: React.FC = () => {
   const filteredStats = userStats.filter(stat => 
     stat.username.toLowerCase().includes(statsSearchTerm.toLowerCase())
   );
+
+  // Show Daily Statistics page if selected
+  if (showDailyStats && selectedUserId && selectedUsername) {
+    return (
+      <DailyStatistics
+        userId={selectedUserId}
+        username={selectedUsername}
+        onBack={backToDashboard}
+      />
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 bg-slate-900 min-h-screen text-white">
@@ -355,7 +347,7 @@ const BackofficeDashboard: React.FC = () => {
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
                         <button
-                          onClick={() => fetchUserDailyData(stat.userId, stat.username)}
+                          onClick={() => showUserDailyStats(stat.userId, stat.username)}
                           className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline cursor-pointer transition-colors"
                         >
                           {stat.username}
@@ -586,75 +578,7 @@ const BackofficeDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* User Daily Data Modal */}
-      {selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-lg border border-slate-700 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="p-4 sm:p-6 border-b border-slate-700 flex justify-between items-center">
-              <h3 className="text-xl sm:text-2xl font-bold text-white">
-                Daily Statistics - {selectedUser}
-              </h3>
-              <button
-                onClick={closeModal}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
 
-            {/* Modal Body */}
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-              {dailyDataLoading ? (
-                <div className="flex justify-center items-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-                </div>
-              ) : userDailyData.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-slate-700">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase">Date</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase">Games</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase">Total Bet</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase">Total Win</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase">House Profit</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-700">
-                      {userDailyData.map((day: any, index: number) => (
-                        <tr key={index} className="hover:bg-slate-700 transition-colors">
-                          <td className="px-4 py-3 text-sm text-white">{day.date}</td>
-                          <td className="px-4 py-3 text-sm text-blue-400 font-semibold">{day.games}</td>
-                          <td className="px-4 py-3 text-sm text-slate-300">{day.totalBet.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-sm text-green-400">{day.totalWin.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-sm text-emerald-400 font-semibold">{day.houseProfit.toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-12 text-slate-400">
-                  No daily data available for this user
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 sm:p-6 border-t border-slate-700 flex justify-end">
-              <button
-                onClick={closeModal}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

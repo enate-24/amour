@@ -1141,11 +1141,12 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
 router.get('/user-daily-stats/:userId', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
-    console.log(`=== FETCHING DAILY STATS FOR USER: ${userId} ===`);
+    const { days = '30' } = req.query;
+    console.log(`=== FETCHING DAILY STATS FOR USER: ${userId} (${days} days) ===`);
 
-    // Get daily statistics for the user (last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Get daily statistics for the user
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - parseInt(days as string));
 
     const dailyStatsQuery = `
       SELECT
@@ -1162,7 +1163,7 @@ router.get('/user-daily-stats/:userId', authenticateToken, requireAdmin, async (
       ORDER BY DATE(g.created_at) DESC
     `;
 
-    const dailyStats = await db.all(dailyStatsQuery, [userId, thirtyDaysAgo.toISOString()]);
+    const dailyStats = await db.all(dailyStatsQuery, [userId, daysAgo.toISOString()]);
 
     const formattedStats = dailyStats.map(stat => ({
       date: new Date(stat.date).toLocaleDateString(),
