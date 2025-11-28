@@ -1137,4 +1137,51 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+// Get daily statistics for a specific user (Admin only)
+router.get('/user-daily-stats/:userId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    console.log(`=== FETCHING DAILY STATS FOR USER: ${userId} ===`);
+
+    // Get daily statistics for the user (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const dailyStatsQuery = `
+      SELECT
+        DATE(g.created_at) as date,
+        COUNT(g.id) as games,
+        COALESCE(SUM(g.bet_money), 0) as total_bet,
+        COALESCE(SUM(g.win_money), 0) as total_win,
+        COALESCE(SUM(g.bet_money - COALESCE(g.win_money, 0)), 0) as house_profit
+      FROM games g
+      WHERE g.user_id = $1 
+        AND g.created_at >= $2 
+        AND g.status IN ('started', 'finished')
+      GROUP BY DATE(g.created_at)
+      ORDER BY DATE(g.created_at) DESC
+    `;
+
+    const dailyStats = await db.all(dailyStatsQuery, [userId, thirtyDaysAgo.toISOString()]);
+
+    const formattedStats = dailyStats.map(stat => ({
+      date: new Date(stat.date).toLocaleDateString(),
+      games: parseInt(stat.games || 0),
+      totalBet: parseFloat(stat.total_bet || 0),
+      totalWin: parseFloat(stat.total_win || 0),
+      houseProfit: parseFloat(stat.house_profit || 0)
+    }));
+
+    console.log(`✅ Returning ${formattedStats.length} days of data`);
+
+    res.json({
+      success: true,
+      dailyStats: formattedStats
+    });
+  } catch (error) {
+    console.error('Error fetching user daily stats:', error);
+    res.status(500).json({ error: 'Failed to fetch user daily statistics' });
+  }
+});
+
 module.exports = router;
