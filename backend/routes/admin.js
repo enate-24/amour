@@ -1050,7 +1050,8 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
 
     console.log(`Today: ${today.toISOString()}, Week start: ${thisWeek.toISOString()}`);
 
-    // Query database directly for accurate statistics (matching weekly-report logic)
+    // Query database directly for accurate statistics (matching dashboard logic)
+    // Dashboard calculates profit as: bet_money - win_money
     const statsQuery = `
       SELECT
         u.id as user_id,
@@ -1058,22 +1059,22 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
         u.is_active,
         -- Daily stats (today)
         COUNT(DISTINCT CASE 
-          WHEN g.created_at >= $1 AND g.created_at < $2 AND g.user_id = u.id AND g.status = 'finished'
+          WHEN g.created_at >= $1 AND g.created_at < $2 AND g.user_id = u.id AND g.status IN ('started', 'finished')
           THEN g.id 
         END) as daily_games,
         COALESCE(SUM(CASE 
-          WHEN g.created_at >= $1 AND g.created_at < $2 AND g.user_id = u.id AND g.status = 'finished'
-          THEN g.bet_money * g.cartelas_selected * (COALESCE(g.house_cut_percentage, 10.0) / 100.0)
+          WHEN g.created_at >= $1 AND g.created_at < $2 AND g.user_id = u.id AND g.status IN ('started', 'finished')
+          THEN g.bet_money - COALESCE(g.win_money, 0)
           ELSE 0 
         END), 0) as daily_house_profit,
         -- Weekly stats (last 7 days)
         COUNT(DISTINCT CASE 
-          WHEN g.created_at >= $3 AND g.user_id = u.id AND g.status = 'finished'
+          WHEN g.created_at >= $3 AND g.user_id = u.id AND g.status IN ('started', 'finished')
           THEN g.id 
         END) as weekly_games,
         COALESCE(SUM(CASE 
-          WHEN g.created_at >= $3 AND g.user_id = u.id AND g.status = 'finished'
-          THEN g.bet_money * g.cartelas_selected * (COALESCE(g.house_cut_percentage, 10.0) / 100.0)
+          WHEN g.created_at >= $3 AND g.user_id = u.id AND g.status IN ('started', 'finished')
+          THEN g.bet_money - COALESCE(g.win_money, 0)
           ELSE 0 
         END), 0) as weekly_profit
       FROM users u
