@@ -92,7 +92,7 @@ const BackofficeLayout: React.FC = () => {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'text-blue-400' },
-    { id: 'weekly-report', label: 'Weekly Report', icon: FileText, color: 'text-green-400' },
+
     ...(userRole === 'admin' ? [
       { id: 'user-management', label: 'User Management', icon: User, color: 'text-purple-400' }
     ] : []),

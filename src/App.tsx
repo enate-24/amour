@@ -11,7 +11,7 @@ import Settings from './components/Settings';
 import Sidebar from './components/Sidebar';
 import BackofficeLayout from './components/BackofficeLayout';
 import BackofficeDashboard from './components/BackofficeDashboard';
-import WeeklyReport from './components/WeeklyReport';
+
 import AdminUserManagement from './components/AdminUserManagement';
 
 import NewAccountPage from './components/NewAccountPage';
@@ -111,7 +111,7 @@ function AppContent() {
       <Routes>
         <Route path="/backoffice/*" element={<BackofficeLayout />}>
           <Route path="dashboard" element={<BackofficeDashboard />} />
-          <Route path="weekly-report" element={<WeeklyReport />} />
+
           <Route path="user-management" element={<AdminUserManagement />} />
           <Route path="" element={<BackofficeDashboard />} />
         </Route>

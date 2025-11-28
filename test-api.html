@@ -23,7 +23,7 @@
     <div class="section">
         <h2>Test Endpoints</h2>
         <button onclick="testUserStats()">Test /admin/user-stats</button>
-        <button onclick="testWeeklyReport()">Test /admin/weekly-report</button>
+
         <button onclick="testUsers()">Test /admin/users</button>
     </div>
 
@@ -83,43 +83,7 @@
             }
         }
 
-        async function testWeeklyReport() {
-            const token = getToken();
-            if (!token) {
-                alert('Please enter and save your token first!');
-                return;
-            }
 
-            const results = document.getElementById('results');
-            results.innerHTML = '<p>Loading weekly report...</p>';
-
-            try {
-                const response = await fetch(`${API_BASE}/admin/weekly-report?period=week`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                const data = await response.json();
-                
-                // Find Alemu
-                const alemu = data.users?.find(u => u.username.toLowerCase() === 'alemu');
-                
-                results.innerHTML = `
-                    <h3>Status: ${response.status}</h3>
-                    <h3>Total Users: ${data.users?.length || 0}</h3>
-                    ${alemu ? `
-                        <h3 style="color: #10b981;">✅ Found Alemu:</h3>
-                        <pre>${JSON.stringify(alemu, null, 2)}</pre>
-                    ` : '<h3 style="color: #ef4444;">❌ Alemu not found</h3>'}
-                    <h3>Summary:</h3>
-                    <pre>${JSON.stringify(data.summary, null, 2)}</pre>
-                `;
-            } catch (error) {
-                results.innerHTML = `<pre style="color: #ef4444;">Error: ${error.message}</pre>`;
-            }
-        }
 
         async function testUsers() {
             const token = getToken();

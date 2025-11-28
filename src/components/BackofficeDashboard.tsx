@@ -88,62 +88,7 @@ const BackofficeDashboard: React.FC = () => {
         return;
       }
 
-      // Fallback: Use weekly-report endpoint to calculate stats
-      console.log('user-stats endpoint not available, using weekly-report fallback');
-      response = await fetch(`${API_BASE_URL}/admin/weekly-report?period=week`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const reportUsers = data.users || [];
-        
-        // Transform weekly report data to user stats format
-        const calculatedStats: UserStats[] = reportUsers.map((user: any) => {
-          // Estimate daily as 1/7 of weekly (rough approximation)
-          const dailyEstimate = Math.round(user.periodHouseProfit / 7);
-          
-          return {
-            userId: user.id,
-            username: user.username,
-            dailyGames: Math.round(user.periodGamesPlayed / 7),
-            dailyHouseProfit: dailyEstimate,
-            weeklyProfit: Math.round(user.periodHouseProfit),
-            houseBonus: Math.round(user.periodHouseProfit * 0.05),
-            isActive: true, // Assume active if in report
-            date: new Date().toISOString()
-          };
-        });
-        
-        setUserStats(calculatedStats);
-      } else {
-        console.error('Error fetching stats:', response.status);
-        // Last fallback: show users with zero stats
-        const allUsers = await fetch(`${API_BASE_URL}/admin/users`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (allUsers.ok) {
-          const userData = await allUsers.json();
-          const zeroStats: UserStats[] = (userData.users || []).map((user: any) => ({
-            userId: user.id,
-            username: user.username,
-            dailyGames: 0,
-            dailyHouseProfit: 0,
-            weeklyProfit: 0,
-            houseBonus: 0,
-            isActive: user.is_active,
-            date: new Date().toISOString()
-          }));
-          setUserStats(zeroStats);
-        }
-      }
+      console.error('Error fetching user stats:', response.status);
     } catch (error) {
       console.error('Error fetching user stats:', error);
     } finally {
@@ -402,9 +347,6 @@ const BackofficeDashboard: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* User Management Section */}
-      
 
 
     </div>

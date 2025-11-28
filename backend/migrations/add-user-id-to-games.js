@@ -72,7 +72,7 @@ async function addUserIdToGames() {
     console.log('✅ Migration completed successfully!\n');
     console.log('Next steps:');
     console.log('1. Restart the backend server');
-    console.log('2. Test the weekly report page');
+    console.log('2. Test the dashboard page');
     console.log('3. You should now see bet amounts instead of 0\n');
 
     process.exit(0);

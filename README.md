@@ -9,7 +9,7 @@ A full-stack bingo game application with real-time gameplay, user authentication
 - 👥 User and admin dashboards
 - 🎯 Advanced pattern detection (One Line, Two Lines, Full House)
 - 🔊 Sound effects for number calls and winners
-- 📊 Game analytics and weekly reports
+- 📊 Game analytics
 - 🎴 Dynamic cartela (bingo card) management
 
 ## Tech Stack
