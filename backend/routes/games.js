@@ -568,12 +568,22 @@ router.put('/:id/finish-session', authenticateToken, [
     console.log(`✅ User ${req.user.id} authorized to finish game ${gameId}`);
     console.log(`📊 Game status: ${gameResult.status}`);
 
+    // If game is already finished, return success (idempotent operation)
+    if (gameResult.status === 'finished') {
+      console.log(`✅ Game ${gameId} is already finished`);
+      return res.json({ 
+        success: true,
+        message: 'Game already finished',
+        game: gameResult
+      });
+    }
+
     if (!['started', 'active', 'waiting'].includes(gameResult.status)) {
       console.log(`❌ Cannot finish game with status: ${gameResult.status}`);
       return res.status(400).json({ 
         error: 'Game is not active', 
         currentStatus: gameResult.status,
-        allowedStatuses: ['started', 'active', 'waiting']
+        allowedStatuses: ['started', 'active', 'waiting', 'finished']
       });
     }
 

@@ -754,59 +754,13 @@ const GamePageOptimized = (): JSX.Element => {
         const gameId = currentGameData.id;
         
         if (gameId) {
-          // Collect winner cartela IDs by checking all selected cartelas
-          const winnerCartelaIds: string[] = [];
-          
-          // Check each selected cartela for wins
-          const selectedCartelasArray = typeof currentGameData.selected_cartelas === 'string' 
-            ? JSON.parse(currentGameData.selected_cartelas)
-            : currentGameData.selected_cartelas;
-            
-          if (selectedCartelasArray && Array.isArray(selectedCartelasArray)) {
-            console.log(`🔍 Checking ${selectedCartelasArray.length} cartelas for winners...`);
-            for (const cartelaId of selectedCartelasArray) {
-              try {
-                console.log(`🎯 Checking cartela ${cartelaId} with pattern: ${selectedPattern}`);
-                const checkResponse = await fetch(`${API_BASE_URL}/winner-check`, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    cartelaId: cartelaId,
-                    gameId: gameId,
-                    calledNumbers: called,
-                    patterns: [selectedPattern]
-                  })
-                });
+          // No automatic winner checking - users must manually check cartelas
+          console.log('🏁 Finishing game without automatic winner checking');
 
-                if (checkResponse.ok) {
-                  const checkResult = await checkResponse.json();
-                  console.log(`📊 Check result for ${cartelaId}:`, checkResult);
-                  if (checkResult.win) {
-                    winnerCartelaIds.push(cartelaId);
-                    console.log(`🏆 Winner cartela found: ${cartelaId}`);
-                  } else {
-                    console.log(`❌ Cartela ${cartelaId} is not a winner`);
-                  }
-                } else {
-                  console.error(`❌ Winner check failed for ${cartelaId}: ${checkResponse.status}`);
-                }
-              } catch (error) {
-                console.warn(`⚠️ Error checking cartela ${cartelaId}:`, error);
-              }
-            }
-          } else {
-            console.warn('⚠️ No cartelas to check or invalid format:', selectedCartelasArray);
-          }
-
-          console.log(`🎯 Total winner cartelas: ${winnerCartelaIds.length}`, winnerCartelaIds);
-
-          // Finish the game session in backend with winner cartela IDs
+          // Finish the game session in backend without winner cartela IDs
           const finishData = {
             winMoney: playerWin || 0,
-            winnerCartelaIds: winnerCartelaIds,
+            winnerCartelaIds: [], // Empty - no automatic checking
             calledNumbers: called,
             selectedPattern: selectedPattern
           };

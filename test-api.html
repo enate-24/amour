@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test User Stats API</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e293b; color: #fff; }
+        button { padding: 10px 20px; margin: 10px; background: #3b82f6; color: white; border: none; cursor: pointer; }
+        button:hover { background: #2563eb; }
+        pre { background: #0f172a; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .section { margin: 20px 0; padding: 15px; background: #334155; border-radius: 5px; }
+        h2 { color: #60a5fa; }
+    </style>
+</head>
+<body>
+    <h1>🔍 User Stats API Tester</h1>
+    
+    <div class="section">
+        <h2>Authentication</h2>
+        <input type="text" id="token" placeholder="Paste your auth token here" style="width: 500px; padding: 8px;">
+        <button onclick="saveToken()">Save Token</button>
+    </div>
+
+    <div class="section">
+        <h2>Test Endpoints</h2>
+        <button onclick="testUserStats()">Test /admin/user-stats</button>
+        <button onclick="testWeeklyReport()">Test /admin/weekly-report</button>
+        <button onclick="testUsers()">Test /admin/users</button>
+    </div>
+
+    <div class="section">
+        <h2>Results:</h2>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://amour-bingo-backend.onrender.com/api';
+        
+        function saveToken() {
+            const token = document.getElementById('token').value;
+            localStorage.setItem('auth_token', token);
+            alert('Token saved!');
+        }
+
+        function getToken() {
+            return localStorage.getItem('auth_token');
+        }
+
+        async function testUserStats() {
+            const token = getToken();
+            if (!token) {
+                alert('Please enter and save your token first!');
+                return;
+            }
+
+            const results = document.getElementById('results');
+            results.innerHTML = '<p>Loading user stats...</p>';
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/user-stats`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                
+                // Find Alemu
+                const alemu = data.stats?.find(u => u.username.toLowerCase() === 'alemu');
+                
+                results.innerHTML = `
+                    <h3>Status: ${response.status}</h3>
+                    <h3>Total Users: ${data.stats?.length || 0}</h3>
+                    ${alemu ? `
+                        <h3 style="color: #10b981;">✅ Found Alemu:</h3>
+                        <pre>${JSON.stringify(alemu, null, 2)}</pre>
+                    ` : '<h3 style="color: #ef4444;">❌ Alemu not found</h3>'}
+                    <h3>All Data:</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                results.innerHTML = `<pre style="color: #ef4444;">Error: ${error.message}</pre>`;
+            }
+        }
+
+        async function testWeeklyReport() {
+            const token = getToken();
+            if (!token) {
+                alert('Please enter and save your token first!');
+                return;
+            }
+
+            const results = document.getElementById('results');
+            results.innerHTML = '<p>Loading weekly report...</p>';
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/weekly-report?period=week`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                
+                // Find Alemu
+                const alemu = data.users?.find(u => u.username.toLowerCase() === 'alemu');
+                
+                results.innerHTML = `
+                    <h3>Status: ${response.status}</h3>
+                    <h3>Total Users: ${data.users?.length || 0}</h3>
+                    ${alemu ? `
+                        <h3 style="color: #10b981;">✅ Found Alemu:</h3>
+                        <pre>${JSON.stringify(alemu, null, 2)}</pre>
+                    ` : '<h3 style="color: #ef4444;">❌ Alemu not found</h3>'}
+                    <h3>Summary:</h3>
+                    <pre>${JSON.stringify(data.summary, null, 2)}</pre>
+                `;
+            } catch (error) {
+                results.innerHTML = `<pre style="color: #ef4444;">Error: ${error.message}</pre>`;
+            }
+        }
+
+        async function testUsers() {
+            const token = getToken();
+            if (!token) {
+                alert('Please enter and save your token first!');
+                return;
+            }
+
+            const results = document.getElementById('results');
+            results.innerHTML = '<p>Loading users...</p>';
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/users`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                
+                // Find Alemu
+                const alemu = data.users?.find(u => u.username.toLowerCase() === 'alemu');
+                
+                results.innerHTML = `
+                    <h3>Status: ${response.status}</h3>
+                    <h3>Total Users: ${data.users?.length || 0}</h3>
+                    ${alemu ? `
+                        <h3 style="color: #10b981;">✅ Found Alemu:</h3>
+                        <pre>${JSON.stringify(alemu, null, 2)}</pre>
+                    ` : '<h3 style="color: #ef4444;">❌ Alemu not found</h3>'}
+                `;
+            } catch (error) {
+                results.innerHTML = `<pre style="color: #ef4444;">Error: ${error.message}</pre>`;
+            }
+        }
+
+        // Auto-load token if exists
+        window.onload = () => {
+            const token = getToken();
+            if (token) {
+                document.getElementById('token').value = token;
+            }
+        };
+    </script>
+</body>
+</html>
