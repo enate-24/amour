@@ -71,7 +71,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange, isOpen, on
               <User size={18} className="text-slate-400 sm:w-5 sm:h-5" />
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-sm sm:text-base truncate">{user?.email?.split('@')[0] || 'User'}</p>
-                <p className="text-xs sm:text-sm text-slate-400">Balance: 0.00 Birr</p>
+                <p className="text-xs sm:text-sm text-slate-400">User Account</p>
               </div>
             </div>
             <div className="mt-3 space-y-2">

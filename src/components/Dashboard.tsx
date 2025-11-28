@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, TrendingUp, PieChart, Banknote, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { DollarSign, TrendingUp, PieChart, Banknote } from 'lucide-react';
 import StatsChart from './StatsChart';
 import { useAuth } from '../hooks/useAuth';
 import { formatCurrency } from '../utils/formatters';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [showBalance, setShowBalance] = useState(false);
+
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,13 +18,7 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     fetchDashboardData();
-    // Refresh user data to get latest balance on mount
-    if (refreshUser) {
-      refreshUser().catch(err => {
-        console.warn('Initial balance refresh failed:', err);
-        // Don't throw error - just log it
-      });
-    }
+
   }, []);
 
   const fetchDashboardData = async () => {
@@ -91,19 +85,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleRefreshBalance = async () => {
-    if (!refreshUser) return;
-    
-    setRefreshing(true);
-    try {
-      await refreshUser();
-      console.log('Balance refreshed successfully');
-    } catch (error) {
-      console.error('Error refreshing balance:', error);
-    } finally {
-      setRefreshing(false);
-    }
-  };
+
 
   // Diagnostic function to check API connection and auth
   const runDiagnostics = async () => {
@@ -214,38 +196,16 @@ const Dashboard: React.FC = () => {
       {/* Header */}
       <div className="text-center mb-6 sm:mb-8">
         <h2 className="text-xl sm:text-2xl font-bold mb-2">{user?.username || 'User'}</h2>
-        {/* Only show balance for non-admin users */}
-        {(!user?.role || user.role !== 'admin') && (
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2">
-            <span className="text-base sm:text-lg">
-              Balance {showBalance ? formatCurrency(user?.balance || 0) : '****'}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowBalance(!showBalance)}
-                className="p-2 hover:bg-slate-700 rounded transition-colors"
-                title={showBalance ? 'Hide balance' : 'Show balance'}
-              >
-                {showBalance ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-              <button
-                onClick={handleRefreshBalance}
-                disabled={refreshing}
-                className={`p-2 hover:bg-slate-700 rounded transition-colors ${refreshing ? 'animate-spin' : ''}`}
-                title="Refresh balance"
-              >
-                <RefreshCw size={16} />
-              </button>
-              <button
-                onClick={runDiagnostics}
-                className="p-2 hover:bg-slate-700 rounded text-yellow-400 transition-colors"
-                title="Run diagnostics (check console)"
-              >
-                🔍
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Balance display removed */}
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={runDiagnostics}
+            className="p-2 hover:bg-slate-700 rounded text-yellow-400 transition-colors"
+            title="Run diagnostics (check console)"
+          >
+            🔍
+          </button>
+        </div>
       </div>
 
       {/* Stats Grid */}
