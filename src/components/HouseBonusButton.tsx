@@ -60,7 +60,7 @@ const HouseBonusButton: React.FC = () => {
     }
     
     if (!bonusData.requirementsMet) {
-      alert(`❌ Daily profit requirement not met. You need ${bonusData.profitNeeded.toFixed(1)} more Birr to unlock the house bonus.`);
+      alert(`❌ House profit requirement not met. You need ${bonusData.profitNeeded.toFixed(1)} more Birr to unlock the house bonus.`);
       return;
     }
     
@@ -149,7 +149,7 @@ const HouseBonusButton: React.FC = () => {
         onClick={useHouseBonus}
         disabled={claiming}
         className="bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-lg font-bold transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-sm sm:text-base flex items-center gap-2"
-        title={`Use ${bonusData.bonusAvailable} Birr house bonus (Daily profit: ${bonusData.dailyProfit.toFixed(1)} Birr)`}
+        title={`Use ${bonusData.bonusAvailable} Birr house bonus (House profit: ${bonusData.dailyProfit.toFixed(1)} Birr)`}
       >
         <Gift className="h-4 w-4 sm:h-5 sm:w-5" />
         {claiming ? (
@@ -166,7 +166,7 @@ const HouseBonusButton: React.FC = () => {
       <button
         disabled
         className="bg-gradient-to-r from-gray-500 to-gray-600 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-lg font-bold opacity-60 cursor-not-allowed text-sm sm:text-base flex items-center gap-2"
-        title={`Need ${bonusData.profitNeeded.toFixed(1)} more Birr daily profit to unlock ${bonusData.bonusAvailable} Birr house bonus`}
+        title={`Need ${bonusData.profitNeeded.toFixed(1)} more Birr house profit to unlock ${bonusData.bonusAvailable} Birr house bonus`}
       >
         <DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />
         <span className="hidden sm:inline">

@@ -20,20 +20,20 @@ router.get('/test', (req, res) => {
 
 // Daily bonus requirements configuration
 const DAILY_REQUIREMENTS = {
-  MIN_DAILY_PROFIT: 1000, // Minimum daily profit to unlock bonus
+  MIN_DAILY_PROFIT: 1000, // Minimum house profit to unlock bonus
   HOUSE_BONUS_AMOUNT: 200 // Fixed house bonus amount
 };
 
 // Helper function to calculate if bonus is available
-const calculateBonusEligibility = (dailyProfit) => {
-  const requirementsMet = dailyProfit >= DAILY_REQUIREMENTS.MIN_DAILY_PROFIT;
+const calculateBonusEligibility = (houseProfit) => {
+  const requirementsMet = houseProfit >= DAILY_REQUIREMENTS.MIN_DAILY_PROFIT;
   const bonusAmount = requirementsMet ? DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT : 0;
 
   return { 
     bonusAmount, 
     requirementsMet,
-    dailyProfit,
-    profitNeeded: Math.max(0, DAILY_REQUIREMENTS.MIN_DAILY_PROFIT - dailyProfit)
+    houseProfit,
+    profitNeeded: Math.max(0, DAILY_REQUIREMENTS.MIN_DAILY_PROFIT - houseProfit)
   };
 };
 
@@ -115,7 +115,7 @@ router.get('/daily', authenticateToken, async (req, res) => {
       });
     }
 
-    // Calculate current bonus eligibility
+    // Calculate current bonus eligibility based on house profit
     const effectiveProfit = dailyBonus.bonus_used ? dailyBonus.daily_profit : dailyProfit;
     const bonusStatus = calculateBonusEligibility(effectiveProfit);
     res.json({
@@ -161,10 +161,10 @@ router.post('/use', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'House bonus already used today' });
     }
 
-    // Check if daily profit meets requirement
+    // Check if house profit meets requirement (>= 1000)
     const bonusStatus = calculateBonusEligibility(dailyBonus.daily_profit);
     console.log('🔍 Checking bonus eligibility:', {
-      dailyProfit: dailyBonus.daily_profit,
+      houseProfit: dailyBonus.daily_profit,
       required: DAILY_REQUIREMENTS.MIN_DAILY_PROFIT,
       requirementsMet: bonusStatus.requirementsMet,
       profitNeeded: bonusStatus.profitNeeded
@@ -173,7 +173,7 @@ router.post('/use', authenticateToken, async (req, res) => {
     if (!bonusStatus.requirementsMet) {
       console.log('❌ Requirements not met, rejecting bonus use');
       return res.status(400).json({ 
-        error: 'Daily profit requirement not met',
+        error: 'House profit requirement not met',
         required: DAILY_REQUIREMENTS.MIN_DAILY_PROFIT,
         current: dailyBonus.daily_profit,
         needed: bonusStatus.profitNeeded
@@ -182,13 +182,13 @@ router.post('/use', authenticateToken, async (req, res) => {
     
     console.log('✅ Requirements met, proceeding with bonus use');
 
-    // Update bonus record - mark as used and deduct from daily profit
-    const newDailyProfit = dailyBonus.daily_profit - DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT;
+    // Update bonus record - mark as used and subtract 200 from current house profit
+    const newHouseProfit = dailyBonus.daily_profit - DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT;
     
     await dailyBonuses.update(userId, today, {
       bonusUsed: true,
       bonusClaimed: true,
-      dailyProfit: newDailyProfit
+      dailyProfit: newHouseProfit
     });
 
     // Add bonus to user balance
@@ -202,7 +202,7 @@ router.post('/use', authenticateToken, async (req, res) => {
       message: 'House bonus used successfully!',
       bonusAmount: DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT,
       newBalance: user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT,
-      newDailyProfit: newDailyProfit
+      newHouseProfit: newHouseProfit
     });
   } catch (error) {
     console.error('❌ Use bonus error:', error);

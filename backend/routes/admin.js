@@ -982,7 +982,9 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
     const stats = statsResults.map(row => {
       const weeklyProfit = Math.round(parseFloat(row.weekly_profit || 0));
       const dailyHouseProfit = Math.round(parseFloat(row.daily_house_profit || 0));
-      const houseBonus = 200; // Fixed house bonus for all users
+      
+      // Simple house bonus logic: 200 if house profit >= 1000, otherwise 0
+      const houseBonus = weeklyProfit >= 1000 ? 200 : 0;
 
       // Debug logging for Alemu
       if (row.username.toLowerCase() === 'alemu') {
