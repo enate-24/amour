@@ -17,25 +17,41 @@ const autoDownloadAudioCache = async () => {
       return;
     }
 
-    console.log('📥 Starting automatic audio cache download...');
+    console.log('📥 Starting automatic audio cache download for 75 files...');
     
-    // Download all number sounds (1-75) in background
-    const downloadPromises: Promise<void>[] = [];
+    // Download all number sounds (1-75) in batches to avoid overwhelming the browser
+    let completed = 0;
+    const batchSize = 5;
     
-    for (let i = 1; i <= 75; i++) {
-      const promise = downloadAndCacheAudio(`/sounds/${i}.mp3`, `${i}.mp3`)
-        .catch(error => {
-          console.warn(`Failed to cache ${i}.mp3:`, error);
-        });
-      downloadPromises.push(promise);
+    for (let start = 1; start <= 75; start += batchSize) {
+      const end = Math.min(start + batchSize - 1, 75);
+      const batchPromises: Promise<void>[] = [];
+      
+      for (let i = start; i <= end; i++) {
+        const promise = downloadAndCacheAudio(`/sounds/${i}.mp3`, `${i}.mp3`)
+          .then(() => {
+            completed++;
+            if (completed % 10 === 0 || completed === 75) {
+              console.log(`📥 Audio cache progress: ${completed}/75 files downloaded`);
+            }
+          })
+          .catch(error => {
+            console.warn(`Failed to cache ${i}.mp3:`, error);
+            completed++;
+          });
+        batchPromises.push(promise);
+      }
+      
+      // Wait for batch to complete before starting next batch
+      await Promise.all(batchPromises);
+      
+      // Small delay between batches
+      if (end < 75) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
-
-    // Download in background without blocking
-    Promise.all(downloadPromises).then(() => {
-      console.log('✅ Audio cache download complete');
-    }).catch(error => {
-      console.error('Audio cache download error:', error);
-    });
+    
+    console.log('✅ Audio cache download complete - all 75 files cached');
 
   } catch (error) {
     console.error('Error checking/downloading audio cache:', error);
