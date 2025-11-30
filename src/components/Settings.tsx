@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Settings as SettingsIcon, DollarSign, Percent } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import AudioCacheManager from './AudioCacheManager';
 
 const Settings: React.FC = () => {
   const navigate = useNavigate();
@@ -299,6 +300,11 @@ const Settings: React.FC = () => {
               />
               <p className="text-sm text-gray-500 mt-2">Percentage taken by the house (0-100%)</p>
             </div>
+          </div>
+
+          {/* Audio Cache Section */}
+          <div>
+            <AudioCacheManager />
           </div>
         </div>
 
