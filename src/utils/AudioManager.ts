@@ -13,9 +13,21 @@ export class AudioManager {
     this.preloadSounds();
   }
 
-  // Preload all number sounds (1-75) using IndexedDB cache
+  // Preload all number sounds (1-75) using IndexedDB cache OR direct URLs as fallback
   private async preloadSounds(): Promise<void> {
-    const batchSize = 10; // Can use larger batches with IndexedDB
+    // Check if cache has any files first
+    const cachedIds = await audioCacheDB.getAllAudioIds();
+    const useCacheOnly = cachedIds.length >= 10; // Only use cache if we have at least 10 files
+    
+    if (!useCacheOnly) {
+      console.log('⚠️ IndexedDB cache is empty or incomplete, using direct file loading');
+      // Don't try to preload from cache, just mark as complete
+      // Audio will be loaded on-demand from direct URLs
+      this.preloadComplete = true;
+      return;
+    }
+    
+    const batchSize = 10;
     
     for (let start = 1; start <= 75; start += batchSize) {
       const end = Math.min(start + batchSize - 1, 75);
@@ -38,7 +50,6 @@ export class AudioManager {
               
               await new Promise<void>((resolve) => {
                 const timeoutId = setTimeout(() => {
-                  console.warn(`⏱️ Timeout preloading ${i}.mp3 from cache`);
                   URL.revokeObjectURL(cachedUrl);
                   this.failedFiles.add(i);
                   resolve();
@@ -52,7 +63,6 @@ export class AudioManager {
                 
                 audio.addEventListener('error', () => {
                   clearTimeout(timeoutId);
-                  console.warn(`⚠️ Failed to preload ${i}.mp3 from cache`);
                   URL.revokeObjectURL(cachedUrl);
                   this.failedFiles.add(i);
                   resolve();
@@ -61,11 +71,9 @@ export class AudioManager {
                 audio.load();
               });
             } else {
-              console.warn(`⚠️ ${i}.mp3 not found in cache`);
               this.failedFiles.add(i);
             }
           } catch (error) {
-            console.warn(`⚠️ Error preloading ${i}.mp3:`, error);
             this.failedFiles.add(i);
           }
         })();
@@ -74,9 +82,7 @@ export class AudioManager {
       }
       
       await Promise.all(batchPromises);
-      console.log(`📦 Loaded batch ${start}-${end} from IndexedDB: ${this.audioPool.size} total files loaded`);
       
-      // Small delay between batches
       if (end < 75) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
@@ -84,18 +90,9 @@ export class AudioManager {
     
     this.preloadComplete = true;
     console.log(`✅ Preloading complete from IndexedDB: ${this.audioPool.size}/75 audio files ready`);
-    if (this.failedFiles.size > 0) {
-      console.warn(`⚠️ ${this.failedFiles.size} files not available in cache`);
-    }
   }
 
   async playSound(number: number): Promise<void> {
-    // Skip if we know this file failed multiple times
-    if (this.failedFiles.has(number)) {
-      console.warn(`⏭️ Skipping ${number}.mp3 - not available in cache`);
-      return;
-    }
-
     // Stop current audio cleanly to prevent noise
     if (this.currentAudio && this.isPlaying) {
       try {
@@ -109,12 +106,11 @@ export class AudioManager {
       }
     }
 
-    // Get preloaded audio or create new one from cache
+    // Get preloaded audio or create new one
     let audio = this.audioPool.get(number);
     
     if (!audio) {
-      // Fallback if not preloaded yet - load from IndexedDB cache on-demand
-      console.log(`⚠️ ${number}.mp3 not preloaded, loading from cache on-demand`);
+      // Try to load from IndexedDB cache first
       try {
         const cachedBlob = await audioCacheDB.getAudio(`${number}.mp3`);
         if (cachedBlob) {
@@ -123,15 +119,18 @@ export class AudioManager {
           audio.volume = 0.6;
           audio.preload = 'auto';
           audio.src = cachedUrl;
-        } else {
-          console.warn(`❌ ${number}.mp3 not found in IndexedDB cache`);
-          this.failedFiles.add(number);
-          return;
         }
       } catch (error) {
-        console.warn(`❌ Error loading ${number}.mp3 from cache:`, error);
-        this.failedFiles.add(number);
-        return;
+        // Ignore cache errors, will fall back to direct URL
+      }
+      
+      // If cache failed, fall back to direct URL
+      if (!audio) {
+        console.log(`📥 Loading ${number}.mp3 directly from server`);
+        audio = new Audio();
+        audio.volume = 0.6;
+        audio.preload = 'auto';
+        audio.src = `/sounds/${number}.mp3`;
       }
     } else {
       // Clone preloaded audio to avoid conflicts
