@@ -1,4 +1,6 @@
-// Optimized audio manager with preloading for instant playback
+import { audioCacheDB } from './audioCache';
+
+// Optimized audio manager with IndexedDB caching for instant playback
 export class AudioManager {
   private audioPool: Map<number, HTMLAudioElement> = new Map();
   private currentAudio: HTMLAudioElement | null = null;
@@ -7,88 +9,90 @@ export class AudioManager {
   private preloadComplete = false;
 
   constructor() {
-    console.log('🔊 AudioManager initialized - preloading sounds...');
+    console.log('🔊 AudioManager initialized with IndexedDB cache - preloading sounds...');
     this.preloadSounds();
   }
 
-  // Preload all number sounds (1-75) in batches to avoid browser limits
+  // Preload all number sounds (1-75) using IndexedDB cache
   private async preloadSounds(): Promise<void> {
-    const batchSize = 5; // Smaller batches to reduce browser load
-    const timeout = 5000; // Shorter timeout per file
+    const batchSize = 10; // Can use larger batches with IndexedDB
     
     for (let start = 1; start <= 75; start += batchSize) {
       const end = Math.min(start + batchSize - 1, 75);
       const batchPromises: Promise<void>[] = [];
       
       for (let i = start; i <= end; i++) {
-        const promise = new Promise<void>((resolve) => {
-          const audio = new Audio();
-          audio.preload = 'metadata'; // Load metadata only, not full audio
-          audio.volume = 0.7;
-          audio.src = `/sounds/${i}.mp3`;
-          
-          const timeoutId = setTimeout(() => {
-            console.warn(`⏱️ Timeout preloading ${i}.mp3 - will load on demand`);
-            this.failedFiles.add(i);
-            resolve();
-          }, timeout);
-          
-          // Use 'loadedmetadata' instead of 'canplaythrough' for faster loading
-          audio.addEventListener('loadedmetadata', () => {
-            clearTimeout(timeoutId);
-            this.audioPool.set(i, audio);
-            resolve();
-          }, { once: true });
-          
-          audio.addEventListener('error', (e) => {
-            clearTimeout(timeoutId);
-            console.warn(`⚠️ Failed to preload ${i}.mp3:`, e);
-            this.failedFiles.add(i);
-            resolve();
-          }, { once: true });
-          
-          // Add load event as fallback
-          audio.addEventListener('load', () => {
-            clearTimeout(timeoutId);
-            if (!this.audioPool.has(i)) {
-              this.audioPool.set(i, audio);
-            }
-            resolve();
-          }, { once: true });
-          
+        const promise = (async () => {
           try {
-            audio.load();
+            // Get audio blob from IndexedDB cache
+            const cachedBlob = await audioCacheDB.getAudio(`${i}.mp3`);
+            
+            if (cachedBlob) {
+              // Create object URL from cached blob
+              const cachedUrl = URL.createObjectURL(cachedBlob);
+              
+              const audio = new Audio();
+              audio.preload = 'metadata';
+              audio.volume = 0.7;
+              audio.src = cachedUrl;
+              
+              await new Promise<void>((resolve) => {
+                const timeoutId = setTimeout(() => {
+                  console.warn(`⏱️ Timeout preloading ${i}.mp3 from cache`);
+                  URL.revokeObjectURL(cachedUrl);
+                  this.failedFiles.add(i);
+                  resolve();
+                }, 3000);
+                
+                audio.addEventListener('loadedmetadata', () => {
+                  clearTimeout(timeoutId);
+                  this.audioPool.set(i, audio);
+                  resolve();
+                }, { once: true });
+                
+                audio.addEventListener('error', () => {
+                  clearTimeout(timeoutId);
+                  console.warn(`⚠️ Failed to preload ${i}.mp3 from cache`);
+                  URL.revokeObjectURL(cachedUrl);
+                  this.failedFiles.add(i);
+                  resolve();
+                }, { once: true });
+                
+                audio.load();
+              });
+            } else {
+              console.warn(`⚠️ ${i}.mp3 not found in cache`);
+              this.failedFiles.add(i);
+            }
           } catch (error) {
-            clearTimeout(timeoutId);
-            console.warn(`⚠️ Error loading ${i}.mp3:`, error);
+            console.warn(`⚠️ Error preloading ${i}.mp3:`, error);
             this.failedFiles.add(i);
-            resolve();
           }
-        });
+        })();
         
         batchPromises.push(promise);
       }
       
       await Promise.all(batchPromises);
-      console.log(`📦 Loaded batch ${start}-${end}: ${this.audioPool.size} total files loaded`);
+      console.log(`📦 Loaded batch ${start}-${end} from IndexedDB: ${this.audioPool.size} total files loaded`);
       
-      // Small delay between batches to prevent overwhelming the browser
+      // Small delay between batches
       if (end < 75) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
     }
     
     this.preloadComplete = true;
-    console.log(`✅ Preloading complete: ${this.audioPool.size}/75 audio files ready`);
+    console.log(`✅ Preloading complete from IndexedDB: ${this.audioPool.size}/75 audio files ready`);
     if (this.failedFiles.size > 0) {
-      console.warn(`⚠️ ${this.failedFiles.size} files failed to preload - will load on demand`);
+      console.warn(`⚠️ ${this.failedFiles.size} files not available in cache`);
     }
   }
 
   async playSound(number: number): Promise<void> {
     // Skip if we know this file failed multiple times
     if (this.failedFiles.has(number)) {
-      console.warn(`⏭️ Skipping ${number}.mp3 - known failed file`);
+      console.warn(`⏭️ Skipping ${number}.mp3 - not available in cache`);
       return;
     }
 
@@ -105,16 +109,30 @@ export class AudioManager {
       }
     }
 
-    // Get preloaded audio or create new one
+    // Get preloaded audio or create new one from cache
     let audio = this.audioPool.get(number);
     
     if (!audio) {
-      // Fallback if not preloaded yet - create fresh audio
-      console.log(`⚠️ ${number}.mp3 not preloaded, creating on-demand`);
-      audio = new Audio();
-      audio.volume = 0.6;
-      audio.preload = 'auto';
-      audio.src = `/sounds/${number}.mp3`;
+      // Fallback if not preloaded yet - load from IndexedDB cache on-demand
+      console.log(`⚠️ ${number}.mp3 not preloaded, loading from cache on-demand`);
+      try {
+        const cachedBlob = await audioCacheDB.getAudio(`${number}.mp3`);
+        if (cachedBlob) {
+          const cachedUrl = URL.createObjectURL(cachedBlob);
+          audio = new Audio();
+          audio.volume = 0.6;
+          audio.preload = 'auto';
+          audio.src = cachedUrl;
+        } else {
+          console.warn(`❌ ${number}.mp3 not found in IndexedDB cache`);
+          this.failedFiles.add(number);
+          return;
+        }
+      } catch (error) {
+        console.warn(`❌ Error loading ${number}.mp3 from cache:`, error);
+        this.failedFiles.add(number);
+        return;
+      }
     } else {
       // Clone preloaded audio to avoid conflicts
       const originalSrc = audio.src;
@@ -137,7 +155,7 @@ export class AudioManager {
     };
 
     audio.onended = () => {
-      console.log(`✅ Finished: ${number}.mp3`);
+      console.log(`✅ Finished playing: ${number}.mp3 (from IndexedDB cache)`);
       cleanup();
     };
 
@@ -157,7 +175,7 @@ export class AudioManager {
       });
       
       await Promise.race([playPromise, timeoutPromise]);
-      console.log(`▶️ Playing: ${number}.mp3`);
+      console.log(`▶️ Playing: ${number}.mp3 (from IndexedDB cache)`);
       
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
