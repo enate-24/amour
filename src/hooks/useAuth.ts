@@ -1,64 +1,8 @@
 import { useState, useEffect } from 'react';
 import { User } from '../types/auth';
-import { audioCacheDB, downloadAndCacheAudio } from '../utils/audioCache';
 
 // Use Vite proxy for API calls - always use relative URLs
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-
-// Helper function to automatically download and cache all audio files
-const autoDownloadAudioCache = async () => {
-  console.log('🔍 Checking audio cache status...');
-  try {
-    // Check if audio is already cached
-    const cachedIds = await audioCacheDB.getAllAudioIds();
-    console.log(`📊 Current cache status: ${cachedIds.length}/75 files`);
-    
-    // If we already have most files cached (at least 70 out of 75), skip download
-    if (cachedIds.length >= 70) {
-      console.log('✅ Audio cache already populated, skipping download');
-      return;
-    }
-
-    console.log('📥 Starting automatic audio cache download for 75 files...');
-    
-    // Download all number sounds (1-75) in batches to avoid overwhelming the browser
-    let completed = 0;
-    const batchSize = 5;
-    
-    for (let start = 1; start <= 75; start += batchSize) {
-      const end = Math.min(start + batchSize - 1, 75);
-      const batchPromises: Promise<void>[] = [];
-      
-      for (let i = start; i <= end; i++) {
-        const promise = downloadAndCacheAudio(`/sounds/${i}.mp3`, `${i}.mp3`)
-          .then(() => {
-            completed++;
-            if (completed % 10 === 0 || completed === 75) {
-              console.log(`📥 Audio cache progress: ${completed}/75 files downloaded`);
-            }
-          })
-          .catch(error => {
-            console.warn(`Failed to cache ${i}.mp3:`, error);
-            completed++;
-          });
-        batchPromises.push(promise);
-      }
-      
-      // Wait for batch to complete before starting next batch
-      await Promise.all(batchPromises);
-      
-      // Small delay between batches
-      if (end < 75) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
-    
-    console.log('✅ Audio cache download complete - all 75 files cached');
-
-  } catch (error) {
-    console.error('Error checking/downloading audio cache:', error);
-  }
-};
 
 // Helper function to clear game data from localStorage
 const clearGameData = () => {
@@ -297,9 +241,6 @@ export const useAuth = () => {
         // Ensure loading is false so App.tsx can redirect
         setLoading(false);
 
-        // Automatically download and cache audio files in background
-        autoDownloadAudioCache();
-
         // Return immediately - no need for artificial delay
         return { data, error: null };
       } else {
@@ -358,9 +299,6 @@ export const useAuth = () => {
         };
 
         setUser(mappedUser);
-        
-        // Automatically download and cache audio files in background
-        autoDownloadAudioCache();
         
         return { data, error: null };
       } else {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Menu, User } from 'lucide-react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
+import { audioCacheDB, downloadAndCacheAudio } from './utils/audioCache';
 import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
 import GamePage from './components/GamePageOptimized';
@@ -18,11 +19,70 @@ import NewAccountPage from './components/NewAccountPage';
 import NewGame from './components/NewGame';
 import GameAnalytics from './components/GameAnalytics';
 
+// Helper function to automatically download and cache all audio files
+const autoDownloadAudioCache = async () => {
+  console.log('🔍 Checking audio cache status...');
+  try {
+    // Check if audio is already cached
+    const cachedIds = await audioCacheDB.getAllAudioIds();
+    console.log(`📊 Current cache status: ${cachedIds.length}/75 files`);
+    
+    // If we already have most files cached (at least 70 out of 75), skip download
+    if (cachedIds.length >= 70) {
+      console.log('✅ Audio cache already populated, skipping download');
+      return;
+    }
+
+    console.log('📥 Starting automatic audio cache download for 75 files...');
+    
+    // Download all number sounds (1-75) in batches to avoid overwhelming the browser
+    let completed = 0;
+    const batchSize = 5;
+    
+    for (let start = 1; start <= 75; start += batchSize) {
+      const end = Math.min(start + batchSize - 1, 75);
+      const batchPromises: Promise<void>[] = [];
+      
+      for (let i = start; i <= end; i++) {
+        const promise = downloadAndCacheAudio(`/sounds/${i}.mp3`, `${i}.mp3`)
+          .then(() => {
+            completed++;
+            if (completed % 10 === 0 || completed === 75) {
+              console.log(`📥 Audio cache progress: ${completed}/75 files downloaded`);
+            }
+          })
+          .catch(error => {
+            console.warn(`Failed to cache ${i}.mp3:`, error);
+            completed++;
+          });
+        batchPromises.push(promise);
+      }
+      
+      // Wait for batch to complete before starting next batch
+      await Promise.all(batchPromises);
+      
+      // Small delay between batches
+      if (end < 75) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    
+    console.log('✅ Audio cache download complete - all 75 files cached');
+  } catch (error) {
+    console.error('Error checking/downloading audio cache:', error);
+  }
+};
+
 function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Automatically download and cache audio files when app loads
+  useEffect(() => {
+    autoDownloadAudioCache();
+  }, []); // Run once on app mount
 
   // Reset sidebar when user changes (login/logout/role change)
   useEffect(() => {
