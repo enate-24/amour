@@ -7,9 +7,11 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 // Helper function to automatically download and cache all audio files
 const autoDownloadAudioCache = async () => {
+  console.log('🔍 Checking audio cache status...');
   try {
     // Check if audio is already cached
     const cachedIds = await audioCacheDB.getAllAudioIds();
+    console.log(`📊 Current cache status: ${cachedIds.length}/75 files`);
     
     // If we already have most files cached (at least 70 out of 75), skip download
     if (cachedIds.length >= 70) {
