@@ -281,7 +281,8 @@ const GamePageOptimized = (): JSX.Element => {
             
             setCurrentGameData(result.game);
             setSelectedCartelas(result.game.cartelas_selected || 0);
-            setBetAmount(parseFloat(result.game.bet_money) || 5);
+            // Use betAmountPerCartela instead of bet_money for per-cartela amount
+            setBetAmount(parseFloat(result.game.betAmountPerCartela) || parseFloat(result.game.bet_money) / (result.game.cartelas_selected || 1) || 5);
             setPlayerWin(parseFloat(result.game.win_money) || 0);
             
             // Always clear called numbers on page refresh

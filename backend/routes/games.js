@@ -135,6 +135,15 @@ router.get('/active', authenticateToken, async (req, res) => {
     // Parse selected_cartelas from database using safe JSON parsing
     const selectedCartelas = safeJSONParseArray(activeGame.selected_cartelas, []);
 
+    // Calculate bet_amount_per_cartela if not present (for old games)
+    let betAmountPerCartela = parseFloat(activeGame.bet_amount_per_cartela);
+    if (!betAmountPerCartela && activeGame.cartelas_selected > 0) {
+      betAmountPerCartela = parseFloat(activeGame.bet_money) / activeGame.cartelas_selected;
+      console.log(`[GET /active] Calculated bet_amount_per_cartela for old game: ${betAmountPerCartela}`);
+    } else if (!betAmountPerCartela) {
+      betAmountPerCartela = 5.0; // Default fallback
+    }
+
     const game = {
       ...activeGame,
       gameNumber: activeGame.game_number,
@@ -142,6 +151,7 @@ router.get('/active', authenticateToken, async (req, res) => {
       selectedCartelas: selectedCartelas, // Include the selected cartela IDs
       cartelasSelected: activeGame.cartelas_selected,
       betMoney: parseFloat(activeGame.bet_money) || 0,
+      betAmountPerCartela: betAmountPerCartela, // NEW: Per-cartela bet amount
       winMoney: parseFloat(activeGame.win_money) || 0,
       totalNumbers: parseInt(activeGame.total_numbers) || 75,
       winnerPattern: activeGame.winner_pattern,
@@ -1473,16 +1483,27 @@ router.post('/session', authenticateToken, [
     const gameId = uuidv4();
     const createdAt = new Date().toISOString();
 
+      // Validate that betAmount * selectedCartelas.length equals totalBet
+      const calculatedTotalBet = betAmount * selectedCartelas.length;
+      if (Math.abs(calculatedTotalBet - totalBet) > 0.01) {
+        console.error(`❌ Bet amount validation failed: ${betAmount} × ${selectedCartelas.length} = ${calculatedTotalBet}, but totalBet = ${totalBet}`);
+        return res.status(400).json({ 
+          error: 'Invalid bet calculation',
+          details: `Expected total bet: ${calculatedTotalBet}, received: ${totalBet}`
+        });
+      }
+
       // Save to database using the games table (reusing existing structure)
       try {
         await db.run(`
-          INSERT INTO games (id, game_number, status, bet_money, win_money, cartelas_selected, selected_cartelas, called_numbers, number_sequence, total_numbers, winner_pattern, house_cut_percentage, user_id, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          INSERT INTO games (id, game_number, status, bet_money, bet_amount_per_cartela, win_money, cartelas_selected, selected_cartelas, called_numbers, number_sequence, total_numbers, winner_pattern, house_cut_percentage, user_id, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         `, [
           gameId,
           gameNumber,
           'started',
           totalBet,
+          betAmount, // NEW: Store bet amount per cartela
           playerWin,
           selectedCartelas.length, // This is the count
           JSON.stringify(selectedCartelas), // Store the actual selected cartela IDs
