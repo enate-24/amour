@@ -74,7 +74,7 @@ const AuthPage: React.FC = () => {
             <GamepadIcon size={40} className="text-slate-900" />
           </div>
           <h1 className="text-5xl font-bold bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 bg-clip-text text-transparent mb-2">
-            AMOUR BINGO
+            ABISINYA BINGO
           </h1>
           <p className="text-slate-300 text-lg">Welcome back!</p>
         </div>

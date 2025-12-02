@@ -658,6 +658,31 @@ const NewGame: React.FC = () => {
         </div>
       </div>
 
+      {/* Last 10 Selected Cartelas Display */}
+      {selectedCards.length > 0 && (
+        <div className="bg-[#002A35] border-b border-slate-700 py-3 px-2 sm:px-4 md:px-8 lg:px-16 xl:px-[87px]">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="text-white font-semibold text-xs sm:text-sm whitespace-nowrap">
+              Last Selected ({Math.min(selectedCards.length, 10)}):
+            </span>
+            <div className="flex gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide">
+              {selectedCards.slice(-10).map((cardId, index) => (
+                <div
+                  key={`${cardId}-${index}`}
+                  className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg border-2 border-blue-300 animate-bounce-in"
+                  style={{
+                    animationDelay: `${index * 0.1}s`,
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3), 0 0 15px rgba(59, 130, 246, 0.4)'
+                  }}
+                >
+                  <span className="text-white font-bold text-xs sm:text-sm">{cardId}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Scrollable Cartela Grid Section */}
       <div className="flex-1 overflow-y-auto px-2 sm:px-4 md:px-8 lg:px-16 xl:px-[87px] py-4">
         {/* Loading State */}
@@ -683,7 +708,7 @@ const NewGame: React.FC = () => {
 
         {/* Cartela Grid */}
         {!loading && !error && (
-          <div className="grid grid-cols-6 xs:grid-cols-8 sm:grid-cols-12 md:grid-cols-16 lg:grid-cols-20 xl:grid-cols-24 2xl:grid-cols-28 gap-0.5 sm:gap-1 pb-4">
+          <div className="flex flex-wrap gap-1 pb-4">
             {cartelas.sort((a, b) => {
               const aNum = parseInt(a.card_id) || 0;
               const bNum = parseInt(b.card_id) || 0;
@@ -692,14 +717,14 @@ const NewGame: React.FC = () => {
               <button
                 key={`${cartela.card_id}-${index}`}
                 onClick={() => handleCartelaSelect(cartela.card_id)}
-                className={`aspect-square p-0.5 rounded transition-all duration-200 active:scale-95 sm:hover:scale-105 ${
+                className={`w-[35px] h-[35px] p-0.5 rounded transition-all duration-200 active:scale-95 sm:hover:scale-105 flex-shrink-0 ${
                   selectedCards.includes(cartela.card_id)
                     ? 'bg-blue-600 text-white shadow-lg transform scale-105'
                     : 'bg-[#c5c9c8] active:bg-[#b0b5b4] sm:hover:bg-[#b0b5b4] text-black border border-gray-300'
                 }`}
               >
                 <div className="text-center h-full flex items-center justify-center">
-                  <div className="text-[8px] xs:text-[9px] sm:text-[10px] md:text-[11px] font-semibold leading-tight">{cartela.card_id}</div>
+                  <div className="text-[12px] font-semibold leading-tight">{cartela.card_id}</div>
                 </div>
               </button>
             ))}
@@ -707,10 +732,10 @@ const NewGame: React.FC = () => {
         )}
       </div>
 
-      {/* Sticky ID Modal */}
+      {/* Centered ID Modal */}
       {isIdModalOpen && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-[95%] max-w-md sm:w-full sm:mx-4 md:top-8">
-          <div className="bg-slate-800 rounded-lg border-2 border-blue-400 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-slate-800 rounded-lg border-2 border-blue-400 shadow-2xl w-full max-w-md">
             <div className="p-3 sm:p-4">
               <div className="flex items-center justify-between mb-3 sm:mb-4">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -747,15 +772,7 @@ const NewGame: React.FC = () => {
                   autoFocus
                 />
 
-                {registrationStatus.message && (
-                  <div className={`p-3 rounded text-sm ${
-                    registrationStatus.type === 'success'
-                      ? 'bg-green-600 text-green-100'
-                      : 'bg-red-600 text-red-100'
-                  }`}>
-                    {registrationStatus.message}
-                  </div>
-                )}
+
 
                 <div className="flex flex-col sm:flex-row gap-2">
                   <button
@@ -765,25 +782,7 @@ const NewGame: React.FC = () => {
                   >
                     {isRegistering ? 'Registering...' : 'Register'}
                   </button>
-                  <div className="flex gap-2">
-                    {registeredCount > 0 && (
-                      <button
-                        onClick={() => {
-                          setIsIdModalOpen(false);
-                          setRegisteredCount(0);
-                        }}
-                        className="px-3 py-2 bg-green-600 hover:bg-green-700 rounded font-medium transition-colors text-sm sm:text-base flex-1 sm:flex-none"
-                      >
-                        <span className="hidden sm:inline">Finish </span>({registeredCount})
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setIsIdModalOpen(false)}
-                      className="px-3 py-2 bg-slate-600 hover:bg-slate-700 rounded font-medium transition-colors text-sm sm:text-base"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+                  
                 </div>
               </div>
             </div>
