@@ -236,7 +236,7 @@ router.post('/', [
     res.status(500).json({ error: 'Failed to create cartela' });
   }
 });
-// Get all cartelas from database (public endpoint)
+// Get all cartelas from database (public endpoint) - OPTIMIZED
 router.get('/all-cartelas', async (req, res) => {
   try {
     // Fetch all cartelas from database
@@ -245,23 +245,10 @@ router.get('/all-cartelas', async (req, res) => {
 
     console.log('Fetched cartelas from database, total:', activeCartelas.length);
 
-    // Get all active games to exclude cartelas that are selected in active games
-    const { games: gamesDb } = require('../data/database.js');
-    const activeGames = await gamesDb.findByStatus('started');
-    const activeGamesWithSessions = await gamesDb.findByStatus('active');
-
-    // Combine active games
-    const allActiveGames = [...activeGames, ...activeGamesWithSessions];
-
-    // For /all-cartelas endpoint, we don't filter out selected cartelas
-    // This allows all cartelas to be visible in CardList
-    // The frontend will handle showing which ones are available vs selected
-    const availableCartelas = activeCartelas;
-
-    console.log(`Filtered cartelas: ${activeCartelas.length} total, ${availableCartelas.length} available`);
-
     // Transform the data to match the expected format with parsed numbers
-    const transformedCartelas = await Promise.all(availableCartelas.map(async (cartela, index) => {
+    // OPTIMIZATION: Skip expensive winner checking for initial load
+    // Winner checking should be done on-demand during gameplay, not on cartela list load
+    const transformedCartelas = activeCartelas.map((cartela) => {
       let numbers;
       try {
         // Parse the JSON string from database
@@ -290,44 +277,8 @@ router.get('/all-cartelas', async (req, res) => {
         numbers = { B: [], I: [], N: [], G: [], O: [] };
       }
 
-      // Dynamic winner checking if cartela has an associated game
-      let dynamicWinnerStatus = false;
-      let potentialWinningPatterns = [];
-
-      if (cartela.game_id) {
-        try {
-          const game = await games.findById(cartela.game_id);
-          if (game && (game.status === 'started' || game.status === 'active')) {
-            let gameCalledNumbers = [];
-            try {
-              if (Array.isArray(game.called_numbers)) {
-                gameCalledNumbers = game.called_numbers;
-              } else if (typeof game.called_numbers === 'string') {
-                const parsed = JSON.parse(game.called_numbers || '[]');
-                gameCalledNumbers = Array.isArray(parsed) ? parsed : [];
-              }
-            } catch (parseError) {
-              console.warn(`Error parsing called numbers for game ${game.id}:`, parseError);
-            }
-
-            if (gameCalledNumbers.length > 0) {
-              const { checkWinningPatterns, validateCartela } = require('../utils/patternDetection');
-              const formattedCartela = {
-                card_id: cartela.card_id,
-                numbers: numbers
-              };
-
-              if (validateCartela(formattedCartela)) {
-                potentialWinningPatterns = checkWinningPatterns(gameCalledNumbers, formattedCartela, ["One Line", "Two Lines", "Full House"]);
-                dynamicWinnerStatus = potentialWinningPatterns.length > 0;
-              }
-            }
-          }
-        } catch (gameCheckError) {
-          console.warn(`Error checking winner status for cartela ${cartela.card_id}:`, gameCheckError);
-        }
-      }
-
+      // Return minimal cartela data for list view
+      // Winner checking is expensive and should only be done during active gameplay
       return {
         id: cartela.id,
         card_id: cartela.card_id,
@@ -338,14 +289,14 @@ router.get('/all-cartelas', async (req, res) => {
         is_active: cartela.is_active,
         purchased_at: cartela.purchased_at,
         isWinner: cartela.is_winner || false, // Static winner status from database
-        dynamicWinnerStatus: dynamicWinnerStatus, // Dynamic winner status based on current called numbers
-        win: dynamicWinnerStatus, // Boolean: true if currently winning
-        cardType: dynamicWinnerStatus ? 'win' : 'stillnotwin', // String: 'win' or 'stillnotwin'
-        soundType: dynamicWinnerStatus ? 'winner' : 'notwinner', // String: 'winner' or 'notwinner'
-        potentialWinningPatterns: potentialWinningPatterns, // Patterns that would win with current numbers
+        dynamicWinnerStatus: false, // Skip expensive checking on list load
+        win: false,
+        cardType: 'stillnotwin',
+        soundType: 'notwinner',
+        potentialWinningPatterns: [],
         createdAt: cartela.purchased_at
       };
-    }));
+    });
 
     console.log(`Successfully transformed ${transformedCartelas.length} available cartelas from database`);
 

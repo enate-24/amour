@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useCartela } from '../hooks/useCartela';
 import { Cartela } from '../lib/api';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 const CardList: React.FC = () => {
   const { cartelas, loading, error, refreshCartelas } = useCartela();
@@ -30,12 +31,29 @@ const CardList: React.FC = () => {
     };
 
     fetchSelectedCartelas();
-
-    // Refresh every 30 seconds to keep status updated
-    const interval = setInterval(fetchSelectedCartelas, 30000);
-
-    return () => clearInterval(interval);
+    // No polling needed - WebSocket will push updates
   }, []);
+
+  // WebSocket for real-time cartela selection updates
+  useWebSocket({
+    onCartelaSelected: (data) => {
+      console.log('🔔 WebSocket: Cartela selected:', data.cartelaId);
+      // Refresh the selected cartelas list
+      const fetchSelectedCartelas = async () => {
+        try {
+          const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+          const response = await fetch(`${API_BASE_URL}/cartelas/status/active-games`);
+          if (response.ok) {
+            const data = await response.json();
+            setSelectedCartelaIds(new Set(data.selectedCartelaIds || []));
+          }
+        } catch (error) {
+          console.error('Error fetching selected cartelas:', error);
+        }
+      };
+      fetchSelectedCartelas();
+    }
+  });
 
   const handleCartelaClick = (cartela: Cartela) => {
     // Use the cartela data directly from the database API

@@ -1,9 +1,13 @@
+import { cachedFetch, invalidateCache } from '../utils/apiCache';
+import { offlineAwareFetch, offlineQueue } from '../utils/offlineQueue';
+import { networkStatusManager } from '../utils/networkStatus';
+
 // API configuration - Use Vite proxy for all API calls
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
-// Enhanced fetch wrapper with auth token
+// Enhanced fetch wrapper with auth token, caching, and offline support
 // NOTE: Does NOT automatically logout on 401 - let components handle auth errors
-const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+const fetchWithAuth = async (url: string, options: RequestInit = {}, cacheTTL?: number) => {
   const token = localStorage.getItem('auth_token');
   
   const headers = {
@@ -12,13 +16,58 @@ const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     ...options.headers,
   };
 
-  const response = await fetch(url, {
+  const fetchOptions = {
     ...options,
     headers,
-  });
+  };
 
-  // Log 401 errors but don't automatically logout
-  // Let the calling component decide how to handle it
+  const method = options.method?.toUpperCase() || 'GET';
+
+  // Use cached fetch for GET requests with TTL
+  if (method === 'GET' && cacheTTL !== undefined) {
+    try {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => await cachedFetch(url, fetchOptions, cacheTTL)
+      } as Response;
+    } catch (error) {
+      // If cached fetch fails and we're offline, throw offline error
+      if (networkStatusManager.isOffline) {
+        throw new Error('Network offline - no cached data available');
+      }
+      // Otherwise fall through to regular fetch
+      console.warn('Cached fetch failed, falling back to regular fetch:', error);
+    }
+  }
+
+  // Use offline-aware fetch for mutations
+  if (method !== 'GET') {
+    try {
+      const response = await offlineAwareFetch(url, fetchOptions);
+      
+      // Log 401 errors but don't automatically logout
+      if (response.status === 401) {
+        console.warn('⚠️ 401 Unauthorized - Token may be expired. Component should handle this.');
+      }
+
+      // Invalidate cache on successful mutations
+      if (response.ok) {
+        const urlPattern = url.split('?')[0];
+        invalidateCache(new RegExp(urlPattern.replace(/\/[^/]+$/, '')));
+      }
+
+      return response;
+    } catch (error) {
+      // Request was queued or failed
+      console.warn('Request failed or queued:', error);
+      throw error;
+    }
+  }
+
+  // Regular fetch for GET requests without cache
+  const response = await fetch(url, fetchOptions);
+
   if (response.status === 401) {
     console.warn('⚠️ 401 Unauthorized - Token may be expired. Component should handle this.');
   }
@@ -48,14 +97,14 @@ export interface ApiResponse<T> {
   error: Error | null;
 }
 
-// Export the fetch wrapper for use in other components
-export { fetchWithAuth, API_BASE_URL };
+// Export the fetch wrapper, cache utilities, and offline support for use in other components
+export { fetchWithAuth, API_BASE_URL, invalidateCache, offlineQueue, networkStatusManager };
 
 export const cartelaAPI = {
-  // Get cartelas for a specific user
+  // Get cartelas for a specific user (cached for 5 seconds)
   async getUserCartelas(userId: string): Promise<ApiResponse<Cartela[]>> {
     try {
-      const response = await fetchWithAuth(`${API_BASE_URL}/cartelas/user/${userId}`);
+      const response = await fetchWithAuth(`${API_BASE_URL}/cartelas/user/${userId}`, {}, 5000);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -71,10 +120,10 @@ export const cartelaAPI = {
     }
   },
 
-  // Get all cartelas (admin function)
+  // Get all cartelas (admin function, cached for 5 seconds)
   async getAllCartelas(): Promise<ApiResponse<Cartela[]>> {
     try {
-      const response = await fetchWithAuth(`${API_BASE_URL}/cartelas/all`);
+      const response = await fetchWithAuth(`${API_BASE_URL}/cartelas/all`, {}, 5000);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -90,21 +139,16 @@ export const cartelaAPI = {
     }
   },
 
-  // Get all cartelas (public endpoint - no authentication required)
+  // Get all cartelas (public endpoint - no authentication required, cached for 5 seconds)
   async getAllCartelasPublic(): Promise<ApiResponse<Cartela[]>> {
     try {
-      const response = await fetch(`${API_BASE_URL}/cartelas`, {
+      const response = await cachedFetch(`${API_BASE_URL}/cartelas`, {
         headers: {
           'Content-Type': 'application/json'
         }
-      });
+      }, 5000);
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      return { data: result.cartelas || [], error: null };
+      return { data: response.cartelas || [], error: null };
     } catch (error) {
       return {
         data: null,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, TrendingUp, Gift } from 'lucide-react';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -99,11 +100,17 @@ const HouseBonus: React.FC = () => {
     }
   };
 
+  // WebSocket for real-time bonus updates
+  useWebSocket({
+    onBonusUpdate: (data) => {
+      console.log('🔔 WebSocket: Bonus update received:', data);
+      fetchBonusData(); // Refresh bonus data when update received
+    }
+  });
+
   useEffect(() => {
     fetchBonusData();
-    // Refresh every 30 seconds to update profit
-    const interval = setInterval(fetchBonusData, 30000);
-    return () => clearInterval(interval);
+    // No polling needed - WebSocket will push updates
   }, []);
 
   if (loading) {

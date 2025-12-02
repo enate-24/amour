@@ -5,6 +5,7 @@ const { users, adminLogs } = require('../data/database.js');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const db = require('../db');
 const { safeJSONParseArray, safeJSONStringify } = require('../utils/safeJSON');
+const { emitNumberCalled, emitGameStatusChange } = require('../websocket');
 
 const router = express.Router();
 
@@ -510,6 +511,13 @@ router.put('/:id/call-number', authenticateToken, [
       await client.query('COMMIT');
 
       console.log(`✅ Number called successfully for game ${gameId}. Called number: ${numberToCall}`);
+
+      // Emit WebSocket event to all clients in this game
+      emitNumberCalled(gameId, {
+        calledNumber: numberToCall,
+        totalCalled: updatedCalledNumbers.length,
+        remainingNumbers: numberSequence.filter(n => !calledSet.has(n)).length
+      });
 
       res.json({
         message: 'Number called successfully',
@@ -1831,6 +1839,59 @@ router.post('/check-winners', authenticateToken, [
       error: 'Failed to check winners',
       message: error.message
     });
+  }
+});
+
+// Get number sequence for a game (for offline caching)
+router.get('/:id/number-sequence', [
+  param('id').isUUID().withMessage('Invalid game ID')
+], authenticateToken, async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const gameId = req.params.id;
+
+    // Get game from database
+    const gameQuery = 'SELECT id, number_sequence, status, user_id FROM games WHERE id = $1';
+    const game = await db.get(gameQuery, [gameId]);
+
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    // Verify user owns this game (unless admin)
+    if (!req.user.isAdmin && game.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Parse number sequence
+    let numberSequence = [];
+    try {
+      if (Array.isArray(game.number_sequence)) {
+        numberSequence = game.number_sequence;
+      } else if (typeof game.number_sequence === 'string') {
+        const parsed = JSON.parse(game.number_sequence || '[]');
+        numberSequence = Array.isArray(parsed) ? parsed : [];
+      }
+    } catch (e) {
+      console.error('Error parsing number_sequence for game', game.id, e);
+      numberSequence = [];
+    }
+
+    console.log(`📥 Fetched number sequence for game ${gameId}: ${numberSequence.length} numbers`);
+
+    res.json({
+      gameId: game.id,
+      numberSequence,
+      sequenceLength: numberSequence.length,
+      status: game.status
+    });
+  } catch (error) {
+    console.error('Error fetching number sequence:', error);
+    res.status(500).json({ error: 'Failed to fetch number sequence' });
   }
 });
 

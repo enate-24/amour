@@ -1,13 +1,25 @@
 // IndexedDB utility for caching audio files
 
 const DB_NAME = 'BingoAudioCache';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented for schema changes
 const STORE_NAME = 'audioFiles';
+const CACHE_VERSION = '1.0.0'; // Version for cache invalidation
 
 interface AudioCacheItem {
   id: string;
   blob: Blob;
   timestamp: number;
+  version: string;
+  size: number;
+}
+
+interface CacheStatus {
+  totalFiles: number;
+  cachedFiles: number;
+  missingFiles: string[];
+  cacheSize: number;
+  isComplete: boolean;
+  lastUpdated: number;
 }
 
 class AudioCacheDB {
@@ -35,38 +47,70 @@ class AudioCacheDB {
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           const objectStore = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
           objectStore.createIndex('timestamp', 'timestamp', { unique: false });
+          objectStore.createIndex('version', 'version', { unique: false });
           console.log('✅ IndexedDB object store created');
+        } else {
+          // Handle migration for existing stores
+          const transaction = (event.target as IDBOpenDBRequest).transaction!;
+          const objectStore = transaction.objectStore(STORE_NAME);
+          
+          // Add new indexes if they don't exist
+          if (!objectStore.indexNames.contains('version')) {
+            objectStore.createIndex('version', 'version', { unique: false });
+          }
         }
       };
     });
   }
 
-  async saveAudio(id: string, blob: Blob): Promise<void> {
+  async saveAudio(id: string, blob: Blob, version: string = CACHE_VERSION): Promise<void> {
     if (!this.db) {
       await this.init();
     }
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
+      try {
+        const transaction = this.db!.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
 
-      const item: AudioCacheItem = {
-        id,
-        blob,
-        timestamp: Date.now()
-      };
+        const item: AudioCacheItem = {
+          id,
+          blob,
+          timestamp: Date.now(),
+          version,
+          size: blob.size
+        };
 
-      const request = store.put(item);
+        const request = store.put(item);
 
-      request.onsuccess = () => {
-        console.log(`✅ Audio cached: ${id}`);
-        resolve();
-      };
+        request.onsuccess = () => {
+          console.log(`✅ Audio cached: ${id} (${blob.size} bytes, v${version})`);
+          resolve();
+        };
 
-      request.onerror = () => {
-        console.error(`❌ Failed to cache audio: ${id}`, request.error);
-        reject(request.error);
-      };
+        request.onerror = () => {
+          // Check for quota exceeded error
+          if (request.error?.name === 'QuotaExceededError') {
+            console.error(`❌ Storage quota exceeded while caching: ${id}`);
+            reject(new Error('Storage quota exceeded. Please clear some cache to continue.'));
+          } else {
+            console.error(`❌ Failed to cache audio: ${id}`, request.error);
+            reject(request.error);
+          }
+        };
+
+        transaction.onerror = () => {
+          if (transaction.error?.name === 'QuotaExceededError') {
+            console.error(`❌ Storage quota exceeded while caching: ${id}`);
+            reject(new Error('Storage quota exceeded. Please clear some cache to continue.'));
+          } else {
+            reject(transaction.error);
+          }
+        };
+      } catch (error) {
+        console.error(`❌ Error in saveAudio for ${id}:`, error);
+        reject(error);
+      }
     });
   }
 
@@ -206,6 +250,130 @@ class AudioCacheDB {
       };
     });
   }
+
+  async validateAudio(id: string): Promise<boolean> {
+    if (!this.db) {
+      await this.init();
+    }
+
+    try {
+      const transaction = this.db!.transaction([STORE_NAME], 'readonly');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get(id);
+
+      return new Promise((resolve, reject) => {
+        request.onsuccess = () => {
+          const result = request.result as AudioCacheItem | undefined;
+          
+          if (!result) {
+            resolve(false);
+            return;
+          }
+
+          // Validate blob integrity
+          const isValid = 
+            result.blob instanceof Blob &&
+            result.blob.size > 0 &&
+            result.version !== undefined &&
+            result.version.trim().length > 0 &&
+            result.timestamp !== undefined;
+
+          if (!isValid) {
+            console.warn(`⚠️ Invalid cache entry detected: ${id}`);
+          }
+
+          resolve(isValid);
+        };
+
+        request.onerror = () => {
+          console.error(`❌ Failed to validate audio: ${id}`, request.error);
+          reject(request.error);
+        };
+      });
+    } catch (error) {
+      console.error(`❌ Error validating audio ${id}:`, error);
+      return false;
+    }
+  }
+
+  async getCacheStatus(): Promise<CacheStatus> {
+    if (!this.db) {
+      await this.init();
+    }
+
+    try {
+      const allIds = await this.getAllAudioIds();
+      const cacheSize = await this.getCacheSize();
+      
+      // Expected audio files: 75 numbers (1-75) + 3 game sounds
+      const expectedFiles = [
+        ...Array.from({ length: 75 }, (_, i) => `${i + 1}.mp3`),
+        'start.wav',
+        'winner.mp3',
+        'notwinner.wav'
+      ];
+
+      const missingFiles = expectedFiles.filter(file => !allIds.includes(file));
+      
+      // Get the most recent timestamp
+      const transaction = this.db!.transaction([STORE_NAME], 'readonly');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.getAll();
+
+      return new Promise((resolve, reject) => {
+        request.onsuccess = () => {
+          const items = request.result as AudioCacheItem[];
+          const lastUpdated = items.length > 0 
+            ? Math.max(...items.map(item => item.timestamp))
+            : 0;
+
+          resolve({
+            totalFiles: expectedFiles.length,
+            cachedFiles: allIds.length,
+            missingFiles,
+            cacheSize,
+            isComplete: missingFiles.length === 0,
+            lastUpdated
+          });
+        };
+
+        request.onerror = () => {
+          console.error('❌ Failed to get cache status', request.error);
+          reject(request.error);
+        };
+      });
+    } catch (error) {
+      console.error('❌ Error getting cache status:', error);
+      throw error;
+    }
+  }
+
+  async getInvalidEntries(): Promise<string[]> {
+    if (!this.db) {
+      await this.init();
+    }
+
+    try {
+      const allIds = await this.getAllAudioIds();
+      const invalidIds: string[] = [];
+
+      for (const id of allIds) {
+        const isValid = await this.validateAudio(id);
+        if (!isValid) {
+          invalidIds.push(id);
+        }
+      }
+
+      if (invalidIds.length > 0) {
+        console.warn(`⚠️ Found ${invalidIds.length} invalid cache entries:`, invalidIds);
+      }
+
+      return invalidIds;
+    } catch (error) {
+      console.error('❌ Error getting invalid entries:', error);
+      throw error;
+    }
+  }
 }
 
 // Create singleton instance
@@ -214,10 +382,16 @@ const audioCacheDB = new AudioCacheDB();
 // Helper function to download and cache audio
 export async function downloadAndCacheAudio(url: string, id: string): Promise<Blob> {
   try {
-    // Check if already cached
+    // Check if already cached and valid
     const cachedBlob = await audioCacheDB.getAudio(id);
     if (cachedBlob) {
-      return cachedBlob;
+      const isValid = await audioCacheDB.validateAudio(id);
+      if (isValid) {
+        return cachedBlob;
+      } else {
+        console.warn(`⚠️ Invalid cached audio detected for ${id}, re-downloading...`);
+        await audioCacheDB.deleteAudio(id);
+      }
     }
 
     // Download audio
@@ -229,8 +403,13 @@ export async function downloadAndCacheAudio(url: string, id: string): Promise<Bl
 
     const blob = await response.blob();
     
-    // Cache it
-    await audioCacheDB.saveAudio(id, blob);
+    // Validate blob before caching
+    if (blob.size === 0) {
+      throw new Error(`Downloaded audio file is empty: ${id}`);
+    }
+    
+    // Cache it with version
+    await audioCacheDB.saveAudio(id, blob, CACHE_VERSION);
     
     return blob;
   } catch (error) {
@@ -242,7 +421,9 @@ export async function downloadAndCacheAudio(url: string, id: string): Promise<Bl
 // Helper function to get audio URL from cache or download
 export async function getAudioUrl(url: string, id: string): Promise<string> {
   try {
-    const blob = await downloadAndCacheAudio(url, id);
+    // Try CDN first if available
+    const cdnUrl = getCDNAudioUrl(url);
+    const blob = await downloadAndCacheAudio(cdnUrl, id);
     return URL.createObjectURL(blob);
   } catch (error) {
     console.error(`❌ Error getting audio URL for ${id}:`, error);
@@ -251,18 +432,64 @@ export async function getAudioUrl(url: string, id: string): Promise<string> {
   }
 }
 
-// Helper function to preload multiple audio files
-export async function preloadAudioFiles(files: { url: string; id: string }[]): Promise<void> {
-  console.log(`📥 Preloading ${files.length} audio files...`);
+// Get CDN URL for audio file with fallback
+function getCDNAudioUrl(localUrl: string): string {
+  // Extract filename from local URL
+  const filename = localUrl.split('/').pop() || '';
   
-  const promises = files.map(file => 
-    downloadAndCacheAudio(file.url, file.id).catch(error => {
-      console.error(`Failed to preload ${file.id}:`, error);
-    })
-  );
-
-  await Promise.all(promises);
-  console.log('✅ Audio preloading complete');
+  // Check if CDN is enabled via environment variable
+  const cdnEnabled = import.meta.env.VITE_CDN_ENABLED === 'true';
+  const cdnBaseUrl = import.meta.env.VITE_CDN_BASE_URL || '';
+  
+  if (cdnEnabled && cdnBaseUrl) {
+    return `${cdnBaseUrl}/sounds/${filename}`;
+  }
+  
+  // Fallback to local URL
+  return localUrl;
 }
 
-export { audioCacheDB };
+// Helper function to preload multiple audio files with concurrent download limiting
+export async function preloadAudioFiles(
+  files: { url: string; id: string }[], 
+  maxConcurrent: number = 6
+): Promise<void> {
+  console.log(`📥 Preloading ${files.length} audio files (max ${maxConcurrent} concurrent)...`);
+  
+  let completed = 0;
+  let failed = 0;
+  const queue = [...files];
+  const inProgress = new Set<Promise<void>>();
+
+  while (queue.length > 0 || inProgress.size > 0) {
+    // Fill up to maxConcurrent downloads
+    while (inProgress.size < maxConcurrent && queue.length > 0) {
+      const file = queue.shift()!;
+      
+      const promise = downloadAndCacheAudio(file.url, file.id)
+        .then(() => {
+          completed++;
+          console.log(`✅ Cached ${file.id} (${completed}/${files.length})`);
+        })
+        .catch(error => {
+          failed++;
+          console.error(`❌ Failed to preload ${file.id}:`, error);
+        })
+        .finally(() => {
+          inProgress.delete(promise);
+        });
+      
+      inProgress.add(promise);
+    }
+
+    // Wait for at least one download to complete
+    if (inProgress.size > 0) {
+      await Promise.race(inProgress);
+    }
+  }
+
+  console.log(`✅ Audio preloading complete: ${completed} cached, ${failed} failed`);
+}
+
+export { audioCacheDB, CACHE_VERSION };
+export type { CacheStatus, AudioCacheItem };

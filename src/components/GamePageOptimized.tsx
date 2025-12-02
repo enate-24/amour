@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { logGameState } from "../utils/gameDebug";
-import { AudioManager } from "../utils/AudioManager";
+import { UnifiedAudioManager } from "../utils/UnifiedAudioManager";
+import { useWebSocket } from "../hooks/useWebSocket";
+import { createPoller, type OptimizedPoller } from "../utils/optimizedPolling";
+import { offlineGameState } from "../utils/offlineGameState";
+import { useNetworkStatus } from "../utils/networkStatus";
 
 // Memoize static data outside component to prevent recreation
 const BINGO_NUMBERS = Array.from({ length: 75 }, (_, i) => i + 1);
@@ -102,139 +106,10 @@ const NumberButton = memo(({
   );
 });
 
-// OLD - TO BE DELETED
-/* // Improved audio manager with queue system
-class AudioManager {
-  private currentAudio: HTMLAudioElement | null = null;
-  private failedFiles = new Set<number>();
-  private isPlaying = false;
-  private queue: number[] = [];
-  private isProcessingQueue = false;
-
-  constructor() {
-    console.log('🔊 AudioManager initialized with queue system');
-  }
-
-  playSound(number: number): void {
-    // Skip if we know this file failed before
-    if (this.failedFiles.has(number)) {
-      console.warn(`⏭️ Skipping ${number}.wav - known failed file`);
-      return;
-    }
-
-    // Add to queue
-    this.queue.push(number);
-    console.log(`📝 Added ${number} to queue. Queue length: ${this.queue.length}`);
-    
-    // Process queue if not already processing
-    if (!this.isProcessingQueue) {
-      this.processQueue();
-    }
-  }
-
-  private async processQueue(): Promise<void> {
-    if (this.isProcessingQueue || this.queue.length === 0) {
-      return;
-    }
-
-    this.isProcessingQueue = true;
-
-    while (this.queue.length > 0) {
-      const number = this.queue.shift()!;
-      await this.playAudioFile(number);
-    }
-
-    this.isProcessingQueue = false;
-  }
-
-  private playAudioFile(number: number): Promise<void> {
-    return new Promise((resolve) => {
-      try {
-        // Create fresh audio element
-        const audio = new Audio();
-        audio.volume = 0.7;
-        audio.preload = 'auto';
-        
-        const audioSrc = `/sounds/${number}.wav`;
-        
-        // Error handling
-        audio.addEventListener('error', () => {
-          console.warn(`❌ Audio load failed: ${number}.wav`);
-          this.failedFiles.add(number);
-          this.isPlaying = false;
-          this.currentAudio = null;
-          resolve();
-        }, { once: true });
-        
-        // Track when audio starts playing
-        audio.addEventListener('play', () => {
-          console.log(`▶️ Playing: ${number}.wav`);
-          this.isPlaying = true;
-        }, { once: true });
-        
-        // Track when audio ends
-        audio.addEventListener('ended', () => {
-          console.log(`✅ Finished: ${number}.wav`);
-          this.isPlaying = false;
-          this.currentAudio = null;
-          resolve();
-        }, { once: true });
-        
-        // Set source and play
-        audio.src = audioSrc;
-        this.currentAudio = audio;
-        
-        audio.play().catch((error) => {
-          console.warn(`🔊 Play error for ${number}.wav:`, error.message);
-          this.isPlaying = false;
-          this.currentAudio = null;
-          resolve();
-        });
-        
-      } catch (error) {
-        console.warn(`� Apudio error for ${number}.wav:`, error);
-        this.failedFiles.add(number);
-        this.isPlaying = false;
-        resolve();
-      }
-    });
-  }
-
-  // Stop any currently playing sound and clear queue
-  stopCurrent(): void {
-    // Clear queue
-    this.queue = [];
-    this.isProcessingQueue = false;
-    
-    if (this.currentAudio) {
-      try {
-        this.currentAudio.pause();
-        this.currentAudio.currentTime = 0;
-      } catch (e) {
-        // Ignore pause errors
-      }
-      this.currentAudio = null;
-      this.isPlaying = false;
-      console.log('🛑 Stopped current audio and cleared queue');
-    }
-  }
-
-  // Check if audio is currently playing
-  getIsPlaying(): boolean {
-    return this.isPlaying;
-  }
-
-  cleanup(): void {
-    this.stopCurrent();
-    this.failedFiles.clear();
-    console.log('🧹 Audio manager cleaned up');
-  }
-} */
-
 const GamePageOptimized = (): JSX.Element => {
   const navigate = useNavigate();
   const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-
+  const { isOnline } = useNetworkStatus();
 
   
   // Core game state
@@ -288,6 +163,39 @@ const GamePageOptimized = (): JSX.Element => {
             // Always clear called numbers on page refresh
             console.log('🔄 Clearing called numbers on page refresh');
             setCalled([]);
+            
+            // Initialize offline game state in IndexedDB and fetch number sequence
+            try {
+              await offlineGameState.initializeGameState(
+                result.game.id,
+                result.game,
+                [] // Start with no called numbers
+              );
+              console.log('✅ Offline game state initialized');
+              
+              // Fetch number sequence from API
+              try {
+                const sequenceResponse = await fetch(`${API_BASE_URL}/games/${result.game.id}/number-sequence`, {
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                  }
+                });
+                
+                if (sequenceResponse.ok) {
+                  const sequenceData = await sequenceResponse.json();
+                  await offlineGameState.updateNumberSequence(result.game.id, sequenceData.numberSequence);
+                  console.log(`✅ Fetched and cached ${sequenceData.numberSequence.length} numbers in sequence`);
+                } else {
+                  console.warn('⚠️ Failed to fetch number sequence:', sequenceResponse.status);
+                }
+              } catch (seqError) {
+                console.warn('⚠️ Failed to fetch number sequence:', seqError);
+              }
+            } catch (error) {
+              console.warn('⚠️ Failed to initialize offline game state:', error);
+            }
+            
             setIsInitialLoading(false);
             
             return;
@@ -450,6 +358,36 @@ const GamePageOptimized = (): JSX.Element => {
   // Game data
   const [currentGameData, setCurrentGameData] = useState<any>(null);
   
+  // WebSocket connection for real-time updates
+  useWebSocket({
+    gameId: currentGameData?.id,
+    onNumberCalled: useCallback((data: any) => {
+      console.log('🔔 WebSocket: Number called:', data.calledNumber);
+      setCalled(prev => {
+        if (prev.includes(data.calledNumber)) {
+          return prev;
+        }
+        const newCalled = [...prev, data.calledNumber];
+        // Play audio for the called number
+        audioManagerRef.current?.playSound(data.calledNumber);
+        return newCalled;
+      });
+    }, []),
+    onGameStatusChanged: useCallback((data: any) => {
+      console.log('🔔 WebSocket: Game status changed:', data.status);
+      if (data.status === 'finished') {
+        setIsGameFinished(true);
+        setAutoCall(false);
+      }
+    }, []),
+    onPlayerJoined: useCallback((data: any) => {
+      console.log('👋 Player joined:', data.username);
+    }, []),
+    onPlayerLeft: useCallback((data: any) => {
+      console.log('👋 Player left:', data.username);
+    }, [])
+  });
+  
   // Safety mechanism to reset isCallingNumber if it gets stuck
   useEffect(() => {
     if (isCallingNumber) {
@@ -486,12 +424,23 @@ const GamePageOptimized = (): JSX.Element => {
   }, [autoCall, isCallingNumber, isGameFinished]);
   
   // Refs
-  const autoCallIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const audioManagerRef = useRef<AudioManager | null>(null);
+  const autoCallPollerRef = useRef<OptimizedPoller | null>(null);
+  const audioManagerRef = useRef<UnifiedAudioManager | null>(null);
+  const calledRef = useRef<number[]>([]);
+  const autoCallRef = useRef<boolean>(false);
   
-  // Initialize audio manager with LOCAL sounds
+  // Keep refs in sync with state
   useEffect(() => {
-    audioManagerRef.current = new AudioManager();
+    calledRef.current = called;
+  }, [called]);
+  
+  useEffect(() => {
+    autoCallRef.current = autoCall;
+  }, [autoCall]);
+  
+  // Initialize audio manager with UnifiedAudioManager
+  useEffect(() => {
+    audioManagerRef.current = UnifiedAudioManager.getInstance();
     
     // Expose debug methods to window for debugging
     if (process.env.NODE_ENV === 'development') {
@@ -512,7 +461,7 @@ const GamePageOptimized = (): JSX.Element => {
     }
     
     return () => {
-      audioManagerRef.current?.cleanup();
+      // UnifiedAudioManager is a singleton, no cleanup needed
       if (process.env.NODE_ENV === 'development') {
         delete (window as any).testAudio;
         delete (window as any).testAudioMultiple;
@@ -520,101 +469,127 @@ const GamePageOptimized = (): JSX.Element => {
     };
   }, []);
 
+  // Pre-warm audio pool when called numbers change
+  useEffect(() => {
+    if (called.length > 0 && audioManagerRef.current) {
+      // Pre-warm the last 10 called numbers for instant replay
+      const recentNumbers = called.slice(-10);
+      audioManagerRef.current.prewarmAudioPool(recentNumbers).catch(error => {
+        console.warn('Failed to pre-warm audio pool:', error);
+      });
+    }
+  }, [called]);
+
   // Remove polling - game data is already loaded on mount and updated via API calls
   // No need for continuous polling which slows down the system
 
-  // Optimized auto-call with better error handling
+  // Optimized auto-call - always uses IndexedDB sequence (online and offline)
   useEffect(() => {
-    // Always clear existing interval first
-    if (autoCallIntervalRef.current) {
-      clearInterval(autoCallIntervalRef.current);
-      autoCallIntervalRef.current = null;
+    // Stop existing poller
+    if (autoCallPollerRef.current) {
+      autoCallPollerRef.current.stop();
+      autoCallPollerRef.current = null;
     }
 
-    if (autoCall && !isGameFinished && selectedCartelas >= 3 && !isCallingNumber) {
-      autoCallIntervalRef.current = setInterval(async () => {
-        // Skip if document is hidden or already calling a number
-        if (document.hidden || isCallingNumber) return;
-        
-        // Set calling state to prevent concurrent calls
-        setIsCallingNumber(true);
-        
-        try {
-          const token = localStorage.getItem('auth_token');
-          
-          if (!token || !currentGameData?.id) {
-            setAutoCall(false);
+    if (autoCall && !isGameFinished && selectedCartelas >= 3) {
+      // Create optimized poller - always uses IndexedDB sequence
+      autoCallPollerRef.current = createPoller(
+        async () => {
+          // Stop immediately if autocall was turned off
+          if (!autoCallRef.current) {
+            console.log('🛑 Autocall turned off, stopping...');
             return;
           }
           
-          const gameId = currentGameData.id;
-
-          // Add timeout to prevent hanging requests
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-          const response = await fetch(`${API_BASE_URL}/games/${gameId}/call-number`, {
-            method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ calledNumbers: called }),
-            signal: controller.signal
-          });
-
-          clearTimeout(timeoutId);
-
-          if (response.ok) {
-            const result = await response.json();
-            
-            if (result.gameCompleted) {
+          // Skip if already calling a number
+          if (isCallingNumber) return;
+          
+          // Set calling state to prevent concurrent calls
+          setIsCallingNumber(true);
+          
+          try {
+            if (!currentGameData?.id) {
               setAutoCall(false);
+              throw new Error('Missing game data');
+            }
+            
+            const gameId = currentGameData.id;
+
+            // Always get next number from IndexedDB sequence
+            const nextNumber = await offlineGameState.getNextNumber(gameId);
+            
+            if (!nextNumber) {
+              console.warn('⚠️ No more numbers in sequence');
+              setAutoCall(false);
+              setIsCallingNumber(false);
               return;
             }
 
-            const calledNumber = result.calledNumber;
-            if (calledNumber) {
-              // Play sound and show number simultaneously
-              audioManagerRef.current?.playSound(calledNumber);
-              
-              setCalled(prev => {
-                // Prevent duplicates by checking if number already exists
-                if (prev.includes(calledNumber)) {
-                  console.warn(`⚠️ Number ${calledNumber} already called, skipping duplicate`);
-                  return prev;
-                }
-                const newCalled = [...prev, calledNumber];
-                return newCalled;
-              });
+            const timestamp = new Date().toLocaleTimeString();
+            const mode = isOnline ? 'ONLINE' : 'OFFLINE';
+            console.log(`🎲 [${timestamp}] AUTOCALL (${mode}) - Number ${nextNumber} from IndexedDB sequence`);
+            
+            // Show the number on screen
+            setCalled(prev => {
+              if (prev.includes(nextNumber)) {
+                console.warn(`⚠️ Number ${nextNumber} already called, skipping duplicate`);
+                return prev;
+              }
+              return [...prev, nextNumber];
+            });
+            
+            // Play sound
+            setTimeout(() => {
+              audioManagerRef.current?.playSound(nextNumber);
+            }, 100);
+
+            // If online, sync to backend (fire and forget)
+            if (isOnline) {
+              const token = localStorage.getItem('auth_token');
+              if (token) {
+                fetch(`${API_BASE_URL}/games/${gameId}/call-number`, {
+                  method: 'PUT',
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({ 
+                    calledNumbers: [...calledRef.current, nextNumber],
+                    fromSequence: true // Flag to indicate this is from pre-fetched sequence
+                  })
+                }).catch(error => {
+                  console.warn('⚠️ Failed to sync number to backend:', error);
+                  // Don't stop autocall on sync failure
+                });
+              }
             }
-          } else if (response.status === 400 || response.status === 429) {
-            console.log('Auto-call stopped due to API response:', response.status);
-            setAutoCall(false);
-          } else {
-            console.warn('Auto-call API error:', response.status);
-            // Don't stop auto-call for temporary server errors
+          } finally {
+            // Always reset calling state
+            setIsCallingNumber(false);
           }
-        } catch (error) {
-          console.error('Auto-call error:', error);
-          if (error instanceof Error && error.name === 'AbortError') {
-            console.log('Auto-call request timed out');
+        },
+        {
+          interval: slider * 1000,
+          maxInterval: 30000,
+          backoffMultiplier: 1.5,
+          pauseWhenHidden: true,
+          stopOnError: false,
+          onError: (error) => {
+            console.error('Auto-call error:', error.message);
           }
-          // Don't stop auto-call for network errors, just log them
-        } finally {
-          // Always reset calling state
-          setIsCallingNumber(false);
         }
-      }, slider * 1000);
+      );
+
+      autoCallPollerRef.current.start();
     }
 
     return () => {
-      if (autoCallIntervalRef.current) {
-        clearInterval(autoCallIntervalRef.current);
-        autoCallIntervalRef.current = null;
+      if (autoCallPollerRef.current) {
+        autoCallPollerRef.current.stop();
+        autoCallPollerRef.current = null;
       }
     };
-  }, [autoCall, slider, isGameFinished, selectedCartelas, called, currentGameData, API_BASE_URL, isCallingNumber]);
+  }, [autoCall, slider, isGameFinished, selectedCartelas, currentGameData?.id, API_BASE_URL, isOnline]);
 
   // Memoized handlers
   const handleNumberClick = useCallback((_num: number) => {
@@ -627,77 +602,63 @@ const GamePageOptimized = (): JSX.Element => {
     setIsCallingNumber(true);
     
     try {
-      const token = localStorage.getItem('auth_token');
-      
-      if (!token || !currentGameData?.id) {
-        console.error('Missing token or game data');
+      if (!currentGameData?.id) {
+        console.error('Missing game data');
         return;
       }
       
       const gameId = currentGameData.id;
 
-      // Add timeout to prevent hanging requests
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      // Always get next number from IndexedDB sequence
+      const nextNumber = await offlineGameState.getNextNumber(gameId);
+      
+      if (!nextNumber) {
+        console.warn('⚠️ No more numbers in sequence');
+        setIsCallingNumber(false);
+        return;
+      }
 
-      const response = await fetch(`${API_BASE_URL}/games/${gameId}/call-number`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ calledNumbers: called }),
-        signal: controller.signal
+      const timestamp = new Date().toLocaleTimeString();
+      const mode = isOnline ? 'ONLINE' : 'OFFLINE';
+      console.log(`🎲 [${timestamp}] MANUAL (${mode}) - Number ${nextNumber} from IndexedDB sequence`);
+      
+      setCalled(prev => {
+        if (prev.includes(nextNumber)) {
+          console.warn(`⚠️ Number ${nextNumber} already called, skipping duplicate`);
+          return prev;
+        }
+        return [...prev, nextNumber];
       });
+      
+      setTimeout(() => {
+        audioManagerRef.current?.playSound(nextNumber);
+      }, 100);
 
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        const result = await response.json();
-        
-        if (result.gameCompleted) {
-          setAutoCall(false);
-          // Remove duplicates from game calledNumbers before setting
-          const gameCalledNumbers = (result.game.calledNumbers || called) as number[];
-          const uniqueCalledNumbers = [...new Set(gameCalledNumbers)];
-          if (uniqueCalledNumbers.length !== gameCalledNumbers.length) {
-            console.warn(`⚠️ Removed ${gameCalledNumbers.length - uniqueCalledNumbers.length} duplicates from completed game`);
-          }
-          setCalled(uniqueCalledNumbers);
-          return;
-        }
-
-        const calledNumber = result.calledNumber;
-        if (calledNumber) {
-          // Play sound and show number simultaneously
-          audioManagerRef.current?.playSound(calledNumber);
-          
-          setCalled(prev => {
-            // Prevent duplicates by checking if number already exists
-            if (prev.includes(calledNumber)) {
-              console.warn(`⚠️ Number ${calledNumber} already called, skipping duplicate`);
-              return prev;
-            }
-            const newCalled = [...prev, calledNumber];
-            return newCalled;
+      // If online, sync to backend (fire and forget)
+      if (isOnline) {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          fetch(`${API_BASE_URL}/games/${gameId}/call-number`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+              calledNumbers: [...called, nextNumber],
+              fromSequence: true
+            })
+          }).catch(error => {
+            console.warn('⚠️ Failed to sync number to backend:', error);
           });
-        }
-      } else {
-        console.error('API error:', response.status);
-        if (response.status === 400) {
-          const errorData = await response.json();
-          console.error('Error details:', errorData);
         }
       }
     } catch (error) {
       console.error('Manual next error:', error);
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.log('Manual next request timed out');
-      }
     } finally {
       setIsCallingNumber(false);
     }
-  }, [isGameFinished, selectedCartelas, isCallingNumber, called, currentGameData, API_BASE_URL]);
+  }, [isGameFinished, selectedCartelas, isCallingNumber, called, currentGameData, API_BASE_URL, isOnline]);
 
   const handleShuffle = useCallback(() => {
     console.log('🔀 Shuffle button clicked - playing shuffle sound and animation');
@@ -1050,17 +1011,26 @@ const GamePageOptimized = (): JSX.Element => {
       }
     } catch (error) {
       console.error('Error checking cartela:', error);
-      // Show error in modal instead of alert
+      
+      // Check if it's a network error
+      const isNetworkError = error instanceof TypeError && 
+                            (error.message.includes('fetch') || 
+                             error.message.includes('Failed to fetch') ||
+                             error.message.includes('NetworkError'));
+      
+      // Show appropriate error message
       setCartelaCheckResult({
         success: false,
         cartelaId: inputId.trim(),
         gameId: '',
         win: false,
-        cardType: 'error',
+        cardType: isNetworkError ? 'offline' : 'error',
         soundType: 'notwinner',
         winningPatterns: [],
         calledNumbersCount: called.length,
-        message: 'Failed to check cartela. Please try again.'
+        message: isNetworkError 
+          ? 'Cannot check cartela while offline. Please reconnect to verify winners.'
+          : 'Failed to check cartela. Please try again.'
       });
       setShowCartelaCheckModal(true);
     } finally {

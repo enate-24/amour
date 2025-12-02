@@ -206,7 +206,7 @@ app.use('*', (req, res) => {
 });
 
 // Start the server
-app.listen(PORT, async () => {
+const server = app.listen(PORT, async () => {
   console.log(`🚀 Bingo Backend Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🗄️ Using PostgreSQL database`);
@@ -220,5 +220,10 @@ app.listen(PORT, async () => {
     process.exit(1);
   }
 });
+
+// Initialize WebSocket
+const { initializeWebSocket } = require('./websocket');
+initializeWebSocket(server);
+console.log('🔌 WebSocket server initialized');
 
 module.exports = app;

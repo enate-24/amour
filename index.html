@@ -5,6 +5,26 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Abisinya bingo</title>
+    
+    <!-- Preconnect to CDN for faster loading -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    
+    <!-- Load React and ReactDOM from CDN in production -->
+    <script type="module">
+      // Only load from CDN in production
+      if (import.meta.env.PROD) {
+        const reactScript = document.createElement('script');
+        reactScript.crossOrigin = 'anonymous';
+        reactScript.src = 'https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js';
+        document.head.appendChild(reactScript);
+        
+        const reactDomScript = document.createElement('script');
+        reactDomScript.crossOrigin = 'anonymous';
+        reactDomScript.src = 'https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js';
+        document.head.appendChild(reactDomScript);
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

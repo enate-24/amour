@@ -146,6 +146,9 @@ export function useCartela(): UseCartelaReturn {
       setLoading(true);
       setError(null);
 
+      // Performance timing
+      const startTime = performance.now();
+
       // Use the /all-cartelas endpoint to get cartelas with proper bingo card data
       const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
       const response = await fetch(`${API_BASE_URL}/cartelas/all-cartelas`);
@@ -168,6 +171,11 @@ export function useCartela(): UseCartelaReturn {
       }));
 
       setCartelas(formattedCartelas);
+
+      // Log performance
+      const endTime = performance.now();
+      const loadTime = (endTime - startTime).toFixed(2);
+      console.log(`✅ Loaded ${formattedCartelas.length} cartelas in ${loadTime}ms`);
 
     } catch (err) {
       console.error('Error refreshing cartelas:', err);
