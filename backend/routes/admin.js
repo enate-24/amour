@@ -940,6 +940,9 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
         u.id as user_id,
         u.username,
         u.is_active,
+        u.user_type,
+        u.balance,
+        u.balance_limit,
         -- Daily stats (today)
         COUNT(DISTINCT CASE 
           WHEN g.created_at >= $1 AND g.created_at < $2 AND g.user_id = u.id AND g.status IN ('started', 'finished')
@@ -962,7 +965,7 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
         END), 0) as weekly_profit
       FROM users u
       LEFT JOIN games g ON u.id = g.user_id
-      GROUP BY u.id, u.username, u.is_active
+      GROUP BY u.id, u.username, u.is_active, u.user_type, u.balance, u.balance_limit
       ORDER BY weekly_profit DESC, u.username ASC
     `;
 
@@ -1000,6 +1003,9 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
       return {
         userId: row.user_id,
         username: row.username,
+        userType: row.user_type,
+        balance: parseFloat(row.balance || 0),
+        balanceLimit: row.balance_limit ? parseFloat(row.balance_limit) : null,
         dailyGames: parseInt(row.weekly_games || 0), // Show weekly games in the table
         dailyHouseProfit: dailyHouseProfit, // Today's profit (will be 0 if no games today)
         weeklyProfit: weeklyProfit, // Last 7 days profit

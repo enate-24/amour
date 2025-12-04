@@ -21,6 +21,9 @@ interface User {
 interface UserStats {
   userId: string;
   username: string;
+  userType: string;
+  balance: number;
+  balanceLimit: number | null;
   dailyGames: number;
   dailyHouseProfit: number;
   weeklyProfit: number;
@@ -29,9 +32,20 @@ interface UserStats {
   date: string;
 }
 
+interface ProfitSummary {
+  dailyProfit: number;
+  weeklyProfit: number;
+  fifteenDayProfit: number;
+}
+
 const BackofficeDashboard: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [userStats, setUserStats] = useState<UserStats[]>([]);
+  const [profitSummary, setProfitSummary] = useState<ProfitSummary>({
+    dailyProfit: 0,
+    weeklyProfit: 0,
+    fifteenDayProfit: 0
+  });
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,6 +59,7 @@ const BackofficeDashboard: React.FC = () => {
   useEffect(() => {
     fetchUsers();
     fetchUserStats();
+    fetchProfitSummary();
   }, []);
 
   const fetchUsers = async () => {
@@ -96,6 +111,28 @@ const BackofficeDashboard: React.FC = () => {
     }
   };
 
+  const fetchProfitSummary = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/dashboard`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setProfitSummary({
+          dailyProfit: data.dailyProfit || 0,
+          weeklyProfit: data.weeklyProfit || 0,
+          fifteenDayProfit: data.fifteenDayProfit || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching profit summary:', error);
+    }
+  };
+
   const handleToggleUserStatus = async (userId: string, currentStatus: boolean) => {
     try {
       const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
@@ -133,7 +170,7 @@ const BackofficeDashboard: React.FC = () => {
 
   const exportToCSV = () => {
     // Create CSV content
-    const headers = ['#', 'User', 'Status', 'Date', 'Total Games (Week)', 'House Bonus'];
+    const headers = ['#', 'User', 'Status', 'Balance', 'Date', 'Total Games (Week)', 'Daily Profit', 'Weekly Profit', 'House Bonus'];
     const csvRows = [headers.join(',')];
 
     filteredStats.forEach((stat, index) => {
@@ -141,8 +178,11 @@ const BackofficeDashboard: React.FC = () => {
         index + 1,
         stat.username,
         stat.isActive ? 'Active' : 'Inactive',
+        stat.userType === 'prepaid' ? stat.balance : 'Unlimited',
         new Date(stat.date).toLocaleDateString(),
         stat.dailyGames || 0,
+        stat.dailyHouseProfit || 0,
+        stat.weeklyProfit || 0,
         stat.houseBonus
       ];
       csvRows.push(row.join(','));
@@ -218,7 +258,44 @@ const BackofficeDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Profit Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {/* Daily Profit */}
+        <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-lg p-6 shadow-lg">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-white text-sm font-medium opacity-90">Daily Profit</h3>
+            <DollarSign className="w-8 h-8 text-white opacity-80" />
+          </div>
+          <p className="text-3xl font-bold text-white mb-1">
+            {profitSummary.dailyProfit.toLocaleString()} Birr
+          </p>
+          <p className="text-green-100 text-xs">Today's earnings</p>
+        </div>
 
+        {/* Weekly Profit */}
+        <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-6 shadow-lg">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-white text-sm font-medium opacity-90">Weekly Profit</h3>
+            <TrendingUp className="w-8 h-8 text-white opacity-80" />
+          </div>
+          <p className="text-3xl font-bold text-white mb-1">
+            {profitSummary.weeklyProfit.toLocaleString()} Birr
+          </p>
+          <p className="text-blue-100 text-xs">Last 7 days</p>
+        </div>
+
+        {/* 15-Day Profit */}
+        <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-6 shadow-lg">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-white text-sm font-medium opacity-90">15-Day Profit</h3>
+            <TrendingUp className="w-8 h-8 text-white opacity-80" />
+          </div>
+          <p className="text-3xl font-bold text-white mb-1">
+            {profitSummary.fifteenDayProfit.toLocaleString()} Birr
+          </p>
+          <p className="text-purple-100 text-xs">Last 15 days</p>
+        </div>
+      </div>
 
       {/* User Statistics Table */}
       <div className="bg-slate-800 rounded-lg border border-slate-700 p-4 sm:p-6 mb-6">
@@ -236,7 +313,10 @@ const BackofficeDashboard: React.FC = () => {
               Export CSV
             </button>
             <button
-              onClick={fetchUserStats}
+              onClick={() => {
+                fetchUserStats();
+                fetchProfitSummary();
+              }}
               className="px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm sm:text-base rounded-lg transition-colors"
             >
               Refresh Stats
@@ -261,21 +341,23 @@ const BackofficeDashboard: React.FC = () => {
         {/* Statistics Table */}
         <div className="bg-slate-700 rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[600px]">
+            <table className="w-full min-w-[800px]">
               <thead className="bg-slate-600">
                 <tr>
                   <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">#</th>
                   <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">User</th>
                   <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Status</th>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Date</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Balance</th>
                   <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Total Games (Week)</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Daily Profit</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Weekly Profit</th>
                   <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">House Bonus</th>
                 </tr>
               </thead>
               <tbody className="bg-slate-700 divide-y divide-slate-600">
                 {statsLoading ? (
                   <tr>
-                    <td colSpan={6} className="px-3 sm:px-6 py-4 text-center text-slate-400">
+                    <td colSpan={8} className="px-3 sm:px-6 py-4 text-center text-slate-400">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
                       <p className="text-sm">Loading statistics...</p>
                     </td>
@@ -301,11 +383,30 @@ const BackofficeDashboard: React.FC = () => {
                           {stat.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-slate-400">
-                        {new Date(stat.date).toLocaleDateString()}
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm">
+                        {stat.userType === 'prepaid' ? (
+                          <div className="flex items-center gap-1 text-orange-400 font-semibold">
+                            <DollarSign size={14} />
+                            {stat.balance.toLocaleString()}
+                          </div>
+                        ) : (
+                          <span className="text-slate-500 text-xs">Unlimited</span>
+                        )}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-blue-400 font-semibold">
                         {stat.dailyGames || 0}
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-green-400 font-semibold">
+                        <div className="flex items-center gap-1">
+                          <DollarSign size={14} />
+                          {(stat.dailyHouseProfit || 0).toLocaleString()}
+                        </div>
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-blue-400 font-semibold">
+                        <div className="flex items-center gap-1">
+                          <DollarSign size={14} />
+                          {(stat.weeklyProfit || 0).toLocaleString()}
+                        </div>
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-yellow-400 font-semibold">
                         <div className="flex items-center gap-1">
@@ -317,7 +418,7 @@ const BackofficeDashboard: React.FC = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-3 sm:px-6 py-4 text-center text-slate-400 text-sm">
+                    <td colSpan={8} className="px-3 sm:px-6 py-4 text-center text-slate-400 text-sm">
                       No statistics found
                     </td>
                   </tr>

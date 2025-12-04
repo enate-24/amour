@@ -15,7 +15,7 @@ import BackofficeLayout from './components/BackofficeLayout';
 import BackofficeDashboard from './components/BackofficeDashboard';
 
 import AdminUserManagement from './components/AdminUserManagement';
-
+import CartelaManagement from './components/CartelaManagement';
 import NewAccountPage from './components/NewAccountPage';
 import NewGame from './components/NewGame';
 import GameAnalytics from './components/GameAnalytics';
@@ -145,7 +145,7 @@ function AppContent() {
       <Routes>
         <Route path="/backoffice/*" element={<BackofficeLayout />}>
           <Route path="dashboard" element={<BackofficeDashboard />} />
-
+          <Route path="cartela-management" element={<CartelaManagement />} />
           <Route path="user-management" element={<AdminUserManagement />} />
           <Route path="" element={<BackofficeDashboard />} />
         </Route>

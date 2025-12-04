@@ -6,7 +6,8 @@ import {
   Menu,
   X,
   Shield,
-  User
+  User,
+  Grid3x3
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
@@ -92,7 +93,7 @@ const BackofficeLayout: React.FC = () => {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'text-blue-400' },
-
+    { id: 'cartela-management', label: 'Cartela Management', icon: Grid3x3, color: 'text-green-400' },
     ...(userRole === 'admin' ? [
       { id: 'user-management', label: 'User Management', icon: User, color: 'text-purple-400' }
     ] : []),

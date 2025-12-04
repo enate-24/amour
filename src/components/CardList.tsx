@@ -203,13 +203,6 @@ const CardList: React.FC = () => {
               <div className="flex justify-center">
                 {renderBingoCard(selectedCartela)}
               </div>
-              
-              {/* Delete Button */}
-              <div className="mt-6 flex justify-center">
-                <button className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white text-lg font-semibold rounded-lg transition-colors">
-                  Delete Cartela
-                </button>
-              </div>
             </div>
           </div>
         </div>

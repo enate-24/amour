@@ -241,14 +241,19 @@ router.get('/all-cartelas', async (req, res) => {
   try {
     // Fetch all cartelas from database
     const allCartelas = await cartelas.findAll();
-    const activeCartelas = allCartelas.filter(c => c.is_active);
 
-    console.log('Fetched cartelas from database, total:', activeCartelas.length);
+    console.log('Fetched cartelas from database, total:', allCartelas.length);
+    if (allCartelas.length > 0) {
+      console.log('Sample cartela from DB:', {
+        id: allCartelas[0].id,
+        card_id: allCartelas[0].card_id
+      });
+    }
 
     // Transform the data to match the expected format with parsed numbers
     // OPTIMIZATION: Skip expensive winner checking for initial load
     // Winner checking should be done on-demand during gameplay, not on cartela list load
-    const transformedCartelas = activeCartelas.map((cartela) => {
+    const transformedCartelas = allCartelas.map((cartela) => {
       let numbers;
       try {
         // Parse the JSON string from database
@@ -842,28 +847,32 @@ router.post('/add-by-range', requireAdmin, [
   }
 });
 
-// Delete cartela (admin only)
-router.delete('/:id', requireAdmin, [
-  param('id').isUUID().withMessage('Cartela ID must be a valid UUID')
+// Delete cartela (public endpoint)
+router.delete('/:id', [
+  param('id').notEmpty().withMessage('Cartela ID is required')
 ], async (req, res) => {
+  console.log('🗑️ DELETE /cartelas/:id endpoint hit - ID:', req.params.id);
+  
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
     const cartelaId = req.params.id;
 
-    // Find the cartela
+    // Find the cartela by id or card_id
     const allCartelas = await cartelas.findAll();
-    const cartela = allCartelas.find(c => c.id === cartelaId);
+    const cartela = allCartelas.find(c => c.id === cartelaId || c.card_id === cartelaId);
 
     if (!cartela) {
       return res.status(404).json({ error: 'Cartela not found' });
     }
 
     // Soft delete by setting is_active to false
-    await cartelas.update(cartelaId, { is_active: false });
+    // Use the actual database ID from the found cartela
+    await cartelas.update(cartela.id, { is_active: false });
 
     res.json({
       message: 'Cartela deleted successfully',
@@ -880,26 +889,30 @@ router.delete('/:id', requireAdmin, [
   }
 });
 
-// Update cartela (admin only)
-router.put('/:id', requireAdmin, [
-  param('id').isUUID().withMessage('Cartela ID must be a valid UUID'),
+// Update cartela (public endpoint)
+router.put('/:id', [
+  param('id').notEmpty().withMessage('Cartela ID is required'),
   body('cardId').optional().isString().notEmpty().withMessage('Card ID must be a non-empty string'),
   body('numbers').optional().isObject().withMessage('Numbers must be an object'),
   body('gameId').optional().isUUID().withMessage('Game ID must be a valid UUID'),
   body('is_active').optional().isBoolean().withMessage('is_active must be a boolean')
 ], async (req, res) => {
+  console.log('🔧 PUT /cartelas/:id endpoint hit - ID:', req.params.id);
+  console.log('🔧 Request body:', req.body);
+  
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
     const cartelaId = req.params.id;
     const updateData = req.body;
 
-    // Find the cartela
+    // Find the cartela by id or card_id
     const allCartelas = await cartelas.findAll();
-    const cartela = allCartelas.find(c => c.id === cartelaId);
+    const cartela = allCartelas.find(c => c.id === cartelaId || c.card_id === cartelaId);
 
     if (!cartela) {
       return res.status(404).json({ error: 'Cartela not found' });
@@ -935,7 +948,8 @@ router.put('/:id', requireAdmin, [
       updated_at: new Date().toISOString()
     };
 
-    await cartelas.update(cartelaId, updatedCartela);
+    // Use the actual database ID from the found cartela
+    await cartelas.update(cartela.id, updatedCartela);
 
     res.json({
       message: 'Cartela updated successfully',
