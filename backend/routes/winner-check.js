@@ -219,6 +219,121 @@ router.post('/', [
       console.log(`❌ No winning patterns detected - check logs above for details`);
     }
 
+    // If this cartela is a winner, save it to the database
+    if (isWinner) {
+      try {
+        console.log('💾 Saving winner cartela to database...');
+        console.log(`🎯 Target game ID: ${targetGameId}`);
+        console.log(`🎫 Winner cartela ID: ${cartela.card_id}`);
+
+        // First, get existing winner cartela IDs from game_analysis
+        let existingWinners = [];
+        console.log('🔍 Checking for existing winners in game_analysis...');
+        
+        const existingAnalysis = await db.get(
+          'SELECT winner_cartela_ids FROM game_analysis WHERE game_id = $1',
+          [targetGameId]
+        );
+
+        console.log('📊 Existing analysis result:', existingAnalysis);
+
+        if (existingAnalysis && existingAnalysis.winner_cartela_ids) {
+          try {
+            existingWinners = JSON.parse(existingAnalysis.winner_cartela_ids);
+            console.log('✅ Parsed existing winners:', existingWinners);
+          } catch (parseError) {
+            console.warn('Failed to parse existing winner cartela IDs:', parseError);
+            existingWinners = [];
+          }
+        } else {
+          console.log('ℹ️ No existing game_analysis record found for this game');
+        }
+
+        // Add this cartela to winners if not already present
+        if (!existingWinners.includes(cartela.card_id)) {
+          existingWinners.push(cartela.card_id);
+          console.log('➕ Added cartela to winners list:', existingWinners);
+
+          // Update or insert into game_analysis table
+          // First try to update existing record
+          console.log('🔄 Attempting to update existing game_analysis record...');
+          const updateResult = await db.run(`
+            UPDATE game_analysis 
+            SET winner_cartela_ids = $1, updated_at = $2
+            WHERE game_id = $3
+          `, [
+            JSON.stringify(existingWinners),
+            new Date().toISOString(),
+            targetGameId
+          ]);
+
+          console.log('📊 Update result:', updateResult);
+
+          // If no existing record was updated, create a new one with required fields
+          if (updateResult.changes === 0) {
+            console.log('📝 No existing record found, creating new game_analysis record...');
+            // Get game details for required fields
+            console.log('🎮 Fetching game details for new record...');
+            const gameDetails = await db.get('SELECT * FROM games WHERE id = $1', [targetGameId]);
+            console.log('📊 Game details:', gameDetails);
+            
+            if (gameDetails) {
+              console.log('📝 Inserting new game_analysis record...');
+              const insertResult = await db.run(`
+                INSERT INTO game_analysis (
+                  id, game_id, game_number, players, bet, total_bet, cut_percentage,
+                  profit, house_bonus, winner_info, status, date, user_id, username,
+                  final_win_amount, winner_cartela_ids, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+              `, [
+                require('crypto').randomUUID(),
+                targetGameId,
+                gameDetails.game_number || 0,
+                1, // players
+                parseFloat(gameDetails.bet_money) || 0,
+                parseFloat(gameDetails.bet_money) || 0,
+                parseFloat(gameDetails.house_cut_percentage) || 25,
+                parseFloat(gameDetails.win_money) || 0,
+                (parseFloat(gameDetails.bet_money) || 0) * (parseFloat(gameDetails.house_cut_percentage) || 25) / 100,
+                `Winner: ${cartela.card_id}`,
+                gameDetails.status || 'active',
+                gameDetails.created_at || new Date().toISOString(),
+                gameDetails.user_id || 'unknown',
+                'unknown',
+                parseFloat(gameDetails.win_money) || 0,
+                JSON.stringify(existingWinners),
+                new Date().toISOString(),
+                new Date().toISOString()
+              ]);
+              console.log('📊 Insert result:', insertResult);
+            }
+          }
+
+          // Mark the cartela as winner in the cartelas table
+          console.log('🏷️ Marking cartela as winner in cartelas table...');
+          const cartelaUpdateResult = await db.run(`
+            UPDATE cartelas 
+            SET is_winner = 1, pattern = $1, updated_at = $2
+            WHERE card_id = $3
+          `, [
+            winningPatterns[0] || selectedPatterns[0],
+            new Date().toISOString(),
+            cartela.card_id
+          ]);
+          console.log('📊 Cartela update result:', cartelaUpdateResult);
+
+          console.log(`✅ Successfully saved winner cartela ${cartela.card_id} to database`);
+          console.log(`📊 Total winners for game ${targetGameId}: ${existingWinners.length}`);
+        } else {
+          console.log(`ℹ️ Cartela ${cartela.card_id} already marked as winner`);
+        }
+
+      } catch (saveError) {
+        console.error('❌ Error saving winner information:', saveError);
+        // Don't fail the response, just log the error
+      }
+    }
+
     // Get completed lines for highlighting in UI
     const grid = convertCartelaToGrid(formattedCartela);
     const { lines: completedLines } = countCompletedLines(grid, calledNumbers);
@@ -244,7 +359,8 @@ router.post('/', [
         completedLines: completedLines, // Add completed lines for UI highlighting
         pattern: isWinner ? winningPatterns.join(', ') : null,
         purchased_at: cartela.purchased_at
-      }
+      },
+      winnerSaved: isWinner // Indicate if winner was saved to database
     };
 
     res.json(response);
@@ -261,6 +377,36 @@ router.post('/', [
       cardType: 'error',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  }
+});
+
+// Debug endpoint to check winner data
+router.get('/debug/:gameId', async (req, res) => {
+  try {
+    const gameId = req.params.gameId;
+    
+    // Get game_analysis data
+    const analysisData = await db.get(
+      'SELECT * FROM game_analysis WHERE game_id = $1',
+      [gameId]
+    );
+    
+    // Get winner cartelas
+    const winnerCartelas = await db.all(
+      'SELECT card_id, is_winner, pattern FROM cartelas WHERE game_id = $1 AND is_winner = 1',
+      [gameId]
+    );
+    
+    res.json({
+      gameId: gameId,
+      analysisData: analysisData,
+      winnerCartelas: winnerCartelas,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Debug endpoint error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

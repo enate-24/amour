@@ -3,7 +3,7 @@ import { Minus, Plus, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCartela } from '../hooks/useCartela';
 import { useAuth } from '../hooks/useAuth';
-import HouseBonusButton from './HouseBonusButton';
+
 
 const NewGame: React.FC = () => {
   const { cartelas, loading, error } = useCartela();
@@ -114,17 +114,9 @@ const NewGame: React.FC = () => {
           const data = await response.json();
           const bonus = data.dailyBonus;
           
-          // Show notification if bonus was just applied (used but profit >= 1000 before use)
-          if (bonus.bonusUsed && bonus.dailyProfit >= 800) {
-            const userType = localStorage.getItem('userType') || 'prepaid';
-            if (userType === 'postpaid') {
-              setBonusNotification(`🎉 House Bonus Applied! 200 Birr deducted from your daily profit`);
-            } else {
-              setBonusNotification(`🎉 House Bonus Applied! 200 Birr added to your balance`);
-            }
-            
-            // Auto-hide notification after 10 seconds
-            setTimeout(() => setBonusNotification(null), 10000);
+          // Show "Today's Bonus Claimed" message if bonus was used today
+          if (bonus.bonusUsed) {
+           
           }
         }
       } catch (error) {
@@ -742,8 +734,13 @@ const NewGame: React.FC = () => {
                 <span className="sm:hidden">Enter ID</span>
               </button>
               
-              {/* House Bonus Button */}
-              <HouseBonusButton />
+              {/* Bonus Claimed Message - Show only when bonus is used today */}
+              {bonusNotification && (
+                <div className="px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-green-100 text-green-800 border border-green-300 flex items-center gap-2">
+                  <span>🎁</span>
+                  <span>Today's Bonus Claimed!</span>
+                </div>
+              )}
               
               {/* Cartela Selection Status */}
               <div className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold ${
@@ -858,7 +855,7 @@ const NewGame: React.FC = () => {
 
         {/* Cartela Grid */}
         {!loading && !error && (
-          <div className="flex flex-wrap gap-1 pb-4">
+          <div className="flex flex-wrap gap-2 pb-4">
             {cartelas.sort((a, b) => {
               const aNum = parseInt(a.card_id) || 0;
               const bNum = parseInt(b.card_id) || 0;
@@ -867,15 +864,15 @@ const NewGame: React.FC = () => {
               <button
                 key={`${cartela.card_id}-${index}`}
                 onClick={() => handleCartelaSelect(cartela.card_id)}
-                className={`w-[35px] h-[35px] p-0.5 rounded transition-all duration-200 active:scale-95 sm:hover:scale-105 flex-shrink-0 ${
+                className={`w-[48px] h-[48px] sm:w-[52px] sm:h-[52px] md:w-[56px] md:h-[56px] p-1 rounded-lg transition-all duration-200 active:scale-95 sm:hover:scale-105 flex-shrink-0 ${
                   selectedCards.includes(cartela.card_id)
-                    ? 'bg-blue-600 text-white shadow-lg transform scale-105'
-                    : 'bg-[#c5c9c8] active:bg-[#b0b5b4] sm:hover:bg-[#b0b5b4] text-black border border-gray-300'
+                    ? 'bg-blue-600 text-white shadow-lg transform scale-105 border-2 border-blue-400'
+                    : 'bg-[#c5c9c8] active:bg-[#b0b5b4] sm:hover:bg-[#b0b5b4] text-black border-2 border-gray-300 hover:border-gray-400'
                 }`}
                 title={`Card ID: ${cartela.card_id}`}
               >
                 <div className="text-center h-full flex items-center justify-center">
-                  <div className="text-[12px] font-semibold leading-tight">{index + 1}</div>
+                  <div className="text-[13px] sm:text-[14px] md:text-[15px] font-bold leading-tight">{index + 1}</div>
                 </div>
               </button>
             ))}

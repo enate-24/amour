@@ -1,10 +1,10 @@
 import React from 'react';
-import { X, Home, Plus, Play, BarChart3, Settings, User, Menu } from 'lucide-react';
+import { X, Home, Plus, Play, BarChart3, Settings, User, Menu, Wallet } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 interface SidebarProps {
   currentPage: string;
-  onPageChange: (page: 'dashboard' | 'game' | 'select-cartela' | 'card-list' | 'settings' | 'backoffice') => void;
+  onPageChange: (page: 'dashboard' | 'game' | 'select-cartela' | 'card-list' | 'settings' | 'balance' | 'backoffice') => void;
   isOpen: boolean;
   onClose: () => void;
   onToggle: () => void;
@@ -27,10 +27,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange, isOpen, on
     }
   }, [user]);
 
+  // Build menu items based on user type
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'game', label: 'Play Bingo', icon: Play },
-    { id: 'game-analytics', label: 'Game History', icon: BarChart3 },
+    // Only show Balance for prepaid users
+    ...(user?.userType === 'prepaid' ? [{ id: 'balance', label: 'Balance', icon: Wallet }] : []),
     { id: 'card-list', label: 'Card List', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];

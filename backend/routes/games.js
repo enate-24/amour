@@ -725,16 +725,46 @@ router.put('/:id/finish-session', authenticateToken, [
         if (!bonusRecord.bonus_used && dailyProfit >= 1000 && existingBonusGames === 0) {
           console.log(`🎁 ✅ APPLYING HOUSE BONUS for user ${userId} (${user.user_type})`);
 
-          // Create a bonus deduction game record to affect all profit calculations
-          const { v4: uuidv4 } = require('uuid');
-          const bonusGameId = uuidv4();
-          const bonusGameNumber = 999999; // Special number for bonus deduction games
-          
-          console.log(`📝 Creating bonus deduction game #${bonusGameNumber}...`);
-          
-          // Insert a "bonus deduction" game with negative profit
+          // Use database transaction to prevent race conditions
+          const client = await db.pool.connect();
           try {
-            await db.run(`
+            await client.query('BEGIN');
+
+            // Double-check bonus hasn't been used in another transaction
+            const doubleCheckQuery = `
+              SELECT bonus_used FROM daily_bonuses 
+              WHERE user_id = $1 AND bonus_date = $2 FOR UPDATE
+            `;
+            const doubleCheckResult = await client.query(doubleCheckQuery, [userId, today]);
+            
+            if (doubleCheckResult.rows[0]?.bonus_used) {
+              console.log(`❌ Bonus already used in concurrent transaction`);
+              await client.query('ROLLBACK');
+              return;
+            }
+
+            // Double-check no bonus games exist
+            const doubleCheckGamesQuery = `
+              SELECT COUNT(*) as count FROM games 
+              WHERE user_id = $1 AND game_number = 999999 AND DATE(created_at) = $2
+            `;
+            const doubleCheckGamesResult = await client.query(doubleCheckGamesQuery, [userId, today]);
+            
+            if (parseInt(doubleCheckGamesResult.rows[0]?.count || 0) > 0) {
+              console.log(`❌ Bonus game already exists in concurrent transaction`);
+              await client.query('ROLLBACK');
+              return;
+            }
+
+            // Create a bonus deduction game record to affect all profit calculations
+            const { v4: uuidv4 } = require('uuid');
+            const bonusGameId = uuidv4();
+            const bonusGameNumber = 999999; // Special number for bonus deduction games
+            
+            console.log(`📝 Creating bonus deduction game #${bonusGameNumber}...`);
+            
+            // Insert a "bonus deduction" game with negative profit
+            await client.query(`
               INSERT INTO games (
                 id, game_number, user_id, bet_money, win_money, 
                 cartelas_selected, total_numbers, house_cut_percentage, 
@@ -755,35 +785,39 @@ router.put('/:id/finish-session', authenticateToken, [
             ]);
 
             console.log(`✅ Created bonus deduction game record (profit: -200 Birr)`);
-          } catch (gameInsertError) {
-            console.error(`❌ FAILED to create bonus deduction game:`, gameInsertError);
-            console.error(`Error details:`, gameInsertError.message);
-            throw gameInsertError; // Re-throw to prevent marking bonus as used
-          }
 
-          if (user.user_type === 'postpaid') {
-            // Postpaid: Mark bonus as used
-            await db.run(`
-              UPDATE daily_bonuses 
-              SET bonus_used = true, bonus_claimed = true
-              WHERE user_id = $1 AND bonus_date = $2
-            `, [userId, today]);
-            
-            bonusMessage = `🎉 House Bonus Applied! 200 Birr deducted from all profits`;
-            console.log(`✅ Postpaid bonus applied: 200 Birr deducted from all profit calculations`);
-          } else {
-            // Prepaid: Add 200 to balance and mark bonus as used
-            const newBalance = parseFloat(user.balance) + 200;
-            await db.run('UPDATE users SET balance = $1 WHERE id = $2', [newBalance, userId]);
-            
-            await db.run(`
-              UPDATE daily_bonuses 
-              SET bonus_used = true, bonus_claimed = true
-              WHERE user_id = $1 AND bonus_date = $2
-            `, [userId, today]);
-            
-            bonusMessage = `🎉 House Bonus Applied! 200 Birr added to your balance (New balance: ${newBalance.toFixed(2)} Birr)`;
-            console.log(`✅ Prepaid bonus applied: Balance increased to ${newBalance}, 200 Birr deducted from all profit calculations`);
+            if (user.user_type === 'postpaid') {
+              // Postpaid: Mark bonus as used
+              await client.query(`
+                UPDATE daily_bonuses 
+                SET bonus_used = true, bonus_claimed = true
+                WHERE user_id = $1 AND bonus_date = $2
+              `, [userId, today]);
+              
+              bonusMessage = `🎉 House Bonus Applied! 200 Birr deducted from all profits`;
+              console.log(`✅ Postpaid bonus applied: 200 Birr deducted from all profit calculations`);
+            } else {
+              // Prepaid: Add 200 to balance and mark bonus as used
+              const newBalance = parseFloat(user.balance) + 200;
+              await client.query('UPDATE users SET balance = $1 WHERE id = $2', [newBalance, userId]);
+              
+              await client.query(`
+                UPDATE daily_bonuses 
+                SET bonus_used = true, bonus_claimed = true
+                WHERE user_id = $1 AND bonus_date = $2
+              `, [userId, today]);
+              
+              bonusMessage = `🎉 House Bonus Applied! 200 Birr added to your balance (New balance: ${newBalance.toFixed(2)} Birr)`;
+              console.log(`✅ Prepaid bonus applied: Balance increased to ${newBalance}, 200 Birr deducted from all profit calculations`);
+            }
+
+            await client.query('COMMIT');
+          } catch (transactionError) {
+            await client.query('ROLLBACK');
+            console.error(`❌ FAILED to apply bonus in transaction:`, transactionError);
+            throw transactionError;
+          } finally {
+            client.release();
           }
         }
       } else {
@@ -1906,6 +1940,53 @@ router.post('/check-winners', authenticateToken, [
 
     console.log('🏆 Winner check completed. Winners found:', winners.length);
 
+    // If winners are found, save them to the database
+    if (winners.length > 0) {
+      try {
+        const winnerCartelaIds = winners.map(w => w.cartelaId);
+        
+        console.log('💾 Saving winner cartela IDs to database:', winnerCartelaIds);
+
+        // Update the game_analysis table with winner cartela IDs
+        const updateAnalysisQuery = `
+          INSERT INTO game_analysis (
+            id, game_id, winner_cartela_ids, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (game_id) 
+          DO UPDATE SET 
+            winner_cartela_ids = $3,
+            updated_at = $5
+        `;
+
+        await db.run(updateAnalysisQuery, [
+          require('crypto').randomUUID(),
+          gameId,
+          JSON.stringify(winnerCartelaIds),
+          new Date().toISOString(),
+          new Date().toISOString()
+        ]);
+
+        // Also mark the cartelas as winners in the cartelas table
+        for (const winner of winners) {
+          await db.run(`
+            UPDATE cartelas 
+            SET is_winner = 1, pattern = $1, updated_at = $2
+            WHERE card_id = $3
+          `, [
+            winner.winningPatterns[0] || selectedPattern,
+            new Date().toISOString(),
+            winner.cartelaId
+          ]);
+        }
+
+        console.log('✅ Successfully saved winner information to database');
+
+      } catch (saveError) {
+        console.error('❌ Error saving winner information:', saveError);
+        // Don't fail the response, just log the error
+      }
+    }
+
     // Return winner information
     const response = {
       hasWinner: winners.length > 0,
@@ -1913,7 +1994,8 @@ router.post('/check-winners', authenticateToken, [
       winningCartela: winningCartela,
       winningPatterns: winningPatterns,
       checkedCartelas: selectedCartelas.length,
-      calledNumbersCount: calledNumbers.length
+      calledNumbersCount: calledNumbers.length,
+      winnerCartelaIds: winners.map(w => w.cartelaId)
     };
 
     console.log('📤 Winner check response:', response);

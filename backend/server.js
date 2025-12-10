@@ -19,6 +19,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const soundRoutes = require('./routes/sound');
 const settingsRoutes = require('./routes/settings');
 const bonusRoutes = require('./routes/bonuses');
+const balanceRoutes = require('./routes/balance');
 
 const app = express();
 const PORT = process.env.PORT || 3003; // Changed from 3001 to 3002
@@ -165,7 +166,10 @@ app.use('/api/bonuses', (req, res, next) => {
   next();
 }, bonusRoutes);
 
-
+app.use('/api/balance', (req, res, next) => {
+  console.log('💰 Balance router hit:', req.method, req.path);
+  next();
+}, balanceRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

@@ -11,6 +11,7 @@ import GamePage from './components/GamePageOptimized';
 import Selectcartela from './components/select-cartela.tsx';
 import CardList from './components/CardList';
 import Settings from './components/Settings';
+import Balance from './components/Balance';
 import Sidebar from './components/Sidebar';
 import BackofficeLayout from './components/BackofficeLayout';
 import BackofficeDashboard from './components/BackofficeDashboard';
@@ -20,7 +21,6 @@ import CartelaManagement from './components/CartelaManagement';
 import PackageManagement from './components/PackageManagement';
 import NewAccountPage from './components/NewAccountPage';
 import NewGame from './components/NewGame';
-import GameAnalytics from './components/GameAnalytics';
 
 // Initialize audio manager with cache-first strategy
 const initializeAudioManager = async () => {
@@ -124,7 +124,7 @@ function AppContent() {
       }
     } else {
       // Regular user - redirect from root or any non-user path to game
-      const validUserPaths = ['/dashboard', '/game', '/game-analytics', '/select-cartela', '/newgame', '/card-list', '/settings', '/new-account'];
+      const validUserPaths = ['/dashboard', '/game', '/balance', '/select-cartela', '/newgame', '/card-list', '/settings', '/new-account'];
       const isValidUserPath = validUserPaths.some(path => currentPath === path);
       
       if (currentPath === '/' || !isValidUserPath) {
@@ -220,7 +220,7 @@ function AppContent() {
         <main className="flex-1 min-w-0 overflow-x-hidden">{/* Ensure content doesn't overflow on mobile */}
           <Routes>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/game-analytics" element={<GameAnalytics />} />
+            <Route path="/balance" element={<Balance />} />
             <Route path="/game" element={<GamePage onNavigateToLottery={() => navigate('/newgame')} />} />
             <Route path="/select-cartela" element={<Selectcartela />} />
             <Route path="/newgame" element={<NewGame />} />
