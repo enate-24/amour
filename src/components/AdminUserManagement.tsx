@@ -91,6 +91,7 @@ interface CreateUserData {
   shopname: string;
   role: string;
   userType: string;
+  balance?: number;
   balanceLimit?: number;
 }
 
@@ -206,6 +207,11 @@ const AdminUserManagement: React.FC = () => {
 
     if (formData.shopname && formData.shopname.length < 2) {
       errors.push('Shop name must be at least 2 characters');
+    }
+
+    // Validate balance for prepaid users
+    if (formData.userType === 'prepaid' && (formData.balance === undefined || formData.balance < 0)) {
+      errors.push('Balance is required for prepaid users and must be non-negative');
     }
 
     return errors;
@@ -452,9 +458,11 @@ const AdminUserManagement: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <Users className="h-6 w-6 sm:h-8 sm:h-8 text-yellow-400 flex-shrink-0" />
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">User Management</h1>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <Users className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-400 flex-shrink-0" />
+              <h1 className="text-2xl sm:text-3xl font-bold text-white">User Management</h1>
+            </div>
             {/* Backend Status Indicator */}
             <div className="flex items-center space-x-2">
               <div className={`w-2 h-2 rounded-full ${
@@ -470,34 +478,35 @@ const AdminUserManagement: React.FC = () => {
               </span>
             </div>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => checkBackendStatus()}
-              className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+              className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-2 rounded-lg font-medium flex items-center justify-center transition-colors"
               title="Check backend status"
             >
               <RefreshCw className="h-4 w-4" />
             </button>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
             >
               <Plus className="h-4 w-4" />
-              <span>Create User</span>
+              <span className="hidden sm:inline">Create User</span>
+              <span className="sm:hidden">Create</span>
             </button>
           </div>
         </div>
 
         {/* Search and Filters */}
-        <div className="mb-6 flex space-x-4">
-          <div className="flex-1 relative">
+        <div className="mb-6">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search users by username, email, or shop name..."
+              placeholder="Search users..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+              className="w-full pl-10 pr-4 py-2.5 sm:py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm sm:text-base placeholder-slate-400 focus:border-blue-500 focus:outline-none"
             />
           </div>
         </div>
@@ -549,114 +558,9 @@ const AdminUserManagement: React.FC = () => {
           </div>
         )}
 
-        {/* Users Table */}
+        {/* Users Table/Cards */}
         <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-700">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    User
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Shop Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    House Profit
-                  </th>
-
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700">
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-700/50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-white">{user.username}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-slate-300">{user.email}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-slate-300">{user.shopname || '-'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        user.role === 'admin'
-                          ? 'bg-purple-600 text-purple-100'
-                          : 'bg-green-600 text-green-100'
-                      }`}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                      {user.balance.toFixed(2)} Birr
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        user.is_active
-                          ? 'bg-green-600 text-green-100'
-                          : 'bg-red-600 text-red-100'
-                      }`}>
-                        {user.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                      {formatDate(user.createdAt)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end space-x-2">
-                        <button
-                          onClick={() => openPasswordModal(user.id)}
-                          className="text-purple-400 hover:text-purple-300 transition-colors"
-                          title="Update password"
-                        >
-                          <Lock className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleToggleBan(user.id, user.username, user.is_active)}
-                          className={`${
-                            user.is_active 
-                              ? 'text-orange-400 hover:text-orange-300' 
-                              : 'text-green-400 hover:text-green-300'
-                          } transition-colors`}
-                          title={user.is_active ? 'Ban user' : 'Unban user'}
-                          disabled={user.id === currentUser?.id}
-                        >
-                          {user.is_active ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteUser(user.id, user.username)}
-                          className="text-red-400 hover:text-red-300 transition-colors"
-                          title="Delete user and all data"
-                          disabled={user.id === currentUser?.id}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {filteredUsers.length === 0 && (
+          {filteredUsers.length === 0 ? (
             <div className="text-center py-12">
               <Users className="mx-auto h-12 w-12 text-slate-400" />
               <h3 className="mt-2 text-sm font-medium text-slate-400">No users found</h3>
@@ -664,14 +568,199 @@ const AdminUserManagement: React.FC = () => {
                 {searchTerm ? 'Try adjusting your search criteria.' : 'Get started by creating your first user.'}
               </p>
             </div>
+          ) : (
+            <>
+              {/* Desktop Table View - Hidden on Mobile */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-700">
+                    <tr>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                        User
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                        Email
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                        Shop Name
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                        Role
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                        Balance
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                        Created
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700">
+                    {filteredUsers.map((user) => (
+                      <tr key={user.id} className="hover:bg-slate-700/50">
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-white">{user.username}</div>
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-slate-300">{user.email}</div>
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-slate-300">{user.shopname || '-'}</div>
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            user.role === 'admin'
+                              ? 'bg-purple-600 text-purple-100'
+                              : 'bg-green-600 text-green-100'
+                          }`}>
+                            {user.role}
+                          </span>
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                          {user.balance.toFixed(2)} Birr
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            user.is_active
+                              ? 'bg-green-600 text-green-100'
+                              : 'bg-red-600 text-red-100'
+                          }`}>
+                            {user.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                          {formatDate(user.createdAt)}
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => openPasswordModal(user.id)}
+                              className="text-purple-400 hover:text-purple-300 transition-colors"
+                              title="Update password"
+                            >
+                              <Lock className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleBan(user.id, user.username, user.is_active)}
+                              className={`${
+                                user.is_active 
+                                  ? 'text-orange-400 hover:text-orange-300' 
+                                  : 'text-green-400 hover:text-green-300'
+                              } transition-colors`}
+                              title={user.is_active ? 'Ban user' : 'Unban user'}
+                              disabled={user.id === currentUser?.id}
+                            >
+                              {user.is_active ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(user.id, user.username)}
+                              className="text-red-400 hover:text-red-300 transition-colors"
+                              title="Delete user and all data"
+                              disabled={user.id === currentUser?.id}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View - Visible only on Mobile */}
+              <div className="md:hidden divide-y divide-slate-700">
+                {filteredUsers.map((user) => (
+                  <div key={user.id} className="p-4">
+                    {/* Header Row */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-base font-semibold text-white truncate">{user.username}</h3>
+                        <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                        {user.shopname && (
+                          <p className="text-xs text-slate-500 truncate mt-0.5">{user.shopname}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 ml-2">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          user.role === 'admin'
+                            ? 'bg-purple-600 text-purple-100'
+                            : 'bg-green-600 text-green-100'
+                        }`}>
+                          {user.role}
+                        </span>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          user.is_active
+                            ? 'bg-green-600 text-green-100'
+                            : 'bg-red-600 text-red-100'
+                        }`}>
+                          {user.is_active ? 'Active' : 'Banned'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Info Grid */}
+                    <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
+                      <div>
+                        <p className="text-xs text-slate-400">Balance</p>
+                        <p className="text-slate-200 font-medium">{user.balance.toFixed(2)} Birr</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-400">Created</p>
+                        <p className="text-slate-200 text-xs">{formatDate(user.createdAt)}</p>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 pt-3 border-t border-slate-700">
+                      <button
+                        onClick={() => openPasswordModal(user.id)}
+                        className="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+                        title="Update password"
+                      >
+                        <Lock className="h-4 w-4" />
+                        <span>Password</span>
+                      </button>
+                      <button
+                        onClick={() => handleToggleBan(user.id, user.username, user.is_active)}
+                        className={`flex-1 px-3 py-2 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                          user.is_active 
+                            ? 'bg-orange-600 hover:bg-orange-700' 
+                            : 'bg-green-600 hover:bg-green-700'
+                        }`}
+                        title={user.is_active ? 'Ban user' : 'Unban user'}
+                        disabled={user.id === currentUser?.id}
+                      >
+                        {user.is_active ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                        <span>{user.is_active ? 'Ban' : 'Unban'}</span>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteUser(user.id, user.username)}
+                        className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center"
+                        title="Delete user and all data"
+                        disabled={user.id === currentUser?.id}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
 
         {/* Update Password Modal */}
         {showPasswordModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md">
-              <div className="p-6">
+            <div className="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="p-4 sm:p-6">
                 <h3 className="text-lg font-medium text-white mb-4">Update User Password</h3>
 
                 <div className="space-y-4">
@@ -725,8 +814,8 @@ const AdminUserManagement: React.FC = () => {
         {/* Create User Modal */}
         {showCreateModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md">
-              <div className="p-6">
+            <div className="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="p-4 sm:p-6">
                 <h3 className="text-lg font-medium text-white mb-4">Create New User</h3>
 
                 <form onSubmit={handleCreateUser} className="space-y-4">
@@ -809,6 +898,51 @@ const AdminUserManagement: React.FC = () => {
                     </select>
                   </div>
 
+                  <div>
+                    <label htmlFor="userType" className="block text-sm font-medium text-slate-300 mb-1">
+                      User Type *
+                    </label>
+                    <select
+                      id="userType"
+                      name="userType"
+                      value={formData.userType}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="prepaid">Prepaid</option>
+                      <option value="postpaid">Postpaid</option>
+                    </select>
+                  </div>
+
+                  {formData.userType === 'prepaid' && (
+                    <div>
+                      <label htmlFor="balance" className="block text-sm font-medium text-slate-300 mb-1">
+                        Initial Balance * (Birr)
+                      </label>
+                      <input
+                        type="number"
+                        id="balance"
+                        name="balance"
+                        value={formData.balance || 0}
+                        onChange={handleInputChange}
+                        required
+                        min="0"
+                        step="0.01"
+                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                        placeholder="Enter initial balance"
+                      />
+                      <p className="text-xs text-slate-400 mt-1">Prepaid users can only spend up to their balance</p>
+                    </div>
+                  )}
+
+                  {formData.userType === 'postpaid' && (
+                    <div>
+                      <p className="text-sm text-slate-300 p-3 bg-slate-700 rounded-lg border border-slate-600">
+                        <span className="font-medium">Postpaid Account:</span> This user will have unlimited credit. Their balance will go negative as they play games.
+                      </p>
+                    </div>
+                  )}
+
                   {formErrors.length > 0 && (
                     <div className="p-3 bg-red-600/20 border border-red-600 rounded-lg">
                       <ul className="text-sm text-red-400 space-y-1">
@@ -844,8 +978,8 @@ const AdminUserManagement: React.FC = () => {
         {/* Troubleshooting Modal */}
         {showTroubleshootModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-              <div className="p-6">
+            <div className="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="p-4 sm:p-6">
                 <h3 className="text-lg font-medium text-white mb-4">Network Connection Troubleshooting</h3>
 
                 <div className="space-y-4 text-sm text-slate-300">

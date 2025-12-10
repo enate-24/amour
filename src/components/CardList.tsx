@@ -70,13 +70,13 @@ const CardList: React.FC = () => {
     const columns = ['B', 'I', 'N', 'G', 'O'] as const;
 
     return (
-      <div className="inline-block bg-white rounded-xl shadow-lg p-4">
+      <div className="inline-block bg-white rounded-xl shadow-lg p-3 sm:p-4">
         {/* BINGO Header */}
-        <div className="grid grid-cols-5 gap-1.5 mb-3">
+        <div className="grid grid-cols-5 gap-1 sm:gap-1.5 mb-2 sm:mb-3">
           {columns.map((letter) => (
             <div
               key={letter}
-              className="h-8 flex items-center justify-center font-bold text-gray-800 text-2xl"
+              className="h-6 sm:h-8 flex items-center justify-center font-bold text-gray-800 text-xl sm:text-2xl"
             >
               {letter}
             </div>
@@ -84,7 +84,7 @@ const CardList: React.FC = () => {
         </div>
 
         {/* Numbers Grid */}
-        <div className="grid grid-cols-5 gap-1.5">
+        <div className="grid grid-cols-5 gap-1 sm:gap-1.5">
           {Array.from({ length: 5 }, (_, rowIndex) =>
             columns.map((column, colIndex) => {
               const isCenter = rowIndex === 2 && colIndex === 2;
@@ -93,9 +93,9 @@ const CardList: React.FC = () => {
               return (
                 <div
                   key={`${column}-${rowIndex}`}
-                  className={`w-12 h-12 flex items-center justify-center font-bold text-lg rounded-lg border-2 ${
+                  className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center font-bold text-base sm:text-lg rounded-lg border-2 ${
                     isCenter
-                      ? 'bg-gray-200 text-gray-600 border-gray-300'
+                      ? 'bg-gray-200 text-gray-600 border-gray-300 text-xs sm:text-sm'
                       : 'bg-white text-gray-800 border-gray-200'
                   }`}
                 >
@@ -110,20 +110,15 @@ const CardList: React.FC = () => {
   };
 
   return (
-    <div className="p-4 lg:p-8 min-h-screen" style={{
-      marginRight: '100px',
-      marginLeft: '100px',
-      marginTop: '50px',
-      marginBottom: '30px'
-    }}>
+    <div className="p-4 sm:p-6 lg:p-8 min-h-screen max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Cartela List for one</h1>
-        <div className="flex gap-3">
-          <button className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded font-medium transition-colors">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-3 sm:mb-4">Cartela List</h1>
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+          <button className="px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors">
             New Game
           </button>
-          <button className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded font-medium transition-colors">
+          <button className="px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors">
             Add Cartela
           </button>
         </div>
@@ -153,7 +148,7 @@ const CardList: React.FC = () => {
       {/* Cartela Cards Display - Simple Grid of Card IDs */}
       {!loading && !error && (
         <div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 sm:gap-2.5">
             {cartelas
               .sort((a, b) => {
                 // Sort by card_id numerically
@@ -163,7 +158,7 @@ const CardList: React.FC = () => {
                 <button
                   key={cartela.id || `cartela-${index}`}
                   onClick={() => handleCartelaClick(cartela)}
-                  className="w-14 h-14 bg-blue-500 hover:bg-blue-600 text-white text-lg font-semibold rounded transition-colors flex items-center justify-center"
+                  className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white text-base sm:text-lg font-semibold rounded-lg transition-colors flex items-center justify-center touch-manipulation"
                   title={`Click to view Cartela ${cartela.card_id}`}
                 >
                   {cartela.card_id}
@@ -172,8 +167,8 @@ const CardList: React.FC = () => {
           </div>
 
           {cartelas.length === 0 && (
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-              <p className="text-blue-700 font-medium text-center">
+            <div className="mt-6 p-4 sm:p-6 bg-blue-50 rounded-lg">
+              <p className="text-blue-700 font-medium text-center text-sm sm:text-base">
                 No cartelas available. Please check if the backend server is running.
               </p>
             </div>
@@ -183,24 +178,24 @@ const CardList: React.FC = () => {
 
       {/* Modal for displaying cartela numbers */}
       {showModal && selectedCartela && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-auto max-w-xl">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl my-4">
             {/* Modal Header */}
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-2xl font-bold text-gray-800">
-                Viewing Cartela {selectedCartela.card_id}
+            <div className="flex justify-between items-center p-4 sm:p-6 border-b">
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-800">
+                Cartela {selectedCartela.card_id}
               </h2>
               <button
                 onClick={handleCloseModal}
-                className="text-gray-400 hover:text-gray-600 transition-colors bg-gray-100 hover:bg-gray-200 rounded-full p-2"
+                className="text-gray-400 hover:text-gray-600 transition-colors bg-gray-100 hover:bg-gray-200 rounded-full p-2 flex-shrink-0"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-8">
-              <div className="flex justify-center">
+            <div className="p-4 sm:p-8">
+              <div className="flex justify-center overflow-x-auto">
                 {renderBingoCard(selectedCartela)}
               </div>
             </div>

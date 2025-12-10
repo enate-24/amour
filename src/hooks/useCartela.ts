@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { cartelaAPI, Cartela } from '../lib/api';
+import { cartelaCacheDB } from '../utils/cartelaCache';
 
 export interface UseCartelaReturn {
   cartelas: Cartela[];
@@ -9,11 +10,12 @@ export interface UseCartelaReturn {
   getCartelaById: (cardId: string) => Cartela | null;
   getUserCartelas: (userId: string) => Promise<Cartela[]>;
   refreshCartelas: () => Promise<void>;
+  clearCache: () => Promise<void>;
 }
 
 export function useCartela(): UseCartelaReturn {
   const [cartelas, setCartelas] = useState<Cartela[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start with true, will be set to false quickly if cache exists
   const [error, setError] = useState<string | null>(null);
 
   // Generate a single cartela with unique numbers
@@ -140,14 +142,65 @@ export function useCartela(): UseCartelaReturn {
     }
   };
 
-  // Refresh cartelas from database
+  // Refresh cartelas from database with IndexedDB caching
   const refreshCartelas = async (): Promise<void> => {
+    // Performance timing
+    const startTime = performance.now();
+
+    // Try to load from IndexedDB cache first (synchronously set loading)
+    try {
+      const cachedCartelas = await cartelaCacheDB.getAllCartelas();
+      
+      if (cachedCartelas.length > 0) {
+        const formattedCached: Cartela[] = cachedCartelas.map((item: any) => ({
+          id: item.id,
+          card_id: item.card_id,
+          user_id: item.user_id,
+          game_id: item.game_id,
+          numbers: item.numbers,
+          is_winner: item.is_winner || false,
+          winning_pattern: item.winning_pattern,
+          created_at: item.created_at
+        }));
+
+        setCartelas(formattedCached);
+        setLoading(false);
+        
+        const cacheTime = (performance.now() - startTime).toFixed(2);
+        console.log(`⚡ Loaded ${formattedCached.length} cartelas from IndexedDB cache in ${cacheTime}ms`);
+        
+        // Also save to localStorage for even faster next load
+        try {
+          localStorage.setItem('cartelas_quick_cache', JSON.stringify(formattedCached));
+          localStorage.setItem('cartelas_cache_timestamp', Date.now().toString());
+        } catch (e) {
+          console.warn('⚠️ Failed to save to localStorage:', e);
+        }
+        
+        // Load from API in background to update cache
+        fetchAndCacheCartelas(false);
+        return;
+      }
+    } catch (cacheError) {
+      console.warn('⚠️ IndexedDB cache read failed, loading from API:', cacheError);
+    }
+
+    // If no cache, load from API with loading state
     try {
       setLoading(true);
       setError(null);
+      await fetchAndCacheCartelas(true);
+    } catch (err) {
+      console.error('Error refreshing cartelas:', err);
+      setError(err instanceof Error ? err.message : 'Failed to refresh cartelas');
+      setLoading(false);
+    }
+  };
 
-      // Performance timing
-      const startTime = performance.now();
+  // Helper function to fetch from API and update cache
+  const fetchAndCacheCartelas = async (updateLoading: boolean): Promise<void> => {
+    try {
+      const fetchStartTime = performance.now();
 
       // Use the /all-cartelas endpoint to get cartelas with proper bingo card data
       const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -172,21 +225,68 @@ export function useCartela(): UseCartelaReturn {
 
       setCartelas(formattedCartelas);
 
-      // Log performance
-      const endTime = performance.now();
-      const loadTime = (endTime - startTime).toFixed(2);
-      console.log(`✅ Loaded ${formattedCartelas.length} cartelas in ${loadTime}ms`);
+      // Save to localStorage for instant access on next load
+      try {
+        localStorage.setItem('cartelas_quick_cache', JSON.stringify(formattedCartelas));
+        localStorage.setItem('cartelas_cache_timestamp', Date.now().toString());
+        console.log(`💾 Saved ${formattedCartelas.length} cartelas to localStorage for instant access`);
+      } catch (e) {
+        console.warn('⚠️ Failed to save to localStorage (quota exceeded?):', e);
+      }
 
-    } catch (err) {
-      console.error('Error refreshing cartelas:', err);
-      setError(err instanceof Error ? err.message : 'Failed to refresh cartelas');
+      // Save to IndexedDB cache in background
+      cartelaCacheDB.saveCartelas(formattedCartelas).catch(err => {
+        console.warn('⚠️ Failed to save cartelas to IndexedDB cache:', err);
+      });
+
+      // Log performance
+      const fetchTime = (performance.now() - fetchStartTime).toFixed(2);
+      console.log(`✅ Loaded ${formattedCartelas.length} cartelas from API in ${fetchTime}ms`);
+
     } finally {
-      setLoading(false);
+      if (updateLoading) {
+        setLoading(false);
+      }
     }
   };
 
-  // Load cartelas on mount
+  // Clear cache function
+  const clearCache = async (): Promise<void> => {
+    try {
+      await cartelaCacheDB.clearCache();
+      console.log('🗑️ Cartela cache cleared successfully');
+    } catch (err) {
+      console.error('❌ Error clearing cache:', err);
+    }
+  };
+
+  // Load cartelas on mount with instant cache check
   useEffect(() => {
+    // Try to load from localStorage first for instant display
+    const cachedCartelasStr = localStorage.getItem('cartelas_quick_cache');
+    const cacheTimestamp = localStorage.getItem('cartelas_cache_timestamp');
+    
+    if (cachedCartelasStr && cacheTimestamp) {
+      const cacheAge = Date.now() - parseInt(cacheTimestamp);
+      const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+      
+      if (cacheAge < CACHE_DURATION) {
+        try {
+          const cachedData = JSON.parse(cachedCartelasStr);
+          setCartelas(cachedData);
+          setLoading(false);
+          console.log(`⚡⚡ INSTANT load from localStorage: ${cachedData.length} cartelas`);
+          
+          // Still refresh from IndexedDB/API in background
+          refreshCartelas();
+          return;
+        } catch (e) {
+          console.warn('Failed to parse localStorage cache:', e);
+        }
+      }
+    }
+    
+    // No localStorage cache, proceed with normal flow
     refreshCartelas();
   }, []);
 
@@ -197,6 +297,7 @@ export function useCartela(): UseCartelaReturn {
     createCartela,
     getCartelaById,
     getUserCartelas,
-    refreshCartelas
+    refreshCartelas,
+    clearCache
   };
 }

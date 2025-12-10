@@ -9,6 +9,54 @@ const { emitNumberCalled, emitGameStatusChange } = require('../websocket');
 
 const router = express.Router();
 
+// Helper function to transform game data from database format to API format
+const transformGameData = (gameRow) => {
+  if (!gameRow) return null;
+
+  // Parse JSON fields safely
+  const parseJSON = (field, defaultValue = []) => {
+    if (Array.isArray(field)) return field;
+    if (typeof field === 'string') {
+      try {
+        const parsed = JSON.parse(field || JSON.stringify(defaultValue));
+        return Array.isArray(parsed) ? parsed : defaultValue;
+      } catch (e) {
+        console.warn('Error parsing JSON field:', e);
+        return defaultValue;
+      }
+    }
+    return defaultValue;
+  };
+
+  // Calculate bet_amount_per_cartela if not present
+  let betAmountPerCartela = parseFloat(gameRow.bet_amount_per_cartela);
+  if (!betAmountPerCartela && gameRow.cartelas_selected > 0) {
+    betAmountPerCartela = parseFloat(gameRow.bet_money) / gameRow.cartelas_selected;
+  } else if (!betAmountPerCartela) {
+    betAmountPerCartela = 5.0; // Default fallback
+  }
+
+  // Return only camelCase fields (no duplication)
+  return {
+    id: gameRow.id,
+    gameNumber: gameRow.game_number,
+    status: gameRow.status,
+    betMoney: parseFloat(gameRow.bet_money) || 0,
+    betAmountPerCartela: betAmountPerCartela,
+    winMoney: parseFloat(gameRow.win_money) || 0,
+    cartelasSelected: gameRow.cartelas_selected,
+    selectedCartelas: parseJSON(gameRow.selected_cartelas, []),
+    calledNumbers: parseJSON(gameRow.called_numbers, []),
+    numberSequence: parseJSON(gameRow.number_sequence, []),
+    totalNumbers: parseInt(gameRow.total_numbers) || 75,
+    winnerPattern: gameRow.winner_pattern,
+    houseCutPercentage: parseFloat(gameRow.house_cut_percentage) || 25,
+    userId: gameRow.user_id,
+    createdAt: gameRow.created_at,
+    updatedAt: gameRow.updated_at
+  };
+};
+
 // Create new game (authenticated users)
 router.post('/', authenticateToken, [
   body('betMoney').isFloat({ min: 0.01 }).withMessage('Bet money must be positive'),
@@ -129,39 +177,14 @@ router.get('/active', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'No active game found' });
     }
 
-    // Called numbers are NOT stored in database - they are managed in localStorage only
-    // Always return empty array for calledNumbers from backend
-    const calledNumbers = [];
-
-    // Parse selected_cartelas from database using safe JSON parsing
-    const selectedCartelas = safeJSONParseArray(activeGame.selected_cartelas, []);
-
-    // Calculate bet_amount_per_cartela if not present (for old games)
-    let betAmountPerCartela = parseFloat(activeGame.bet_amount_per_cartela);
-    if (!betAmountPerCartela && activeGame.cartelas_selected > 0) {
-      betAmountPerCartela = parseFloat(activeGame.bet_money) / activeGame.cartelas_selected;
-      console.log(`[GET /active] Calculated bet_amount_per_cartela for old game: ${betAmountPerCartela}`);
-    } else if (!betAmountPerCartela) {
-      betAmountPerCartela = 5.0; // Default fallback
-    }
-
-    const game = {
-      ...activeGame,
-      gameNumber: activeGame.game_number,
-      calledNumbers: calledNumbers, // Always empty - managed in localStorage
-      selectedCartelas: selectedCartelas, // Include the selected cartela IDs
-      cartelasSelected: activeGame.cartelas_selected,
-      betMoney: parseFloat(activeGame.bet_money) || 0,
-      betAmountPerCartela: betAmountPerCartela, // NEW: Per-cartela bet amount
-      winMoney: parseFloat(activeGame.win_money) || 0,
-      totalNumbers: parseInt(activeGame.total_numbers) || 75,
-      winnerPattern: activeGame.winner_pattern,
-      createdAt: activeGame.created_at,
-      updatedAt: activeGame.updated_at
-    };
+    // Transform game data to clean camelCase format (no duplication)
+    const game = transformGameData(activeGame);
+    
+    // Override calledNumbers to always be empty (managed in localStorage only)
+    game.calledNumbers = [];
 
     console.log(`[GET /active] Loaded game ${game.id} for user ${req.user?.id || 'unknown'}. Sequence exists: ${!!activeGame.number_sequence}`);
-    console.log(`[GET /active] selectedCartelas:`, selectedCartelas);
+    console.log(`[GET /active] selectedCartelas:`, game.selectedCartelas);
 
     res.json({ game });
   } catch (error) {
@@ -206,39 +229,8 @@ router.get('/', async (req, res) => {
 
     const gamesResult = await db.all(gamesQuery, queryParams);
 
-    // Parse JSON fields for each game
-    const games = gamesResult.map(game => {
-      // Parse called_numbers from database (stored as JSON string, but may already be parsed by driver)
-      let calledNumbers = [];
-      try {
-        if (Array.isArray(game.called_numbers)) {
-          // Already parsed by database driver
-          calledNumbers = game.called_numbers;
-        } else if (typeof game.called_numbers === 'string') {
-          // Stored as JSON string, need to parse
-          const parsed = JSON.parse(game.called_numbers || '[]');
-          calledNumbers = Array.isArray(parsed) ? parsed : [];
-        } else {
-          // Fallback for unexpected format
-          calledNumbers = [];
-        }
-      } catch (e) {
-        console.warn('Error parsing called_numbers for game', game.id, e);
-        calledNumbers = [];
-      }
-
-      return {
-        ...game,
-        calledNumbers: calledNumbers,
-        cartelasSelected: game.cartelas_selected,
-        betMoney: game.bet_money,
-        winMoney: game.win_money,
-        totalNumbers: game.total_numbers,
-        winnerPattern: game.winner_pattern,
-        createdAt: game.created_at,
-        updatedAt: game.updated_at
-      };
-    });
+    // Transform each game to clean camelCase format (no duplication)
+    const games = gamesResult.map(game => transformGameData(game));
 
     res.json({
       games,
@@ -309,41 +301,38 @@ router.put('/:id/start', authenticateToken, [
       console.log(`🎯 Using existing number sequence for game ${gameId}`);
     }
 
-    // Update game status to started with the pre-generated sequence
+    const now = new Date().toISOString();
+
+    // OPTIMIZATION: Single database update instead of two separate operations
     await db.run(`
       UPDATE games
       SET status = 'started', number_sequence = $1, updated_at = $2
       WHERE id = $3
-    `, [JSON.stringify(numberSequence), new Date().toISOString(), gameId]);
+    `, [JSON.stringify(numberSequence), now, gameId]);
 
-    // Parse JSON fields for response
-    const game = {
-      ...gameResult,
-      calledNumbers: [],
-      cartelasSelected: gameResult.cartelas_selected,
-      betMoney: gameResult.bet_money,
-      winMoney: gameResult.win_money,
-      totalNumbers: gameResult.total_numbers,
-      winnerPattern: gameResult.winner_pattern,
-      createdAt: gameResult.created_at,
-      updatedAt: new Date().toISOString(),
-      status: 'started'
-    };
+    // Transform game data to clean camelCase format
+    const game = transformGameData(gameResult);
+    game.calledNumbers = [];
+    game.status = 'started';
+    game.updatedAt = now;
+    game.numberSequence = numberSequence;
 
-    // Log admin action in database
-    await db.run(`
-      INSERT INTO admin_logs (id, admin_id, action, target_type, target_id, details, ip_address, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `, [
-      uuidv4(),
-      req.user.id,
-      'START_GAME',
-      'GAME',
-      gameId,
-      JSON.stringify({ gameNumber: game.gameNumber }), // Game started without pre-generated sequence
-      req.ip,
-      new Date().toISOString()
-    ]);
+    // OPTIMIZATION: Log admin action asynchronously (non-blocking)
+    setImmediate(() => {
+      db.run(`
+        INSERT INTO admin_logs (id, admin_id, action, target_type, target_id, details, ip_address, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, [
+        uuidv4(),
+        req.user.id,
+        'START_GAME',
+        'GAME',
+        gameId,
+        JSON.stringify({ gameNumber: game.gameNumber }),
+        req.ip,
+        now
+      ]).catch(err => console.error('Failed to log admin action:', err));
+    });
 
     res.json({
       message: 'Game started successfully',
@@ -519,20 +508,15 @@ router.put('/:id/call-number', authenticateToken, [
         remainingNumbers: numberSequence.filter(n => !calledSet.has(n)).length
       });
 
+      // Transform game data to clean camelCase format
+      const transformedGame = transformGameData(game);
+      transformedGame.calledNumbers = updatedCalledNumbers;
+      transformedGame.updatedAt = new Date().toISOString();
+
       res.json({
         message: 'Number called successfully',
         calledNumber: numberToCall,
-        game: {
-          ...game,
-          calledNumbers: updatedCalledNumbers,
-          cartelasSelected: game.cartelas_selected,
-          betMoney: parseFloat(game.bet_money) || 0,
-          winMoney: parseFloat(game.win_money) || 0,
-          totalNumbers: parseInt(game.total_numbers) || 75,
-          winnerPattern: game.winner_pattern,
-          createdAt: game.created_at,
-          updatedAt: new Date().toISOString()
-        },
+        game: transformedGame,
         debug: {
           clientCalledNumbersLength: clientCalledNumbers.length,
           numberToCall: numberToCall,
@@ -560,6 +544,7 @@ router.put('/:id/finish-session', authenticateToken, [
   body('winMoney').isFloat({ min: 0 }).withMessage('Win money must be non-negative'),
   body('winnerCartelaIds').optional().isArray().withMessage('Winner cartela IDs must be an array')
 ], async (req, res) => {
+  console.log('🏁 FINISH-SESSION endpoint called for game:', req.params.id);
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -568,6 +553,7 @@ router.put('/:id/finish-session', authenticateToken, [
 
     const gameId = req.params.id;
     const { winMoney, winnerCartelaIds = [] } = req.body;
+    console.log(`🏁 Finishing game ${gameId}, winMoney: ${winMoney}`);
 
     // Get game from database
     const gameQuery = 'SELECT * FROM games WHERE id = $1';
@@ -668,42 +654,166 @@ router.put('/:id/finish-session', authenticateToken, [
       console.log(`User ${req.user.id} finished game ${gameId}`);
     }
 
-    // Parse called_numbers from database (stored as JSON string, but may already be parsed by driver)
-    let calledNumbers = [];
+    // Transform game data to clean camelCase format
+    const game = transformGameData(gameResult);
+    game.winMoney = winMoney;
+    game.status = 'finished';
+    game.updatedAt = new Date().toISOString();
+
+    // Check and auto-apply house bonus after finishing game
+    let bonusMessage = null;
     try {
-      if (Array.isArray(gameResult.called_numbers)) {
-        // Already parsed by database driver
-        calledNumbers = gameResult.called_numbers;
-      } else if (typeof gameResult.called_numbers === 'string') {
-        // Stored as JSON string, need to parse
-        const parsed = JSON.parse(gameResult.called_numbers || '[]');
-        calledNumbers = Array.isArray(parsed) ? parsed : [];
+      console.log('🔍 Starting bonus check...');
+      const today = new Date().toISOString().split('T')[0];
+      const userId = gameResult.user_id;
+      console.log(`📅 Today: ${today}, User ID: ${userId}`);
+
+      // Get user info to check payment type
+      const user = await db.get('SELECT user_type, balance FROM users WHERE id = $1', [userId]);
+      console.log(`👤 User found: ${user ? 'Yes' : 'No'}, Type: ${user?.user_type}, Balance: ${user?.balance}`);
+      
+      if (user) {
+        // Calculate today's profit for this user
+        const todayGamesQuery = `
+          SELECT COALESCE(SUM(bet_money - COALESCE(win_money, 0)), 0) as daily_profit
+          FROM games
+          WHERE user_id = $1 AND DATE(created_at) = $2 AND status = 'finished'
+        `;
+        const profitResult = await db.get(todayGamesQuery, [userId, today]);
+        const dailyProfit = parseFloat(profitResult?.daily_profit || 0);
+
+        console.log(`💰 Daily profit for user ${userId}: ${dailyProfit} Birr`);
+        console.log(`✅ Profit check: ${dailyProfit >= 1000 ? 'ELIGIBLE' : 'NOT ELIGIBLE'} (need ≥1000)`);
+
+        // Check if bonus already used today
+        const bonusCheckQuery = 'SELECT bonus_used, daily_profit FROM daily_bonuses WHERE user_id = $1 AND bonus_date = $2';
+        let bonusRecord = await db.get(bonusCheckQuery, [userId, today]);
+        console.log(`📋 Bonus record: ${bonusRecord ? 'Found' : 'Not found'}, Used: ${bonusRecord?.bonus_used ? 'Yes' : 'No'}`);
+
+        // Create bonus record if it doesn't exist
+        if (!bonusRecord) {
+          const { v4: uuidv4 } = require('uuid');
+          await db.run(`
+            INSERT INTO daily_bonuses (id, user_id, bonus_date, daily_profit, bonus_amount, requirements_met, bonus_claimed, bonus_used)
+            VALUES ($1, $2, $3, $4, 200, 0, 0, 0)
+          `, [uuidv4(), userId, today, dailyProfit]);
+          bonusRecord = await db.get(bonusCheckQuery, [userId, today]);
+        } else {
+          // Update daily profit if bonus not used yet
+          if (!bonusRecord.bonus_used) {
+            await db.run('UPDATE daily_bonuses SET daily_profit = $1 WHERE user_id = $2 AND bonus_date = $3', 
+              [dailyProfit, userId, today]);
+            bonusRecord.daily_profit = dailyProfit; // Update local copy
+          }
+        }
+
+        // Auto-apply bonus if eligible and not already used
+        console.log(`🔍 Final check: bonus_used=${bonusRecord.bonus_used} (type: ${typeof bonusRecord.bonus_used}), dailyProfit=${dailyProfit}`);
+        console.log(`🔍 Bonus check conditions: !bonus_used=${!bonusRecord.bonus_used}, profit>=1000=${dailyProfit >= 1000}`);
+        
+        // ADDITIONAL CHECK: Ensure no bonus deduction game already exists for today
+        const existingBonusGameQuery = `
+          SELECT COUNT(*) as bonus_game_count
+          FROM games
+          WHERE user_id = $1 AND game_number = 999999 AND DATE(created_at) = $2
+        `;
+        const existingBonusGameResult = await db.get(existingBonusGameQuery, [userId, today]);
+        const existingBonusGames = parseInt(existingBonusGameResult?.bonus_game_count || 0);
+        
+        console.log(`🔍 Existing bonus games today: ${existingBonusGames}`);
+        
+        if (!bonusRecord.bonus_used && dailyProfit >= 1000 && existingBonusGames === 0) {
+          console.log(`🎁 ✅ APPLYING HOUSE BONUS for user ${userId} (${user.user_type})`);
+
+          // Create a bonus deduction game record to affect all profit calculations
+          const { v4: uuidv4 } = require('uuid');
+          const bonusGameId = uuidv4();
+          const bonusGameNumber = 999999; // Special number for bonus deduction games
+          
+          console.log(`📝 Creating bonus deduction game #${bonusGameNumber}...`);
+          
+          // Insert a "bonus deduction" game with negative profit
+          try {
+            await db.run(`
+              INSERT INTO games (
+                id, game_number, user_id, bet_money, win_money, 
+                cartelas_selected, total_numbers, house_cut_percentage, 
+                status, created_at, updated_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            `, [
+              bonusGameId,
+              bonusGameNumber,
+              userId,
+              0,        // bet_money = 0
+              200,      // win_money = 200 (creates -200 profit)
+              0,        // cartelas_selected = 0
+              75,       // total_numbers = 75
+              0,        // house_cut_percentage = 0
+              'finished',
+              new Date().toISOString(),
+              new Date().toISOString()
+            ]);
+
+            console.log(`✅ Created bonus deduction game record (profit: -200 Birr)`);
+          } catch (gameInsertError) {
+            console.error(`❌ FAILED to create bonus deduction game:`, gameInsertError);
+            console.error(`Error details:`, gameInsertError.message);
+            throw gameInsertError; // Re-throw to prevent marking bonus as used
+          }
+
+          if (user.user_type === 'postpaid') {
+            // Postpaid: Mark bonus as used
+            await db.run(`
+              UPDATE daily_bonuses 
+              SET bonus_used = true, bonus_claimed = true
+              WHERE user_id = $1 AND bonus_date = $2
+            `, [userId, today]);
+            
+            bonusMessage = `🎉 House Bonus Applied! 200 Birr deducted from all profits`;
+            console.log(`✅ Postpaid bonus applied: 200 Birr deducted from all profit calculations`);
+          } else {
+            // Prepaid: Add 200 to balance and mark bonus as used
+            const newBalance = parseFloat(user.balance) + 200;
+            await db.run('UPDATE users SET balance = $1 WHERE id = $2', [newBalance, userId]);
+            
+            await db.run(`
+              UPDATE daily_bonuses 
+              SET bonus_used = true, bonus_claimed = true
+              WHERE user_id = $1 AND bonus_date = $2
+            `, [userId, today]);
+            
+            bonusMessage = `🎉 House Bonus Applied! 200 Birr added to your balance (New balance: ${newBalance.toFixed(2)} Birr)`;
+            console.log(`✅ Prepaid bonus applied: Balance increased to ${newBalance}, 200 Birr deducted from all profit calculations`);
+          }
+        }
       } else {
-        // Fallback for unexpected format
-        calledNumbers = [];
+        let reason = 'Unknown';
+        if (bonusRecord.bonus_used) {
+          reason = 'Already used (bonus_used = true)';
+        } else if (existingBonusGames > 0) {
+          reason = `Bonus game already exists (${existingBonusGames} games found)`;
+        } else if (dailyProfit < 1000) {
+          reason = `Profit too low (${dailyProfit} < 1000)`;
+        }
+        console.log(`❌ Bonus NOT applied. Reason: ${reason}`);
       }
-    } catch (e) {
-      console.warn('Error parsing called_numbers for game', gameResult.id, e);
-      calledNumbers = [];
+    } catch (bonusError) {
+      console.error('⚠️ Error checking/applying bonus:', bonusError);
+      console.error('Error stack:', bonusError.stack);
+      // Don't fail the game finish if bonus check fails
     }
 
-    const game = {
-      ...gameResult,
-      calledNumbers: calledNumbers,
-      cartelasSelected: gameResult.cartelas_selected,
-      betMoney: gameResult.bet_money,
-      winMoney: winMoney,
-      totalNumbers: gameResult.total_numbers,
-      winnerPattern: gameResult.winner_pattern,
-      createdAt: gameResult.created_at,
-      updatedAt: new Date().toISOString(),
-      status: 'finished'
-    };
-
-    res.json({
+    const response = {
       message: 'Game finished successfully',
       game
-    });
+    };
+
+    // Add bonus message if bonus was applied
+    if (bonusMessage) {
+      response.bonusMessage = bonusMessage;
+    }
+
+    res.json(response);
   } catch (error) {
     console.error('Finish game error:', error);
     res.status(500).json({ error: 'Failed to finish game' });
@@ -795,37 +905,11 @@ router.put('/:id/finish', requireAdmin, [
       new Date().toISOString()
     ]);
 
-    // Parse called_numbers from database (stored as JSON string, but may already be parsed by driver)
-    let calledNumbers = [];
-    try {
-      if (Array.isArray(gameResult.called_numbers)) {
-        // Already parsed by database driver
-        calledNumbers = gameResult.called_numbers;
-      } else if (typeof gameResult.called_numbers === 'string') {
-        // Stored as JSON string, need to parse
-        const parsed = JSON.parse(gameResult.called_numbers || '[]');
-        calledNumbers = Array.isArray(parsed) ? parsed : [];
-      } else {
-        // Fallback for unexpected format
-        calledNumbers = [];
-      }
-    } catch (e) {
-      console.warn('Error parsing called_numbers for game', gameResult.id, e);
-      calledNumbers = [];
-    }
-
-    const game = {
-      ...gameResult,
-      calledNumbers: calledNumbers,
-      cartelasSelected: gameResult.cartelas_selected,
-      betMoney: gameResult.bet_money,
-      winMoney: winMoney,
-      totalNumbers: gameResult.total_numbers,
-      winnerPattern: gameResult.winner_pattern,
-      createdAt: gameResult.created_at,
-      updatedAt: new Date().toISOString(),
-      status: 'end'
-    };
+    // Transform game data to clean camelCase format
+    const game = transformGameData(gameResult);
+    game.winMoney = winMoney;
+    game.status = 'end';
+    game.updatedAt = new Date().toISOString();
 
     res.json({
       message: 'Game finished successfully',
@@ -868,37 +952,10 @@ router.put('/:id/cancel', requireAdmin, [
       WHERE id = $2
     `, [new Date().toISOString(), gameId]);
 
-    // Parse called_numbers from database (stored as JSON string, but may already be parsed by driver)
-    let calledNumbers = [];
-    try {
-      if (Array.isArray(gameResult.called_numbers)) {
-        // Already parsed by database driver
-        calledNumbers = gameResult.called_numbers;
-      } else if (typeof gameResult.called_numbers === 'string') {
-        // Stored as JSON string, need to parse
-        const parsed = JSON.parse(gameResult.called_numbers || '[]');
-        calledNumbers = Array.isArray(parsed) ? parsed : [];
-      } else {
-        // Fallback for unexpected format
-        calledNumbers = [];
-      }
-    } catch (e) {
-      console.warn('Error parsing called_numbers for game', gameResult.id, e);
-      calledNumbers = [];
-    }
-
-    const game = {
-      ...gameResult,
-      calledNumbers: calledNumbers,
-      cartelasSelected: gameResult.cartelas_selected,
-      betMoney: gameResult.bet_money,
-      winMoney: gameResult.win_money,
-      totalNumbers: gameResult.total_numbers,
-      winnerPattern: gameResult.winner_pattern,
-      createdAt: gameResult.created_at,
-      updatedAt: new Date().toISOString(),
-      status: 'cancelled'
-    };
+    // Transform game data to clean camelCase format
+    const game = transformGameData(gameResult);
+    game.status = 'cancelled';
+    game.updatedAt = new Date().toISOString();
 
     // Log admin action in database
     await db.run(`
@@ -928,7 +985,7 @@ router.put('/:id/cancel', requireAdmin, [
 // Get game analysis data for table
 router.get('/analysis', authenticateToken, async (req, res) => {
   try {
-    const { page = 1, limit = 50 } = req.query;
+    const { page = 1, limit = 50, username } = req.query;
     const userId = req.user?.id;
     const isAdmin = req.user?.role === 'admin';
     const offset = (page - 1) * limit;
@@ -937,30 +994,59 @@ router.get('/analysis', authenticateToken, async (req, res) => {
 
     let gamesQuery;
     if (isAdmin) {
-      // Admin sees all games
-      gamesQuery = `
-        SELECT
-          g.id as gameId,
-          g.created_at as date,
-          g.game_number as gameNumber,
-          g.cartelas_selected as players,
-          CASE 
-            WHEN g.cartelas_selected > 0 THEN (g.bet_money / g.cartelas_selected)
-            ELSE 0
-          END as bet,
-          g.bet_money as totalBet,
-          g.house_cut_percentage as cutPercentage,
-          COALESCE(g.win_money, 0) as win,
-          (g.bet_money - COALESCE(g.win_money, 0)) as profit,
-          0 as houseBonus,
-          0 as playersBonus,
-          (SELECT wc.card_id FROM cartelas wc WHERE wc.game_id = g.id AND wc.is_winner = 1 LIMIT 1) as winnerInfo,
-          g.status
-        FROM games g
-        ORDER BY g.created_at DESC
-        LIMIT $1 OFFSET $2
-      `;
-      queryParams.push(limit, offset);
+      // Admin sees all games, optionally filtered by username
+      if (username) {
+        gamesQuery = `
+          SELECT DISTINCT
+            g.id as gameId,
+            g.created_at as date,
+            g.game_number as gameNumber,
+            g.cartelas_selected as players,
+            CASE 
+              WHEN g.cartelas_selected > 0 THEN (g.bet_money / g.cartelas_selected)
+              ELSE 0
+            END as bet,
+            g.bet_money as totalBet,
+            g.house_cut_percentage as cutPercentage,
+            COALESCE(g.win_money, 0) as win,
+            (g.bet_money - COALESCE(g.win_money, 0)) as profit,
+            0 as houseBonus,
+            0 as playersBonus,
+            (SELECT wc.card_id FROM cartelas wc WHERE wc.game_id = g.id AND wc.is_winner = 1 LIMIT 1) as winnerInfo,
+            g.status
+          FROM games g
+          INNER JOIN cartelas c ON g.id = c.game_id
+          INNER JOIN users u ON c.user_id = u.id
+          WHERE u.username = $1
+          ORDER BY g.created_at DESC
+          LIMIT $2 OFFSET $3
+        `;
+        queryParams.push(username, limit, offset);
+      } else {
+        gamesQuery = `
+          SELECT
+            g.id as gameId,
+            g.created_at as date,
+            g.game_number as gameNumber,
+            g.cartelas_selected as players,
+            CASE 
+              WHEN g.cartelas_selected > 0 THEN (g.bet_money / g.cartelas_selected)
+              ELSE 0
+            END as bet,
+            g.bet_money as totalBet,
+            g.house_cut_percentage as cutPercentage,
+            COALESCE(g.win_money, 0) as win,
+            (g.bet_money - COALESCE(g.win_money, 0)) as profit,
+            0 as houseBonus,
+            0 as playersBonus,
+            (SELECT wc.card_id FROM cartelas wc WHERE wc.game_id = g.id AND wc.is_winner = 1 LIMIT 1) as winnerInfo,
+            g.status
+          FROM games g
+          ORDER BY g.created_at DESC
+          LIMIT $1 OFFSET $2
+        `;
+        queryParams.push(limit, offset);
+      }
     } else {
       // Regular users only see their own games (filter by user_id)
       gamesQuery = `
@@ -1027,8 +1113,19 @@ router.get('/analysis', authenticateToken, async (req, res) => {
     const countParams = [];
     
     if (isAdmin) {
-      // Admin sees count of all games
-      countQuery = 'SELECT COUNT(*) as total FROM games';
+      // Admin sees count of all games, optionally filtered by username
+      if (username) {
+        countQuery = `
+          SELECT COUNT(DISTINCT g.id) as total 
+          FROM games g
+          INNER JOIN cartelas c ON g.id = c.game_id
+          INNER JOIN users u ON c.user_id = u.id
+          WHERE u.username = $1
+        `;
+        countParams.push(username);
+      } else {
+        countQuery = 'SELECT COUNT(*) as total FROM games';
+      }
     } else {
       // Regular users see count of only their games
       countQuery = 'SELECT COUNT(*) as total FROM games WHERE user_id = $1';
@@ -1344,36 +1441,10 @@ router.put('/:id/shuffle', authenticateToken, [
       WHERE id = $4
     `, [JSON.stringify(numbers), JSON.stringify([]), new Date().toISOString(), gameId]);
 
-    // Parse called_numbers from database (stored as JSON string, but may already be parsed by driver)
-    let calledNumbers = [];
-    try {
-      if (Array.isArray(gameResult.called_numbers)) {
-        // Already parsed by database driver
-        calledNumbers = gameResult.called_numbers;
-      } else if (typeof gameResult.called_numbers === 'string') {
-        // Stored as JSON string, need to parse
-        const parsed = JSON.parse(gameResult.called_numbers || '[]');
-        calledNumbers = Array.isArray(parsed) ? parsed : [];
-      } else {
-        // Fallback for unexpected format
-        calledNumbers = [];
-      }
-    } catch (e) {
-      console.warn('Error parsing called_numbers for game', gameResult.id, e);
-      calledNumbers = [];
-    }
-
-    const game = {
-      ...gameResult,
-      calledNumbers: calledNumbers,
-      cartelasSelected: gameResult.cartelas_selected,
-      betMoney: gameResult.bet_money,
-      winMoney: gameResult.win_money,
-      totalNumbers: gameResult.total_numbers,
-      winnerPattern: gameResult.winner_pattern,
-      createdAt: gameResult.created_at,
-      updatedAt: new Date().toISOString()
-    };
+    // Transform game data to clean camelCase format
+    const game = transformGameData(gameResult);
+    game.calledNumbers = [];
+    game.updatedAt = new Date().toISOString();
 
     res.json({
       message: 'Game shuffled successfully',
@@ -1411,11 +1482,11 @@ router.post('/session', authenticateToken, [
   body('houseCut').isFloat({ min: 0 }).withMessage('House cut must be non-negative'),
   body('playerWin').isFloat({ min: 0 }).withMessage('Player win must be non-negative')
 ], async (req, res) => {
+  const startTime = Date.now();
   console.log('🚀 POST /games/session endpoint called');
   console.log('Request body type:', typeof req.body);
   console.log('Request body keys:', Object.keys(req.body));
-  console.log('Request body:', JSON.stringify(req.body, null, 2));
-  console.log('User from token:', req.user);
+  console.log(`📊 Cartelas selected: ${req.body.selectedCartelas?.length || 0}`);
 
   try {
     const errors = validationResult(req);
@@ -1475,6 +1546,16 @@ router.post('/session', authenticateToken, [
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Debug: Log user type and balance information
+    console.log('🔍 User Balance Check:', {
+      userId: user.id,
+      username: user.username,
+      userType: user.userType,
+      balance: user.balance,
+      totalBet: req.body.totalBet,
+      houseCut: req.body.houseCut
+    });
+
     const gameNumber = (user.totalGamesPlayed || 0) + 1;
 
     console.log(`Creating user session game #${gameNumber} for user ${req.user.id} (current games played: ${user.totalGamesPlayed})`);
@@ -1532,39 +1613,59 @@ router.post('/session', authenticateToken, [
     }
 
     // Validate that cartelas exist in database but do NOT save associations
+    // OPTIMIZED: Validate all cartelas in a single query instead of loop
     try {
-      for (const cartelaId of selectedCartelas) {
-        // Just validate that the cartela exists - do not create new cartela records
-        const existingCartelaQuery = 'SELECT * FROM cartelas WHERE card_id = $1 AND is_active = $2 LIMIT 1';
-        const existingCartela = await db.get(existingCartelaQuery, [cartelaId, 1]);
+      const placeholders = selectedCartelas.map((_, i) => `$${i + 1}`).join(',');
+      const existingCartelasQuery = `SELECT card_id FROM cartelas WHERE card_id IN (${placeholders}) AND is_active = 1`;
+      const existingCartelas = await db.all(existingCartelasQuery, selectedCartelas);
 
-        if (!existingCartela) {
-          console.warn(`⚠️ Selected cartela ${cartelaId} not found in database`);
-          return res.status(400).json({ error: `Cartela ${cartelaId} not found in database` });
-        }
-
-        console.log(`✅ Validated existing cartela ${cartelaId} in database`);
+      if (existingCartelas.length !== selectedCartelas.length) {
+        const foundIds = existingCartelas.map(c => c.card_id);
+        const missingIds = selectedCartelas.filter(id => !foundIds.includes(id));
+        console.warn(`⚠️ Selected cartelas not found: ${missingIds.join(', ')}`);
+        return res.status(400).json({ 
+          error: `Cartelas not found in database: ${missingIds.join(', ')}` 
+        });
       }
 
-      console.log('✅ All selected cartelas validated successfully (not saved to database)');
+      console.log(`✅ All ${selectedCartelas.length} cartelas validated successfully in single query`);
     } catch (dbError) {
       console.error('Error validating cartelas:', dbError);
       throw new Error(`Database error validating cartelas: ${dbError.message}`);
     }
 
-    // Update user statistics
+    // OPTIMIZATION: Deduct balance and update user statistics in a single transaction
+    const { deductBalance } = require('../middleware/auth');
+    let balanceWarning = null;
+    
     try {
-      await db.run(`
-        UPDATE users
-        SET total_games_played = total_games_played + 1,
-            total_winnings = total_winnings + $1,
-            updated_at = $2
-        WHERE id = $3
-      `, [playerWin, createdAt, req.user.id]);
+      // Deduct the house cut from user's balance
+      const balanceResult = await deductBalance(user, houseCut);
+      
+      if (!balanceResult.success) {
+        return res.status(400).json({ error: balanceResult.message });
+      }
+      
+      // Store warning if present
+      if (balanceResult.warning) {
+        balanceWarning = balanceResult.warning;
+      }
+      
+      // OPTIMIZATION: Update user winnings asynchronously (non-blocking)
+      setImmediate(() => {
+        db.run(`
+          UPDATE users
+          SET total_winnings = total_winnings + $1,
+              updated_at = $2
+          WHERE id = $3
+        `, [playerWin, createdAt, req.user.id]).catch(err => 
+          console.error('Failed to update user winnings:', err)
+        );
+      });
 
-      console.log('✅ User statistics updated');
+      console.log('✅ User balance deducted, winnings update queued');
     } catch (dbError) {
-      console.error('Error updating user statistics:', dbError);
+      console.error('Error updating user balance:', dbError);
       throw new Error(`Database error updating user: ${dbError.message}`);
     }
 
@@ -1586,7 +1687,7 @@ router.post('/session', authenticateToken, [
 
     console.log('✅ Game session created successfully');
 
-    res.status(201).json({
+    const response = {
       gameId: gameId, // Return UUID instead of game number for API calls
       gameNumber: gameNumber, // Also return game number for display
       lastGame: {
@@ -1606,8 +1707,22 @@ router.post('/session', authenticateToken, [
         updatedAt: createdAt,
         __v: 0
       }
-    });
+    };
+    
+    // Add warning if present
+    if (balanceWarning) {
+      response.warning = balanceWarning;
+    }
+
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    console.log(`⏱️ Game session created in ${duration}ms`);
+
+    res.status(201).json(response);
   } catch (error) {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    console.error(`❌ Game session failed after ${duration}ms`);
     console.error('Save user game session error:', error);
     console.error('Error stack:', error.stack);
     res.status(500).json({
@@ -1638,36 +1753,8 @@ router.get('/:id', [
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    // Parse called_numbers from database (stored as JSON string, but may already be parsed by driver)
-    let calledNumbers = [];
-    try {
-      if (Array.isArray(gameResult.called_numbers)) {
-        // Already parsed by database driver
-        calledNumbers = gameResult.called_numbers;
-      } else if (typeof gameResult.called_numbers === 'string') {
-        // Stored as JSON string, need to parse
-        const parsed = JSON.parse(gameResult.called_numbers || '[]');
-        calledNumbers = Array.isArray(parsed) ? parsed : [];
-      } else {
-        // Fallback for unexpected format
-        calledNumbers = [];
-      }
-    } catch (e) {
-      console.warn('Error parsing called_numbers for game', gameResult.id, e);
-      calledNumbers = [];
-    }
-
-    const game = {
-      ...gameResult,
-      calledNumbers: calledNumbers,
-      cartelasSelected: gameResult.cartelas_selected,
-      betMoney: gameResult.bet_money,
-      winMoney: gameResult.win_money,
-      totalNumbers: gameResult.total_numbers,
-      winnerPattern: gameResult.winner_pattern,
-      createdAt: gameResult.created_at,
-      updatedAt: gameResult.updated_at
-    };
+    // Transform game data to clean camelCase format
+    const game = transformGameData(gameResult);
 
     // Get game cartelas from database
     const cartelasQuery = 'SELECT * FROM cartelas WHERE game_id = $1';

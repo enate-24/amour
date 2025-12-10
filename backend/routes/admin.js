@@ -451,6 +451,7 @@ router.post('/users', authenticateToken, requireAdmin, [
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('shopname').optional().isLength({ min: 2 }).withMessage('Shop name must be at least 2 characters'),
   body('userType').optional().isIn(['prepaid', 'postpaid']).withMessage('User type must be prepaid or postpaid'),
+  body('balance').optional().isNumeric().withMessage('Balance must be a number'),
   body('balanceLimit').optional().isNumeric().withMessage('Balance limit must be a number')
 ], async (req, res) => {
   try {
@@ -459,7 +460,15 @@ router.post('/users', authenticateToken, requireAdmin, [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { username, email, password, shopname, role = 'user', userType = 'prepaid', balanceLimit } = req.body;
+    const { username, email, password, shopname, role = 'user', userType = 'prepaid', balance } = req.body;
+
+    // Validate prepaid user has balance
+    if (userType === 'prepaid' && (balance === undefined || balance === null)) {
+      return res.status(400).json({ error: 'Balance is required for prepaid users' });
+    }
+
+    // Postpaid users start with 0 balance (will go negative)
+    const initialBalance = userType === 'postpaid' ? 0 : (balance !== undefined ? parseFloat(balance) : 0);
 
     // Check if user already exists
     const existingUserByEmail = await users.findByEmail(email);
@@ -481,9 +490,9 @@ router.post('/users', authenticateToken, requireAdmin, [
       shopname,
       password: hashedPassword,
       role: role,
-      userType,
-      balance: 0,
-      balanceLimit: balanceLimit ? parseFloat(balanceLimit) : null,
+      userType: userType,
+      balance: initialBalance,
+      balanceLimit: null, // No balance limit for either type
       totalGamesPlayed: 0,
       totalWinnings: 0,
       is_active: true,
@@ -500,7 +509,7 @@ router.post('/users', authenticateToken, requireAdmin, [
       action: 'CREATE_USER',
       targetType: 'USER',
       targetId: newUser.id,
-      details: { username, email, role, shopname, userType, balanceLimit },
+      details: { username, email, role, shopname, userType, balance: newUser.balance },
       ipAddress: req.ip || req.connection.remoteAddress
     });
 
@@ -629,6 +638,87 @@ router.put('/users/:userId', authenticateToken, requireAdmin, [
   } catch (error) {
     console.error('Update user error:', error);
     res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Update user balance (Admin only) - for package management
+router.put('/users/:userId/balance', authenticateToken, requireAdmin, [
+  body('balance').isNumeric().withMessage('Balance must be a number')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { userId } = req.params;
+    const { balance } = req.body;
+
+    // Find user
+    const user = await users.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log('🔍 User data for balance update:', {
+      userId: user.id,
+      username: user.username,
+      userType: user.userType,
+      user_type: user.user_type,
+      balance: user.balance
+    });
+
+    // Only allow balance updates for prepaid users
+    // Check both camelCase and snake_case for compatibility
+    const userType = user.userType || user.user_type;
+    if (userType !== 'prepaid') {
+      return res.status(400).json({ 
+        error: 'Balance can only be updated for prepaid users',
+        currentUserType: userType
+      });
+    }
+
+    // Validate balance is not negative
+    if (balance < 0) {
+      return res.status(400).json({ error: 'Balance cannot be negative for prepaid users' });
+    }
+
+    const oldBalance = user.balance;
+
+    // Update balance
+    await users.update(userId, {
+      balance: parseFloat(balance),
+      updatedAt: new Date().toISOString()
+    });
+
+    // Log admin action
+    await adminLogs.create({
+      id: require('uuid').v4(),
+      adminId: req.user.id,
+      action: 'UPDATE_USER_BALANCE',
+      targetType: 'USER',
+      targetId: userId,
+      details: {
+        oldBalance: oldBalance,
+        newBalance: balance,
+        difference: balance - oldBalance
+      },
+      ipAddress: req.ip || req.connection.remoteAddress
+    });
+
+    // Get updated user
+    const updatedUser = await users.findById(userId);
+    const { password: _, ...userResponse } = updatedUser;
+
+    res.json({
+      message: 'Balance updated successfully',
+      user: userResponse,
+      oldBalance: oldBalance,
+      newBalance: balance
+    });
+  } catch (error) {
+    console.error('Update balance error:', error);
+    res.status(500).json({ error: 'Failed to update balance' });
   }
 });
 
@@ -981,13 +1071,34 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
 
     console.log(`Query returned ${statsResults.length} users`);
 
+    // Check bonus usage for all users
+    const todayStr = today.toISOString().split('T')[0];
+    const bonusCheckQuery = `
+      SELECT user_id, bonus_used, daily_profit
+      FROM daily_bonuses
+      WHERE bonus_date = $1
+    `;
+    const bonusRecords = await db.all(bonusCheckQuery, [todayStr]);
+    const bonusMap = new Map(bonusRecords.map(b => [b.user_id, b]));
+
     // Format results
     const stats = statsResults.map(row => {
       const weeklyProfit = Math.round(parseFloat(row.weekly_profit || 0));
-      const dailyHouseProfit = Math.round(parseFloat(row.daily_house_profit || 0));
+      let dailyHouseProfit = Math.round(parseFloat(row.daily_house_profit || 0));
+      
+      // Check if user has used their bonus today
+      const bonusRecord = bonusMap.get(row.user_id);
+      const bonusUsed = bonusRecord?.bonus_used || false;
+      
+      // If bonus was used, the daily_bonuses table has the adjusted profit (with 200 deducted)
+      // Use that value instead of the raw calculation
+      if (bonusUsed && bonusRecord) {
+        dailyHouseProfit = Math.round(parseFloat(bonusRecord.daily_profit || 0));
+      }
       
       // Simple house bonus logic: 200 if DAILY house profit >= 1000, otherwise 0
-      const houseBonus = dailyHouseProfit >= 1000 ? 200 : 0;
+      // But if already used, show 0
+      const houseBonus = bonusUsed ? 0 : (dailyHouseProfit >= 1000 ? 200 : 0);
 
       // Debug logging for Alemu
       if (row.username.toLowerCase() === 'alemu') {
@@ -995,6 +1106,7 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
         console.log(`   User ID: ${row.user_id}`);
         console.log(`   Daily Games: ${row.daily_games}`);
         console.log(`   Daily House Profit: ${dailyHouseProfit}`);
+        console.log(`   Bonus Used: ${bonusUsed}`);
         console.log(`   Weekly Games: ${row.weekly_games}`);
         console.log(`   Weekly Profit: ${weeklyProfit}`);
         console.log(`   House Bonus: ${houseBonus}`);
@@ -1006,8 +1118,9 @@ router.get('/user-stats', authenticateToken, requireAdmin, async (req, res) => {
         userType: row.user_type,
         balance: parseFloat(row.balance || 0),
         balanceLimit: row.balance_limit ? parseFloat(row.balance_limit) : null,
+        dailyGames: parseInt(row.weekly_games || 0), // Sholance_limit) : null,
         dailyGames: parseInt(row.weekly_games || 0), // Show weekly games in the table
-        dailyHouseProfit: dailyHouseProfit, // Today's profit (will be 0 if no games today)
+        dailyHouseProfit: dailyHouseProfit, // Today's profit (adjusted if bonus used)
         weeklyProfit: weeklyProfit, // Last 7 days profit
         houseBonus: houseBonus,
         isActive: row.is_active,

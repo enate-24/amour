@@ -30,12 +30,11 @@ router.post('/', [
     const { cartelaId, gameId, patterns, calledNumbers: clientCalledNumbers } = req.body;
     console.log('📥 Winner check request body:', { cartelaId, gameId, patterns, clientCalledNumbers: clientCalledNumbers?.length || 0 });
 
-    // Find the cartela by ID or card_id from PostgreSQL database
-    let cartela = await db.get('SELECT * FROM cartelas WHERE id = $1 AND is_active = 1', [cartelaId]);
-
-    if (!cartela) {
-      cartela = await db.get('SELECT * FROM cartelas WHERE card_id = $1 AND is_active = 1', [cartelaId]);
-    }
+    // Find the cartela by ID or card_id from PostgreSQL database (single optimized query)
+    const cartela = await db.get(
+      'SELECT * FROM cartelas WHERE (id = $1 OR card_id = $1) AND is_active = 1 LIMIT 1',
+      [cartelaId]
+    );
 
     if (!cartela) {
       console.error('❌ Cartela not found:', cartelaId);
@@ -82,40 +81,19 @@ router.post('/', [
     }
 
     // Get the winner pattern - priority order:
-    // 1. Patterns from request body (frontend sends current selection)
-    // 2. User settings from database
-    // 3. Game pattern from database
-    // 4. Default to "Two Lines"
+    // 1. Patterns from request body (frontend always sends current selection)
+    // 2. Game pattern from database
+    // 3. Default to "Two Lines"
     let selectedPatterns;
     
     if (patterns && Array.isArray(patterns) && patterns.length > 0) {
       selectedPatterns = patterns;
       console.log(`✅ Using patterns from request: ${JSON.stringify(selectedPatterns)}`);
     } else {
-      console.log(`⚠️ No patterns in request body, checking user settings...`);
-      
-      // Try to get current user settings from PostgreSQL
-      let userPattern = null;
-      try {
-        if (req.user && req.user.id) {
-          const userSettingsData = await db.get('SELECT * FROM user_settings WHERE user_id = $1', [req.user.id]);
-          if (userSettingsData && userSettingsData.selected_pattern) {
-            userPattern = userSettingsData.selected_pattern;
-            console.log(`✅ Found user settings pattern: ${userPattern}`);
-          } else {
-            console.log(`⚠️ No user settings found for user ${req.user.id}`);
-          }
-        } else {
-          console.log(`⚠️ No authenticated user found in request`);
-        }
-      } catch (settingsError) {
-        console.warn('Error fetching user settings:', settingsError);
-      }
-      
-      // Use user pattern, game pattern, or default
-      const finalPattern = userPattern || game.winner_pattern || "Two Lines";
+      // Fallback to game pattern or default
+      const finalPattern = game.winner_pattern || "Two Lines";
       selectedPatterns = [finalPattern];
-      console.log(`⚠️ Using fallback pattern: ${finalPattern} (source: ${userPattern ? 'user settings' : game.winner_pattern ? 'game' : 'default'})`);
+      console.log(`⚠️ Using fallback pattern: ${finalPattern}`);
     }
     
     console.log(`🎯 Winner check for cartela: ${cartelaId}, game: ${gameId}`);

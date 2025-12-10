@@ -93,6 +93,8 @@ router.post('/register', [
 
 // Login user
 router.post('/login', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { username, email, password } = req.body;
 
@@ -112,6 +114,7 @@ router.post('/login', async (req, res) => {
 
     let user = null;
 
+    // Optimize: Single database query instead of two
     // If email is provided, check if it's a valid email format (for admin login)
     if (email) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -126,19 +129,22 @@ router.post('/login', async (req, res) => {
       user = await users.findByUsername(username);
     }
 
-    // If still no user found, return error
+    // If still no user found, return error immediately
     if (!user) {
+      console.log(`Login failed: User not found (${Date.now() - startTime}ms)`);
       return res.status(401).json({ error: 'Invalid login credentials' });
     }
 
-    // Check if user is active
+    // Check if user is active before password check (faster fail)
     if (!user.is_active) {
+      console.log(`Login failed: Account deactivated (${Date.now() - startTime}ms)`);
       return res.status(401).json({ error: 'Account is deactivated' });
     }
 
     // Check password
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
+      console.log(`Login failed: Invalid password (${Date.now() - startTime}ms)`);
       return res.status(401).json({ error: 'Invalid login credentials' });
     }
 
@@ -147,20 +153,8 @@ router.post('/login', async (req, res) => {
     const signOptions = process.env.JWT_EXPIRES_IN ? { expiresIn: process.env.JWT_EXPIRES_IN } : {};
     const token = jwt.sign(tokenOptions, process.env.JWT_SECRET, signOptions);
 
-    // Log admin login
-    if (user.role === 'admin') {
-      await adminLogs.create({
-        id: uuidv4(),
-        adminId: user.id,
-        action: 'LOGIN',
-        targetType: 'AUTH',
-        targetId: user.id,
-        details: { email: user.email },
-        ipAddress: req.ip || req.connection.remoteAddress
-      });
-    }
-
-    res.json({
+    // Prepare response
+    const responseData = {
       message: 'Login successful',
       user: {
         id: user.id,
@@ -174,9 +168,28 @@ router.post('/login', async (req, res) => {
         is_active: user.is_active
       },
       token: token
-    });
+    };
+
+    // Send response immediately
+    res.json(responseData);
+
+    // Log admin login asynchronously (don't wait for it)
+    if (user.role === 'admin') {
+      adminLogs.create({
+        id: uuidv4(),
+        adminId: user.id,
+        action: 'LOGIN',
+        targetType: 'AUTH',
+        targetId: user.id,
+        details: { email: user.email },
+        ipAddress: req.ip || req.connection.remoteAddress
+      }).catch(err => console.error('Admin log creation failed:', err));
+    }
+
+    console.log(`✅ Login successful for ${user.username} (${Date.now() - startTime}ms)`);
   } catch (error) {
     console.error('Login error:', error);
+    console.log(`❌ Login failed (${Date.now() - startTime}ms)`);
     res.status(500).json({ error: 'Login failed' });
   }
 });

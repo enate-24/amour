@@ -236,13 +236,47 @@ router.post('/', [
     res.status(500).json({ error: 'Failed to create cartela' });
   }
 });
+// Get all cartelas - LIGHTWEIGHT (only IDs for quick loading)
+router.get('/all-cartelas-light', async (req, res) => {
+  try {
+    console.log('📦 Fetching lightweight cartela list...');
+    const startTime = Date.now();
+    
+    // Fetch only essential fields for fast loading
+    const allCartelas = await cartelas.findAll();
+    
+    // Return minimal data - just IDs and basic info
+    const lightCartelas = allCartelas.map(c => ({
+      id: c.id,
+      card_id: c.card_id,
+      user_id: c.user_id,
+      game_id: c.game_id,
+      is_active: c.is_active,
+      purchased_at: c.purchased_at
+    }));
+    
+    const duration = Date.now() - startTime;
+    console.log(`✅ Fetched ${lightCartelas.length} cartelas (lightweight) in ${duration}ms`);
+    
+    res.json({ cartelas: lightCartelas, count: lightCartelas.length });
+  } catch (error) {
+    console.error('Get lightweight cartelas error:', error);
+    res.status(500).json({ error: 'Failed to fetch cartelas' });
+  }
+});
+
 // Get all cartelas from database (public endpoint) - OPTIMIZED
 router.get('/all-cartelas', async (req, res) => {
   try {
+    console.log('📦 Fetching all cartelas with full data...');
+    const startTime = Date.now();
+    
     // Fetch all cartelas from database
     const allCartelas = await cartelas.findAll();
 
-    console.log('Fetched cartelas from database, total:', allCartelas.length);
+    const fetchDuration = Date.now() - startTime;
+    console.log(`✅ Fetched ${allCartelas.length} cartelas from DB in ${fetchDuration}ms`);
+    
     if (allCartelas.length > 0) {
       console.log('Sample cartela from DB:', {
         id: allCartelas[0].id,
@@ -303,12 +337,14 @@ router.get('/all-cartelas', async (req, res) => {
       };
     });
 
-    console.log(`Successfully transformed ${transformedCartelas.length} available cartelas from database`);
+    const totalDuration = Date.now() - startTime;
+    console.log(`✅ Successfully transformed ${transformedCartelas.length} cartelas in ${totalDuration}ms total`);
 
     res.json({
       cartelas: transformedCartelas,
       total: transformedCartelas.length,
-      source: 'database'
+      source: 'database',
+      loadTime: totalDuration
     });
   } catch (error) {
     console.error('Get all cartelas error:', error);

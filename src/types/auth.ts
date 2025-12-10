@@ -3,7 +3,9 @@ export interface User {
   username: string | null;
   email: string;
   role: string;
+  userType?: 'prepaid' | 'postpaid';
   balance: number;
+  balanceLimit?: number | null;
   totalGamesPlayed: number;
   totalWinnings: number;
   isActive: boolean;

@@ -6,6 +6,7 @@ import { useWebSocket } from "../hooks/useWebSocket";
 import { createPoller, type OptimizedPoller } from "../utils/optimizedPolling";
 import { offlineGameState } from "../utils/offlineGameState";
 import { useNetworkStatus } from "../utils/networkStatus";
+import { useAuth } from "../hooks/useAuth";
 
 // Memoize static data outside component to prevent recreation
 const BINGO_NUMBERS = Array.from({ length: 75 }, (_, i) => i + 1);
@@ -34,7 +35,8 @@ const NumberGrid = memo(({
       gridTemplateColumns: "repeat(15, minmax(0, 1fr))",
       gap: "clamp(2px, 0.8vw, 6px)",
       width: "100%",
-      maxWidth: "100%"
+      maxWidth: "100%",
+      overflow: "hidden"
     }}>
       {numbers.map((num) => {
         const isCalled = calledSet.has(num);
@@ -108,6 +110,7 @@ const NumberButton = memo(({
 
 const GamePageOptimized = (): JSX.Element => {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
   const { isOnline } = useNetworkStatus();
 
@@ -155,10 +158,18 @@ const GamePageOptimized = (): JSX.Element => {
             console.log('Active game found in backend:', result.game);
             
             setCurrentGameData(result.game);
-            setSelectedCartelas(result.game.cartelas_selected || 0);
-            // Use betAmountPerCartela instead of bet_money for per-cartela amount
-            setBetAmount(parseFloat(result.game.betAmountPerCartela) || parseFloat(result.game.bet_money) / (result.game.cartelas_selected || 1) || 5);
-            setPlayerWin(parseFloat(result.game.win_money) || 0);
+            setSelectedCartelas(result.game.cartelasSelected || 0);
+            console.log('✅ Game data set:', {
+              gameId: result.game.id,
+              gameNumber: result.game.gameNumber,
+              cartelasSelected: result.game.cartelasSelected,
+              betAmountPerCartela: result.game.betAmountPerCartela,
+              winMoney: result.game.winMoney,
+              status: result.game.status
+            });
+            // Use betAmountPerCartela for per-cartela amount
+            setBetAmount(parseFloat(result.game.betAmountPerCartela) || 5);
+            setPlayerWin(parseFloat(result.game.winMoney) || 0);
             
             // Always clear called numbers on page refresh
             console.log('🔄 Clearing called numbers on page refresh');
@@ -196,6 +207,14 @@ const GamePageOptimized = (): JSX.Element => {
               console.warn('⚠️ Failed to initialize offline game state:', error);
             }
             
+            console.log('✅ Game loaded successfully, setting isInitialLoading to false');
+            console.log('📊 Final game state:', {
+              gameId: result.game.id,
+              gameNumber: result.game.gameNumber,
+              status: result.game.status,
+              cartelasSelected: result.game.cartelasSelected,
+              betAmount: result.game.betAmountPerCartela
+            });
             setIsInitialLoading(false);
             
             return;
@@ -354,6 +373,7 @@ const GamePageOptimized = (): JSX.Element => {
   } | null>(null);
   const [showCartelaCheckModal, setShowCartelaCheckModal] = useState<boolean>(false);
   const [checkingCartela, setCheckingCartela] = useState<boolean>(false);
+  const [notificationMessage, setNotificationMessage] = useState<string>('');
   
   // Game data
   const [currentGameData, setCurrentGameData] = useState<any>(null);
@@ -754,24 +774,14 @@ const GamePageOptimized = (): JSX.Element => {
             const finishResult = await response.json();
             console.log('✅ Game finished successfully:', finishResult);
             
-            // Refresh daily profit calculation for house bonus (optional)
-            try {
-              const bonusResponse = await fetch(`${API_BASE_URL}/bonuses/refresh-profit`, {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json'
-                }
-              });
-              
-              if (bonusResponse.ok) {
-                console.log('✅ Daily profit refreshed for house bonus');
-              } else {
-                console.warn('⚠️ Bonus system not available (status:', bonusResponse.status, ')');
+            // Show bonus message if bonus was auto-applied
+            if (finishResult.bonusMessage) {
+              alert(finishResult.bonusMessage);
+              // Refresh user data to update balance
+              if (refreshUser) {
+                await refreshUser();
+                console.log('✅ User data refreshed after bonus application');
               }
-            } catch (bonusError) {
-              console.warn('⚠️ Bonus system not available:', bonusError instanceof Error ? bonusError.message : 'Unknown error');
-              // Don't block game completion if bonus system is unavailable
             }
           } else {
             let errorMessage = `Failed to finish game in backend (HTTP ${response.status})`;
@@ -804,6 +814,12 @@ const GamePageOptimized = (): JSX.Element => {
       return;
     }
 
+    // Prevent checking cartelas when game is finished
+    if (currentGameData?.status === 'finished') {
+      console.log('⚠️ Cannot check cartela - game has ended');
+      return;
+    }
+
     setCheckingCartela(true);
     
     try {
@@ -816,58 +832,26 @@ const GamePageOptimized = (): JSX.Element => {
       
       const gameId = currentGameData.id;
 
-      // Get selected cartelas from current game data or fetch from backend
-      let selectedCartelas: string[] = [];
+      // Get selected cartelas from current game data (already loaded)
+      let selectedCartelasArray: string[] = [];
       
-      // First try from currentGameData
-      if (currentGameData && currentGameData.selected_cartelas) {
-        selectedCartelas = typeof currentGameData.selected_cartelas === 'string' 
-          ? JSON.parse(currentGameData.selected_cartelas)
-          : currentGameData.selected_cartelas;
-      } else {
-        // Fallback: fetch from backend
-        try {
-          const gameResponse = await fetch(`${API_BASE_URL}/games/${gameId}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (gameResponse.ok) {
-            const gameInfo = await gameResponse.json();
-            // Parse selected_cartelas from database
-            if (gameInfo.game && gameInfo.game.selected_cartelas) {
-              selectedCartelas = typeof gameInfo.game.selected_cartelas === 'string' 
-                ? JSON.parse(gameInfo.game.selected_cartelas)
-                : gameInfo.game.selected_cartelas;
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching game data:', error);
-        }
+      if (currentGameData && currentGameData.selectedCartelas) {
+        selectedCartelasArray = Array.isArray(currentGameData.selectedCartelas)
+          ? currentGameData.selectedCartelas
+          : (typeof currentGameData.selectedCartelas === 'string' 
+              ? JSON.parse(currentGameData.selectedCartelas)
+              : []);
       }
       
-      console.log('🎯 Selected cartelas for this game:', selectedCartelas);
+      console.log('🎯 Selected cartelas for this game:', selectedCartelasArray);
       console.log('🔍 Checking cartela:', inputId.trim());
       
       // Check if cartela is in selected cartelas
-      const isSelected = selectedCartelas.includes(inputId.trim());
+      const isSelected = selectedCartelasArray.includes(inputId.trim());
       
       if (!isSelected) {
-        // Show not registered message
-        setCartelaCheckResult({
-          success: false,
-          cartelaId: inputId.trim(),
-          gameId: gameId,
-          win: false,
-          cardType: 'notregistered',
-          soundType: 'notwinner',
-          winningPatterns: [],
-          calledNumbersCount: called.length,
-          message: `Cartela ${inputId.trim()} is not registered for this game. Please select it in the New Game page first.`
-        });
-        setShowCartelaCheckModal(true);
+        // Show simple notification message for 2 seconds
+        setNotificationMessage(`Cartela ${inputId.trim()} not registered`);
         
         // Play notwinner sound from LOCAL file without blocking
         const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
@@ -881,7 +865,13 @@ const GamePageOptimized = (): JSX.Element => {
           }
         });
         
+        // Clear message after 2 seconds
+        setTimeout(() => {
+          setNotificationMessage('');
+        }, 2000);
+        
         setCheckingCartela(false);
+        setInputId(''); // Clear input
         return;
       }
 
@@ -1206,6 +1196,17 @@ const GamePageOptimized = (): JSX.Element => {
               transform: translateX(-1px) rotate(-2deg);
             }
           }
+          
+          @keyframes slideDown {
+            0% {
+              transform: translateX(-50%) translateY(-20px);
+              opacity: 0;
+            }
+            100% {
+              transform: translateX(-50%) translateY(0);
+              opacity: 1;
+            }
+          }
         `}
       </style>
 
@@ -1224,7 +1225,7 @@ const GamePageOptimized = (): JSX.Element => {
           marginRight: "clamp(5px, 1.5vw, 10px)",
           width: "100%"
         }}>
-          GAME <span style={{ color: "#FFD700" }}>{currentGameData?.game_number || "169"}</span>
+          GAME <span style={{ color: "#FFD700" }}>{currentGameData?.gameNumber || "..."}</span>
         </div>
         <div style={{
           background: "#FFD700",
@@ -1246,7 +1247,7 @@ const GamePageOptimized = (): JSX.Element => {
           fontSize: "clamp(11px, 2.5vw, 14px)",
           whiteSpace: "nowrap"
         }}>
-          BET {betAmount} BIRR
+          TOTAL BET {Math.round(betAmount * selectedCartelas)} BIRR
         </div>
         <div style={{
           background: "#90EE90",
@@ -1323,8 +1324,9 @@ const GamePageOptimized = (): JSX.Element => {
         {/* Center - Numbers grid */}
         <div style={{
           flex: 1,
-          minWidth: "280px",
-          maxWidth: "100%"
+          minWidth: 0,
+          maxWidth: "100%",
+          overflow: "hidden"
         }}>
           <NumberGrid 
             numbers={BINGO_NUMBERS}
@@ -1585,11 +1587,11 @@ const GamePageOptimized = (): JSX.Element => {
         </div>
         <input
           type="text"
-          placeholder="Enter ID"
+          placeholder={currentGameData?.status === 'finished' ? "Game Ended" : "Enter ID"}
           value={inputId}
           onChange={(e) => setInputId(e.target.value)}
           onKeyPress={(e) => {
-            if (e.key === 'Enter' && !checkingCartela) {
+            if (e.key === 'Enter' && !checkingCartela && currentGameData?.status !== 'finished') {
               handleCheckCartela();
             }
           }}
@@ -1603,9 +1605,10 @@ const GamePageOptimized = (): JSX.Element => {
             outline: "none",
             width: "clamp(120px, 30vw, 200px)",
             fontWeight: "bold",
-            boxSizing: "border-box"
+            boxSizing: "border-box",
+            opacity: currentGameData?.status === 'finished' ? 0.5 : 1
           }}
-          disabled={checkingCartela}
+          disabled={checkingCartela || currentGameData?.status === 'finished'}
         />
         <button
           style={{
@@ -1613,18 +1616,40 @@ const GamePageOptimized = (): JSX.Element => {
             fontSize: "clamp(12px, 2.5vw, 16px)",
             padding: "clamp(8px, 2vw, 12px) clamp(12px, 3vw, 24px)",
             margin: 0,
-            background: checkingCartela
+            background: (checkingCartela || currentGameData?.status === 'finished')
               ? "linear-gradient(180deg, #666 0%, #444 100%)"
               : "linear-gradient(180deg, #FFA500 0%, #FF8C00 100%)",
-            cursor: checkingCartela ? "not-allowed" : "pointer",
-            opacity: checkingCartela ? 0.5 : 1,
+            cursor: (checkingCartela || currentGameData?.status === 'finished') ? "not-allowed" : "pointer",
+            opacity: (checkingCartela || currentGameData?.status === 'finished') ? 0.5 : 1,
             whiteSpace: "nowrap" as const
           }}
           onClick={handleCheckCartela}
-          disabled={checkingCartela}
+          disabled={checkingCartela || currentGameData?.status === 'finished'}
         >
-          {checkingCartela ? "..." : "Check"}
+          {checkingCartela ? "..." : currentGameData?.status === 'finished' ? "Game Ended" : "Check"}
         </button>
+        
+        {/* Notification Message */}
+        {notificationMessage && (
+          <div style={{
+            position: "fixed",
+            top: "20px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "linear-gradient(135deg, #FF6B6B 0%, #C92A2A 100%)",
+            color: "#fff",
+            padding: "12px 24px",
+            borderRadius: "8px",
+            fontSize: "clamp(14px, 2.5vw, 16px)",
+            fontWeight: "bold",
+            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
+            zIndex: 2000,
+            animation: "slideDown 0.3s ease-out",
+            border: "2px solid rgba(255, 255, 255, 0.3)"
+          }}>
+            {notificationMessage}
+          </div>
+        )}
       </div>
 
 

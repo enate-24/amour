@@ -304,13 +304,14 @@ const BackofficeDashboard: React.FC = () => {
             <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-green-400 flex-shrink-0" />
             <h2 className="text-xl sm:text-2xl font-bold">User Statistics</h2>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
             <button
               onClick={exportToCSV}
-              className="px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base rounded-lg transition-colors flex items-center gap-2"
+              className="px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base rounded-lg transition-colors flex items-center justify-center gap-2"
             >
               <Download size={16} />
-              Export CSV
+              <span className="hidden sm:inline">Export CSV</span>
+              <span className="sm:hidden">Export</span>
             </button>
             <button
               onClick={() => {
@@ -338,95 +339,168 @@ const BackofficeDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Statistics Table */}
-        <div className="bg-slate-700 rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px]">
-              <thead className="bg-slate-600">
-                <tr>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">#</th>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">User</th>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Status</th>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Balance</th>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Total Games (Week)</th>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Daily Profit</th>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Weekly Profit</th>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">House Bonus</th>
-                </tr>
-              </thead>
-              <tbody className="bg-slate-700 divide-y divide-slate-600">
-                {statsLoading ? (
-                  <tr>
-                    <td colSpan={8} className="px-3 sm:px-6 py-4 text-center text-slate-400">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
-                      <p className="text-sm">Loading statistics...</p>
-                    </td>
-                  </tr>
-                ) : filteredStats.length > 0 ? (
-                  filteredStats.map((stat, index) => (
-                    <tr key={stat.userId} className="hover:bg-slate-600 transition-colors">
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-slate-300 font-medium">
-                        {index + 1}
-                      </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
-                        <button
-                          onClick={() => showUserDailyStats(stat.userId, stat.username)}
-                          className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline cursor-pointer transition-colors"
-                        >
-                          {stat.username}
-                        </button>
-                      </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
-                        <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs rounded ${
-                          stat.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}>
-                          {stat.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm">
-                        {stat.userType === 'prepaid' ? (
-                          <div className="flex items-center gap-1 text-orange-400 font-semibold">
-                            <DollarSign size={14} />
-                            {stat.balance.toLocaleString()}
-                          </div>
-                        ) : (
-                          <span className="text-slate-500 text-xs">Unlimited</span>
-                        )}
-                      </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-blue-400 font-semibold">
-                        {stat.dailyGames || 0}
-                      </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-green-400 font-semibold">
-                        <div className="flex items-center gap-1">
-                          <DollarSign size={14} />
-                          {(stat.dailyHouseProfit || 0).toLocaleString()}
-                        </div>
-                      </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-blue-400 font-semibold">
-                        <div className="flex items-center gap-1">
-                          <DollarSign size={14} />
-                          {(stat.weeklyProfit || 0).toLocaleString()}
-                        </div>
-                      </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-yellow-400 font-semibold">
-                        <div className="flex items-center gap-1">
-                          <DollarSign size={14} />
-                          {stat.houseBonus.toLocaleString()}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={8} className="px-3 sm:px-6 py-4 text-center text-slate-400 text-sm">
-                      No statistics found
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        {/* Loading State */}
+        {statsLoading ? (
+          <div className="bg-slate-700 rounded-lg p-8 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
+            <p className="text-slate-400">Loading statistics...</p>
           </div>
-        </div>
+        ) : filteredStats.length === 0 ? (
+          <div className="bg-slate-700 rounded-lg p-8 text-center">
+            <p className="text-slate-400">No statistics found</p>
+          </div>
+        ) : (
+          <>
+            {/* Desktop Table View - Hidden on Mobile */}
+            <div className="hidden md:block bg-slate-700 rounded-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-600">
+                    <tr>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">#</th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">User</th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Status</th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Balance</th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Games (Week)</th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Daily Profit</th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Weekly Profit</th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">House Bonus</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-slate-700 divide-y divide-slate-600">
+                    {filteredStats.map((stat, index) => (
+                      <tr key={stat.userId} className="hover:bg-slate-600 transition-colors">
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-slate-300 font-medium">
+                          {index + 1}
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                          <button
+                            onClick={() => showUserDailyStats(stat.userId, stat.username)}
+                            className="text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline cursor-pointer transition-colors"
+                          >
+                            {stat.username}
+                          </button>
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 text-xs rounded ${
+                            stat.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {stat.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm">
+                          {stat.userType === 'prepaid' ? (
+                            <div className="flex items-center gap-1 text-orange-400 font-semibold">
+                              <DollarSign size={14} />
+                              {stat.balance.toLocaleString()}
+                            </div>
+                          ) : (
+                            <span className="text-slate-500 text-xs">Unlimited</span>
+                          )}
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-blue-400 font-semibold">
+                          {stat.dailyGames || 0}
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-green-400 font-semibold">
+                          <div className="flex items-center gap-1">
+                            <DollarSign size={14} />
+                            {(stat.dailyHouseProfit || 0).toLocaleString()}
+                          </div>
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-blue-400 font-semibold">
+                          <div className="flex items-center gap-1">
+                            <DollarSign size={14} />
+                            {(stat.weeklyProfit || 0).toLocaleString()}
+                          </div>
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-yellow-400 font-semibold">
+                          <div className="flex items-center gap-1">
+                            <DollarSign size={14} />
+                            {stat.houseBonus.toLocaleString()}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Mobile Card View - Visible only on Mobile */}
+            <div className="md:hidden space-y-4">
+              {filteredStats.map((stat, index) => (
+                <div key={stat.userId} className="bg-slate-700 rounded-lg p-4 border border-slate-600">
+                  {/* Header Row */}
+                  <div className="flex items-center justify-between mb-3 pb-3 border-b border-slate-600">
+                    <div className="flex items-center gap-3">
+                      <span className="text-slate-400 font-medium text-sm">#{index + 1}</span>
+                      <button
+                        onClick={() => showUserDailyStats(stat.userId, stat.username)}
+                        className="text-base font-semibold text-blue-400 hover:text-blue-300 hover:underline"
+                      >
+                        {stat.username}
+                      </button>
+                    </div>
+                    <span className={`px-2 py-1 text-xs rounded ${
+                      stat.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {stat.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Balance */}
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">Balance</p>
+                      {stat.userType === 'prepaid' ? (
+                        <div className="flex items-center gap-1 text-orange-400 font-semibold">
+                          <DollarSign size={14} />
+                          <span className="text-sm">{stat.balance.toLocaleString()}</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-500 text-xs">Unlimited</span>
+                      )}
+                    </div>
+
+                    {/* Games */}
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">Games (Week)</p>
+                      <p className="text-sm text-blue-400 font-semibold">{stat.dailyGames || 0}</p>
+                    </div>
+
+                    {/* Daily Profit */}
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">Daily Profit</p>
+                      <div className="flex items-center gap-1 text-green-400 font-semibold">
+                        <DollarSign size={14} />
+                        <span className="text-sm">{(stat.dailyHouseProfit || 0).toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    {/* Weekly Profit */}
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">Weekly Profit</p>
+                      <div className="flex items-center gap-1 text-blue-400 font-semibold">
+                        <DollarSign size={14} />
+                        <span className="text-sm">{(stat.weeklyProfit || 0).toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    {/* House Bonus */}
+                    <div className="col-span-2">
+                      <p className="text-xs text-slate-400 mb-1">House Bonus</p>
+                      <div className="flex items-center gap-1 text-yellow-400 font-semibold">
+                        <DollarSign size={14} />
+                        <span className="text-sm">{stat.houseBonus.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
 

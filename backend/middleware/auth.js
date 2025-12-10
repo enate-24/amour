@@ -109,37 +109,88 @@ const isBalanceExempt = (user) => {
 
 // Helper function to check if user has sufficient balance (returns true for admin users)
 const hasSufficientBalance = (user, requiredAmount) => {
+  console.log('💰 hasSufficientBalance called:', {
+    userId: user?.id,
+    username: user?.username,
+    userType: user?.userType,
+    balance: user?.balance,
+    requiredAmount: requiredAmount,
+    isAdmin: user?.role === 'admin'
+  });
+
   // Admin users are always considered to have sufficient balance
   if (isBalanceExempt(user)) {
+    console.log('✅ Admin user - balance check bypassed');
     return true;
   }
 
-  // Regular users need to have enough balance
+  // For prepaid users: check if balance is sufficient (limited by their balance)
+  if (user.userType === 'prepaid') {
+    const hasSufficient = user && user.balance >= requiredAmount;
+    console.log(`💰 Prepaid user balance check: ${user.balance} >= ${requiredAmount} = ${hasSufficient}`);
+    return hasSufficient;
+  }
+
+  // For postpaid users: unlimited credit (no limit)
+  if (user.userType === 'postpaid') {
+    console.log('✅ Postpaid user - unlimited credit');
+    return true; // Postpaid users have unlimited credit
+  }
+
+  // Default: check positive balance
+  console.log(`⚠️ Unknown user type: ${user.userType}, checking balance: ${user.balance} >= ${requiredAmount}`);
   return user && user.balance >= requiredAmount;
 };
 
 // Helper function to deduct balance (no-op for admin users)
 const deductBalance = async (user, amount) => {
+  console.log('💰 deductBalance called:', {
+    userId: user?.id,
+    username: user?.username,
+    userType: user?.userType,
+    currentBalance: user?.balance,
+    amountToDeduct: amount
+  });
+
   // Admin users don't need balance deduction
   if (isBalanceExempt(user)) {
     console.log(`💰 Balance exemption applied for admin user: ${user.username}`);
     return { success: true, message: 'Admin user - no balance deduction required' };
   }
 
-  // Regular users need balance deduction
-  if (!user || user.balance < amount) {
+  // Check if user has sufficient balance/credit
+  if (!hasSufficientBalance(user, amount)) {
+    console.log(`❌ Insufficient balance: ${user.balance} < ${amount}`);
     return { success: false, message: 'Insufficient balance' };
   }
 
   try {
+    const newBalance = user.balance - amount;
+    
     // Update user balance in database
     await users.update(user.id, {
-      balance: user.balance - amount,
+      balance: newBalance,
       totalGamesPlayed: user.totalGamesPlayed + 1
     });
 
-    console.log(`💰 Deducted ${amount} from user ${user.username}'s balance`);
-    return { success: true, message: `Balance deducted: ${amount}` };
+    console.log(`💰 Deducted ${amount} from user ${user.username}'s balance. New balance: ${newBalance}`);
+    
+    // Check if prepaid user is running low on balance (below 10% of original)
+    let warning = null;
+    if (user.userType === 'prepaid' && newBalance > 0) {
+      // Warning when balance is low (you can adjust the threshold)
+      if (newBalance < 100) {
+        warning = `⚠️ Low balance warning: Your balance is ${newBalance.toFixed(2)} Birr`;
+        console.log(warning);
+      }
+    }
+    
+    return { 
+      success: true, 
+      message: `Balance deducted: ${amount}`,
+      newBalance,
+      warning
+    };
   } catch (error) {
     console.error('Error deducting balance:', error);
     return { success: false, message: 'Failed to deduct balance' };

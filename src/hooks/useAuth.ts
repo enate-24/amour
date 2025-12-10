@@ -147,7 +147,9 @@ export const useAuth = () => {
             username: data.user.username,
             email: data.user.email,
             role: data.user.role,
+            userType: data.user.userType || data.user.user_type || 'prepaid',
             balance: Number(data.user.balance) || 0,
+            balanceLimit: data.user.balanceLimit !== undefined ? Number(data.user.balanceLimit) : (data.user.balance_limit !== undefined ? Number(data.user.balance_limit) : null),
             totalGamesPlayed: Number(data.user.total_games_played) || Number(data.user.totalGamesPlayed) || 0,
             totalWinnings: Number(data.user.total_winnings) || Number(data.user.totalWinnings) || 0,
             isActive: data.user.is_active !== undefined ? Boolean(data.user.is_active) : true,
@@ -155,7 +157,7 @@ export const useAuth = () => {
             updatedAt: data.user.updated_at || data.user.updatedAt || new Date().toISOString()
           };
           setUser(mappedUser);
-          console.log('User authenticated successfully:', mappedUser.username);
+          console.log('User authenticated successfully:', mappedUser.username, 'Type:', mappedUser.userType);
         } else {
           throw new Error('No user data received');
         }
@@ -227,7 +229,9 @@ export const useAuth = () => {
           username: data.user.username,
           email: data.user.email,
           role: data.user.role,
+          userType: data.user.userType || data.user.user_type || 'prepaid',
           balance: Number(data.user.balance) || 0,
+          balanceLimit: data.user.balanceLimit !== undefined ? Number(data.user.balanceLimit) : (data.user.balance_limit !== undefined ? Number(data.user.balance_limit) : null),
           totalGamesPlayed: Number(data.user.total_games_played) || Number(data.user.totalGamesPlayed) || 0,
           totalWinnings: Number(data.user.total_winnings) || Number(data.user.totalWinnings) || 0,
           isActive: data.user.is_active !== undefined ? Boolean(data.user.is_active) : true,
@@ -235,7 +239,7 @@ export const useAuth = () => {
           updatedAt: data.user.updated_at || data.user.updatedAt || new Date().toISOString()
         };
 
-        console.log('Setting user state:', mappedUser);
+        console.log('Setting user state:', mappedUser, 'Type:', mappedUser.userType);
         setUser(mappedUser);
         
         // Ensure loading is false so App.tsx can redirect
@@ -290,7 +294,9 @@ export const useAuth = () => {
           username: data.user.username,
           email: data.user.email,
           role: data.user.role,
+          userType: data.user.userType || data.user.user_type || 'prepaid',
           balance: Number(data.user.balance) || 0,
+          balanceLimit: data.user.balanceLimit !== undefined ? Number(data.user.balanceLimit) : (data.user.balance_limit !== undefined ? Number(data.user.balance_limit) : null),
           totalGamesPlayed: Number(data.user.total_games_played) || Number(data.user.totalGamesPlayed) || 0,
           totalWinnings: Number(data.user.total_winnings) || Number(data.user.totalWinnings) || 0,
           isActive: data.user.is_active !== undefined ? Boolean(data.user.is_active) : true,
@@ -399,7 +405,9 @@ export const useAuth = () => {
           username: data.user.username,
           email: data.user.email,
           role: data.user.role,
+          userType: data.user.userType || data.user.user_type || 'prepaid',
           balance: Number(data.user.balance) || 0,
+          balanceLimit: data.user.balanceLimit !== undefined ? Number(data.user.balanceLimit) : (data.user.balance_limit !== undefined ? Number(data.user.balance_limit) : null),
           totalGamesPlayed: Number(data.user.total_games_played) || Number(data.user.totalGamesPlayed) || 0,
           totalWinnings: Number(data.user.total_winnings) || Number(data.user.totalWinnings) || 0,
           isActive: data.user.is_active !== undefined ? Boolean(data.user.is_active) : true,
@@ -407,7 +415,7 @@ export const useAuth = () => {
           updatedAt: data.user.updated_at || data.user.updatedAt || new Date().toISOString()
         };
         setUser(mappedUser);
-        console.log('User data refreshed successfully:', mappedUser.username, 'Balance:', mappedUser.balance);
+        console.log('User data refreshed successfully:', mappedUser.username, 'Type:', mappedUser.userType, 'Balance:', mappedUser.balance);
         return { error: null, user: mappedUser };
       } else {
         throw new Error('No user data received');

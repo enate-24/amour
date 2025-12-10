@@ -233,6 +233,46 @@ router.get('/', authenticateToken, async (req, res) => {
 
       console.log('Found game data for', recentGamesResults.length, 'days');
 
+      // Get bonus deductions for each day to adjust house profit
+      const bonusDeductionsByDate = {};
+      if (!isAdmin) {
+        // For regular users, get their bonus deductions by date
+        const userBonusQuery = `
+          SELECT bonus_date, bonus_used
+          FROM daily_bonuses
+          WHERE user_id = $1 AND bonus_used = true
+        `;
+        const userBonuses = await db.all(userBonusQuery, [userId]);
+        console.log('Recent games - User bonuses found:', userBonuses.length);
+        userBonuses.forEach(bonus => {
+          // Handle both date string and date object formats
+          let dateStr;
+          if (typeof bonus.bonus_date === 'string') {
+            dateStr = bonus.bonus_date.split('T')[0];
+          } else {
+            dateStr = new Date(bonus.bonus_date).toISOString().split('T')[0];
+          }
+          bonusDeductionsByDate[dateStr] = 200;
+          console.log(`Recent games - Bonus deduction set for ${dateStr}: 200 Birr`);
+        });
+        
+
+      } else {
+        // For admin, get total bonus deductions by date
+        const adminBonusQuery = `
+          SELECT bonus_date, COUNT(*) as bonus_count
+          FROM daily_bonuses
+          WHERE bonus_used = true
+          GROUP BY bonus_date
+        `;
+        const adminBonuses = await db.all(adminBonusQuery);
+        adminBonuses.forEach(bonus => {
+          const dateStr = new Date(bonus.bonus_date).toISOString().split('T')[0];
+          bonusDeductionsByDate[dateStr] = parseInt(bonus.bonus_count) * 200;
+        });
+      }
+      console.log('Recent games - Bonus deductions by date:', bonusDeductionsByDate);
+
       // Format the results - only include days with actual game data
       recentGames = recentGamesResults.map(game => {
         const gameDate = new Date(game.created_date);
@@ -240,12 +280,19 @@ router.get('/', authenticateToken, async (req, res) => {
                         String(gameDate.getMonth() + 1).padStart(2, '0') + '-' +
                         String(gameDate.getDate()).padStart(2, '0');
 
+        // Apply bonus deduction for this date
+        const rawProfit = parseFloat(game.houseprofit || 0);
+        const bonusDeduction = bonusDeductionsByDate[dateStr] || 0;
+        const adjustedProfit = rawProfit - bonusDeduction;
+        
+        console.log(`Recent games - ${dateStr}: Raw profit ${rawProfit}, Bonus deduction ${bonusDeduction}, Adjusted ${adjustedProfit}`);
+
         return {
           date: dateStr,
           games: game.games,
           playersBet: `${parseFloat(game.playersbet || 0).toLocaleString()} Birr`,
           playersWon: `${parseFloat(game.playerswon || 0).toLocaleString()} Birr`,
-          houseProfit: `${parseFloat(game.houseprofit || 0).toLocaleString()} Birr`
+          houseProfit: `${adjustedProfit.toLocaleString()} Birr`
         };
       });
 
@@ -293,6 +340,46 @@ router.get('/', authenticateToken, async (req, res) => {
       const chartDataResults = await db.all(chartDataQuery, chartDataParams);
       console.log('Chart data results:', chartDataResults);
 
+      // Get bonus deductions for chart data (reuse bonusDeductionsByDate if available, or fetch again)
+      const chartBonusDeductionsByDate = {};
+      if (!isAdmin) {
+        // For regular users, get their bonus deductions by date
+        const userBonusQuery = `
+          SELECT bonus_date, bonus_used
+          FROM daily_bonuses
+          WHERE user_id = $1 AND bonus_used = true AND bonus_date >= $2
+        `;
+        const userBonuses = await db.all(userBonusQuery, [userId, thirtyDaysAgo.toISOString().split('T')[0]]);
+        console.log('Chart data - User bonuses found:', userBonuses.length);
+        userBonuses.forEach(bonus => {
+          // Handle both date string and date object formats
+          let dateStr;
+          if (typeof bonus.bonus_date === 'string') {
+            dateStr = bonus.bonus_date.split('T')[0];
+          } else {
+            dateStr = new Date(bonus.bonus_date).toISOString().split('T')[0];
+          }
+          chartBonusDeductionsByDate[dateStr] = 200;
+          console.log(`Chart data - Bonus deduction set for ${dateStr}: 200 Birr`);
+        });
+        
+
+      } else {
+        // For admin, get total bonus deductions by date
+        const adminBonusQuery = `
+          SELECT bonus_date, COUNT(*) as bonus_count
+          FROM daily_bonuses
+          WHERE bonus_used = true AND bonus_date >= $1
+          GROUP BY bonus_date
+        `;
+        const adminBonuses = await db.all(adminBonusQuery, [thirtyDaysAgo.toISOString().split('T')[0]]);
+        adminBonuses.forEach(bonus => {
+          const dateStr = new Date(bonus.bonus_date).toISOString().split('T')[0];
+          chartBonusDeductionsByDate[dateStr] = parseInt(bonus.bonus_count) * 200;
+        });
+      }
+      console.log('Chart data - Bonus deductions by date:', chartBonusDeductionsByDate);
+
       chartData = chartDataResults.map(data => {
         // Ensure date is formatted as YYYY-MM-DD string
         const dateObj = new Date(data.date);
@@ -300,15 +387,22 @@ router.get('/', authenticateToken, async (req, res) => {
                         String(dateObj.getMonth() + 1).padStart(2, '0') + '-' +
                         String(dateObj.getDate()).padStart(2, '0');
         
+        // Apply bonus deduction for this date
+        const rawProfit = parseFloat(data.houseprofit || 0);
+        const bonusDeduction = chartBonusDeductionsByDate[dateStr] || 0;
+        const adjustedProfit = rawProfit - bonusDeduction;
+        
+        console.log(`Chart data - ${dateStr}: Raw profit ${rawProfit}, Bonus deduction ${bonusDeduction}, Adjusted ${adjustedProfit}`);
+        
         return {
           date: dateStr,
           games: data.games,
           totalBets: parseFloat(data.totalbets || 0),
-          houseProfit: parseFloat(data.houseprofit || 0)
+          houseProfit: adjustedProfit
         };
       });
       
-      console.log('Formatted chart data:', chartData);
+      console.log('Formatted chart data with bonus deductions:', chartData);
     } catch (chartError) {
       console.error('Error fetching chart data:', chartError);
       // Return empty chart data on error
@@ -334,14 +428,97 @@ router.get('/', authenticateToken, async (req, res) => {
     // PostgreSQL returns lowercase column names
     const fifteenDayProfit = parseFloat(fifteenDayHouseProfitResult?.fifteendayhouseprofit || 0);
 
+    // Check if bonus was used and adjust profits accordingly (daily, weekly, 15-day)
+    let adjustedDailyProfit = parseFloat(dailyResults[0]?.dailyprofit || 0);
+    let adjustedWeeklyProfit = parseFloat(weeklyResults[0]?.weeklyprofit || 0);
+    let adjustedFifteenDayProfit = fifteenDayProfit;
+    
+    if (!isAdmin) {
+      // For regular users, check their bonus usage across different time periods
+      const todayStr = today.toISOString().split('T')[0];
+      const weekStartStr = startOfWeek.toISOString().split('T')[0];
+      const weekEndStr = endOfWeek.toISOString().split('T')[0];
+      const fifteenDaysAgoStr = fifteenDaysAgo.toISOString().split('T')[0];
+      
+      // Check for bonus used today (for daily profit)
+      const dailyBonusQuery = `SELECT bonus_used FROM daily_bonuses WHERE user_id = $1 AND bonus_date = $2 AND bonus_used = true`;
+      const dailyBonusRecord = await db.get(dailyBonusQuery, [userId, todayStr]);
+      
+      // Check for bonuses used this week (for weekly profit)
+      const weeklyBonusQuery = `SELECT COUNT(*) as bonus_count FROM daily_bonuses WHERE user_id = $1 AND bonus_date >= $2 AND bonus_date < $3 AND bonus_used = true`;
+      const weeklyBonusRecord = await db.get(weeklyBonusQuery, [userId, weekStartStr, weekEndStr]);
+      
+      // Check for bonuses used in last 15 days (for 15-day profit)
+      const fifteenDayBonusQuery = `SELECT COUNT(*) as bonus_count FROM daily_bonuses WHERE user_id = $1 AND bonus_date >= $2 AND bonus_used = true`;
+      const fifteenDayBonusRecord = await db.get(fifteenDayBonusQuery, [userId, fifteenDaysAgoStr]);
+      
+      // Apply deductions based on actual bonus usage in each period
+      if (dailyBonusRecord?.bonus_used) {
+        adjustedDailyProfit = adjustedDailyProfit - 200;
+        console.log(`✅ Daily bonus deduction applied for user ${userId}: -200 Birr`);
+      }
+      
+      const weeklyBonusCount = parseInt(weeklyBonusRecord?.bonus_count || 0);
+      if (weeklyBonusCount > 0) {
+        adjustedWeeklyProfit = adjustedWeeklyProfit - (weeklyBonusCount * 200);
+        console.log(`✅ Weekly bonus deduction applied for user ${userId}: -${weeklyBonusCount * 200} Birr (${weeklyBonusCount} bonuses)`);
+      }
+      
+      const fifteenDayBonusCount = parseInt(fifteenDayBonusRecord?.bonus_count || 0);
+      if (fifteenDayBonusCount > 0) {
+        adjustedFifteenDayProfit = adjustedFifteenDayProfit - (fifteenDayBonusCount * 200);
+        console.log(`✅ 15-day bonus deduction applied for user ${userId}: -${fifteenDayBonusCount * 200} Birr (${fifteenDayBonusCount} bonuses)`);
+      }
+    } else {
+      // For admin, use the already calculated profits and subtract bonuses
+      const todayStr = today.toISOString().split('T')[0];
+      
+      // Get total bonus deductions for today (daily)
+      const dailyBonusQuery = `
+        SELECT COALESCE(SUM(200), 0) as total_bonus_deductions
+        FROM daily_bonuses
+        WHERE bonus_date = $1 AND bonus_used = true
+      `;
+      const dailyBonusResult = await db.get(dailyBonusQuery, [todayStr]);
+      const dailyBonusDeductions = parseFloat(dailyBonusResult?.total_bonus_deductions || 0);
+      
+      // Get total bonus deductions for this week
+      const weeklyBonusQuery = `
+        SELECT COALESCE(SUM(200), 0) as total_bonus_deductions
+        FROM daily_bonuses
+        WHERE bonus_date >= $1 AND bonus_date < $2 AND bonus_used = true
+      `;
+      const weekStartStr = startOfWeek.toISOString().split('T')[0];
+      const weekEndStr = endOfWeek.toISOString().split('T')[0];
+      const weeklyBonusResult = await db.get(weeklyBonusQuery, [weekStartStr, weekEndStr]);
+      const weeklyBonusDeductions = parseFloat(weeklyBonusResult?.total_bonus_deductions || 0);
+      
+      // Get total bonus deductions for last 15 days
+      const fifteenDayBonusQuery = `
+        SELECT COALESCE(SUM(200), 0) as total_bonus_deductions
+        FROM daily_bonuses
+        WHERE bonus_date >= $1 AND bonus_used = true
+      `;
+      const fifteenDaysAgoStr = fifteenDaysAgo.toISOString().split('T')[0];
+      const fifteenDayBonusResult = await db.get(fifteenDayBonusQuery, [fifteenDaysAgoStr]);
+      const fifteenDayBonusDeductions = parseFloat(fifteenDayBonusResult?.total_bonus_deductions || 0);
+      
+      // Subtract bonus deductions from all profit calculations
+      adjustedDailyProfit = adjustedDailyProfit - dailyBonusDeductions;
+      adjustedWeeklyProfit = adjustedWeeklyProfit - weeklyBonusDeductions;
+      adjustedFifteenDayProfit = adjustedFifteenDayProfit - fifteenDayBonusDeductions;
+      
+      console.log(`✅ Admin bonus deductions applied: Daily -${dailyBonusDeductions}, Weekly -${weeklyBonusDeductions}, 15-day -${fifteenDayBonusDeductions} Birr`);
+    }
+
     // Return actual computed data - ensure all values are numbers
     const dashboardData = {
-      dailyProfit: parseFloat(dailyResults[0]?.dailyprofit || 0),
+      dailyProfit: adjustedDailyProfit,
       dailyTotal: parseFloat(dailyResults[0]?.dailytotal || 0),
       dailyGames: parseInt(dailyResults[0]?.dailygames || 0),
       weeklyTotal: parseFloat(weeklyResults[0]?.weeklytotal || 0),
-      weeklyProfit: parseFloat(weeklyResults[0]?.weeklyprofit || 0),
-      fifteenDayProfit: fifteenDayProfit,
+      weeklyProfit: adjustedWeeklyProfit,
+      fifteenDayProfit: adjustedFifteenDayProfit,
       totalGamesPlayed: parseInt(dailyResults[0]?.dailygames || 0),
       totalWinnings: 0, // Removed user-specific winnings for admin view
       recentGames: recentGames,

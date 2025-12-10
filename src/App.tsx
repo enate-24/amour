@@ -3,6 +3,7 @@ import { Menu, User } from 'lucide-react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import { UnifiedAudioManager } from './utils/UnifiedAudioManager';
+import { cartelaCacheDB } from './utils/cartelaCache';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
@@ -16,6 +17,7 @@ import BackofficeDashboard from './components/BackofficeDashboard';
 
 import AdminUserManagement from './components/AdminUserManagement';
 import CartelaManagement from './components/CartelaManagement';
+import PackageManagement from './components/PackageManagement';
 import NewAccountPage from './components/NewAccountPage';
 import NewGame from './components/NewGame';
 import GameAnalytics from './components/GameAnalytics';
@@ -47,15 +49,38 @@ const initializeAudioManager = async () => {
   }
 };
 
+// Initialize IndexedDB for cartela caching
+const initializeCartelaCache = async () => {
+  console.log('💾 Initializing Cartela IndexedDB cache...');
+  try {
+    await cartelaCacheDB.init();
+    
+    // Check cache status
+    const stats = await cartelaCacheDB.getCacheStats();
+    console.log(`📊 Cartela cache: ${stats.count} cartelas cached`);
+    
+    if (stats.count > 0) {
+      const cacheAge = Date.now() - stats.newestCache;
+      const hoursOld = (cacheAge / (1000 * 60 * 60)).toFixed(1);
+      console.log(`✅ Cartela cache ready - last updated ${hoursOld}h ago`);
+    } else {
+      console.log('⚠️ Cartela cache empty - will populate on first load');
+    }
+  } catch (error) {
+    console.error('❌ Failed to initialize cartela cache:', error);
+  }
+};
+
 function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Initialize audio manager (cache-first, no auto-download)
+  // Initialize audio manager and cartela cache (cache-first, no auto-download)
   useEffect(() => {
     initializeAudioManager();
+    initializeCartelaCache();
   }, []); // Run once on app mount
 
   // Reset sidebar when user changes (login/logout/role change)
@@ -147,6 +172,7 @@ function AppContent() {
           <Route path="dashboard" element={<BackofficeDashboard />} />
           <Route path="cartela-management" element={<CartelaManagement />} />
           <Route path="user-management" element={<AdminUserManagement />} />
+          <Route path="package-management" element={<PackageManagement />} />
           <Route path="" element={<BackofficeDashboard />} />
         </Route>
         <Route path="*" element={<BackofficeLayout />} />

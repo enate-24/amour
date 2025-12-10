@@ -16,10 +16,40 @@ const Dashboard: React.FC = () => {
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
+  // Debug: Log user type
+  useEffect(() => {
+    if (user) {
+      console.log('Dashboard - User Type:', user.userType, 'Role:', user.role, 'Balance:', user.balance);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchDashboardData();
-
+    // Refresh user data to get latest balance
+    if (refreshUser) {
+      refreshUser();
+    }
   }, []);
+
+  // Refresh data when window gains focus (user returns to dashboard)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (!document.hidden) {
+        fetchDashboardData();
+        if (refreshUser) {
+          refreshUser();
+        }
+      }
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [refreshUser]);
 
   const fetchDashboardData = async () => {
     try {
@@ -196,21 +226,30 @@ const Dashboard: React.FC = () => {
       {/* Header */}
       <div className="text-center mb-6 sm:mb-8">
         <h2 className="text-xl sm:text-2xl font-bold mb-2">{user?.username || 'User'}</h2>
-        {/* Show house profit (which is the user's balance) */}
-        {(!user?.role || user.role !== 'admin') && (
+        {/* Show user balance/credit based on user type - only for non-admin users */}
+        {user?.role !== 'admin' && (
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2">
-            <span className="text-base sm:text-lg">
-              House Profit: {formatCurrency(user?.balance || 0)}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={runDiagnostics}
-                className="p-2 hover:bg-slate-700 rounded text-yellow-400 transition-colors"
-                title="Run diagnostics (check console)"
-              >
-                🔍
-              </button>
-            </div>
+            {user?.userType === 'prepaid' && (
+              <span className="text-base sm:text-lg">
+                Balance: {formatCurrency(user?.balance || 0)}
+              </span>
+            )}
+            {user?.userType === 'postpaid' && (
+              <span className="text-base sm:text-lg">
+                Credit Used: {formatCurrency(Math.abs(user?.balance || 0))} (Unlimited)
+              </span>
+            )}
+            {user?.userType && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={runDiagnostics}
+                  className="p-2 hover:bg-slate-700 rounded text-yellow-400 transition-colors"
+                  title="Run diagnostics (check console)"
+                >
+                  🔍
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

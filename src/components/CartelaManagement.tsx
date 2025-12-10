@@ -279,7 +279,7 @@ const CartelaManagement: React.FC = () => {
 
       {/* Filters and View Controls */}
       <div className="bg-slate-800 rounded-lg border border-slate-700 p-4 mb-6">
-        <div className="flex flex-col lg:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           {/* Search */}
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
@@ -288,43 +288,48 @@ const CartelaManagement: React.FC = () => {
               placeholder="Search by card ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white"
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white text-sm sm:text-base"
             />
           </div>
 
-          {/* Status Filter */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as 'all' | 'active' | 'inactive')}
-            className="px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active Only</option>
-            <option value="inactive">Inactive Only</option>
-          </select>
+          {/* Status Filter and View Toggle */}
+          <div className="flex gap-2 sm:gap-3">
+            {/* Status Filter */}
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as 'all' | 'active' | 'inactive')}
+              className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none text-white text-sm sm:text-base"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
 
-          {/* View Mode Toggle */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2.5 rounded-lg transition-colors ${
-                viewMode === 'grid'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-              }`}
-            >
-              <Grid3x3 size={20} />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2.5 rounded-lg transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-              }`}
-            >
-              <List size={20} />
-            </button>
+            {/* View Mode Toggle */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-2.5 rounded-lg transition-colors ${
+                  viewMode === 'grid'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                }`}
+                title="Grid view"
+              >
+                <Grid3x3 size={20} />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2.5 rounded-lg transition-colors ${
+                  viewMode === 'list'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                }`}
+                title="List view"
+              >
+                <List size={20} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -361,73 +366,140 @@ const CartelaManagement: React.FC = () => {
               ))}
             </div>
           ) : (
-            <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-700">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">Card ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">In Game</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">Created</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-700">
-                    {filteredCartelas.map((cartela) => (
-                      <tr key={cartela.id} className="hover:bg-slate-700/50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          {cartela.card_id}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs rounded ${
-                            cartela.is_active
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-red-100 text-red-700'
-                          }`}>
-                            {cartela.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          {cartela.game_id ? (
-                            <span className="text-yellow-400">Yes</span>
-                          ) : (
-                            <span className="text-slate-500">No</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
-                          {new Date(cartela.purchased_at).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleCartelaClick(cartela)}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors"
-                              title="View details"
-                            >
-                              <Eye size={16} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedCartela(cartela);
-                                setEditedStatus(cartela.is_active);
-                                setEditedNumbers(JSON.parse(JSON.stringify(cartela.numbers)));
-                                setIsEditing(true);
-                                setShowModal(true);
-                              }}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-sm transition-colors"
-                              title="Edit cartela"
-                            >
-                              <Edit size={16} />
-                            </button>
-                          </div>
-                        </td>
+            <>
+              {/* Desktop Table View - Hidden on Mobile */}
+              <div className="hidden md:block bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-700">
+                      <tr>
+                        <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">Card ID</th>
+                        <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">Status</th>
+                        <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">In Game</th>
+                        <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">Created</th>
+                        <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700">
+                      {filteredCartelas.map((cartela) => (
+                        <tr key={cartela.id} className="hover:bg-slate-700/50 transition-colors">
+                          <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            {cartela.card_id}
+                          </td>
+                          <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs rounded ${
+                              cartela.is_active
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                              {cartela.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm">
+                            {cartela.game_id ? (
+                              <span className="text-yellow-400">Yes</span>
+                            ) : (
+                              <span className="text-slate-500">No</span>
+                            )}
+                          </td>
+                          <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-slate-400">
+                            {new Date(cartela.purchased_at).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleCartelaClick(cartela)}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors"
+                                title="View details"
+                              >
+                                <Eye size={16} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedCartela(cartela);
+                                  setEditedStatus(cartela.is_active);
+                                  setEditedNumbers(JSON.parse(JSON.stringify(cartela.numbers)));
+                                  setIsEditing(true);
+                                  setShowModal(true);
+                                }}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-sm transition-colors"
+                                title="Edit cartela"
+                              >
+                                <Edit size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+
+              {/* Mobile Card View - Visible only on Mobile */}
+              <div className="md:hidden space-y-3">
+                {filteredCartelas.map((cartela) => (
+                  <div key={cartela.id} className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg font-bold text-white">Card {cartela.card_id}</span>
+                        {cartela.game_id && (
+                          <div className="w-2 h-2 bg-yellow-400 rounded-full" title="In Game"></div>
+                        )}
+                      </div>
+                      <span className={`px-2 py-1 text-xs rounded font-semibold ${
+                        cartela.is_active
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}>
+                        {cartela.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+
+                    {/* Info */}
+                    <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
+                      <div>
+                        <p className="text-xs text-slate-400">In Game</p>
+                        <p className={cartela.game_id ? 'text-yellow-400' : 'text-slate-500'}>
+                          {cartela.game_id ? 'Yes' : 'No'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-400">Created</p>
+                        <p className="text-slate-300 text-xs">
+                          {new Date(cartela.purchased_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2 pt-3 border-t border-slate-700">
+                      <button
+                        onClick={() => handleCartelaClick(cartela)}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm transition-colors text-white"
+                      >
+                        <Eye size={16} />
+                        <span>View</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedCartela(cartela);
+                          setEditedStatus(cartela.is_active);
+                          setEditedNumbers(JSON.parse(JSON.stringify(cartela.numbers)));
+                          setIsEditing(true);
+                          setShowModal(true);
+                        }}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg text-sm transition-colors text-white"
+                      >
+                        <Edit size={16} />
+                        <span>Edit</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
 
           {filteredCartelas.length === 0 && (
@@ -440,15 +512,15 @@ const CartelaManagement: React.FC = () => {
 
       {/* Modal for displaying cartela details */}
       {showModal && selectedCartela && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-2xl shadow-2xl w-auto max-w-2xl border border-slate-700">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 my-4">
             {/* Modal Header */}
-            <div className="flex justify-between items-center p-6 border-b border-slate-700">
-              <div>
-                <h2 className="text-2xl font-bold text-white">
+            <div className="flex justify-between items-start p-4 sm:p-6 border-b border-slate-700">
+              <div className="flex-1 min-w-0 mr-2">
+                <h2 className="text-xl sm:text-2xl font-bold text-white">
                   Cartela {selectedCartela.card_id}
                 </h2>
-                <div className="flex gap-2 mt-2">
+                <div className="flex flex-wrap gap-2 mt-2">
                   <span className={`px-2 py-1 text-xs rounded ${
                     selectedCartela.is_active
                       ? 'bg-green-100 text-green-700'
@@ -470,14 +542,14 @@ const CartelaManagement: React.FC = () => {
               </div>
               <button
                 onClick={handleCloseModal}
-                className="text-slate-400 hover:text-white transition-colors bg-slate-700 hover:bg-slate-600 rounded-full p-2"
+                className="text-slate-400 hover:text-white transition-colors bg-slate-700 hover:bg-slate-600 rounded-full p-2 flex-shrink-0"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-8">
+            <div className="p-4 sm:p-8">
               <div className="flex justify-center mb-6">
                 {renderBingoCard(selectedCartela, isEditing)}
               </div>
@@ -521,7 +593,7 @@ const CartelaManagement: React.FC = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="mt-6 flex gap-3">
+              <div className="mt-6 flex flex-col sm:flex-row gap-3">
                 {!isEditing ? (
                   <>
                     <button
@@ -529,14 +601,14 @@ const CartelaManagement: React.FC = () => {
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white font-medium"
                     >
                       <Edit size={18} />
-                      Edit Cartela
+                      <span>Edit Cartela</span>
                     </button>
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-white font-medium"
                     >
                       <Trash2 size={18} />
-                      Delete
+                      <span>Delete</span>
                     </button>
                   </>
                 ) : (
@@ -546,7 +618,7 @@ const CartelaManagement: React.FC = () => {
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white font-medium"
                     >
                       <Save size={18} />
-                      Save Changes
+                      <span>Save Changes</span>
                     </button>
                     <button
                       onClick={() => {
@@ -569,13 +641,13 @@ const CartelaManagement: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && selectedCartela && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 p-6">
-            <h3 className="text-xl font-bold text-white mb-4">Confirm Delete</h3>
-            <p className="text-slate-300 mb-6">
+          <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 p-4 sm:p-6">
+            <h3 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4">Confirm Delete</h3>
+            <p className="text-slate-300 text-sm sm:text-base mb-4 sm:mb-6">
               Are you sure you want to delete Cartela <span className="font-bold text-white">{selectedCartela.card_id}</span>? 
               This will set it as inactive and cannot be undone.
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={handleDeleteCartela}
                 className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-white font-medium"

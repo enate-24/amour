@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Minus, Plus, Eye, EyeOff } from 'lucide-react';
+import { Minus, Plus, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCartela } from '../hooks/useCartela';
+import { useAuth } from '../hooks/useAuth';
 import HouseBonusButton from './HouseBonusButton';
 
 const NewGame: React.FC = () => {
   const { cartelas, loading, error } = useCartela();
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [gamesPlayed, setGamesPlayed] = useState(19);
   const [bonusPlayed, setBonusPlayed] = useState(0);
@@ -26,6 +28,7 @@ const NewGame: React.FC = () => {
   const [hideHouseCut, setHideHouseCut] = useState(true);
   const [selectedPattern, setSelectedPattern] = useState<string>("Two Lines");
   const [isLoadingPattern, setIsLoadingPattern] = useState(true);
+  const [bonusNotification, setBonusNotification] = useState<string | null>(null);
 
   const patternOptions = ["One Line", "Two Lines", "Three Lines", "Full House"];
 
@@ -91,6 +94,46 @@ const NewGame: React.FC = () => {
   React.useEffect(() => {
     localStorage.setItem('betAmount', betBirr.toString());
   }, [betBirr]);
+
+  // Check for bonus notification on component mount
+  React.useEffect(() => {
+    const checkBonusStatus = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+        const response = await fetch(`${API_BASE_URL}/bonuses/daily`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const bonus = data.dailyBonus;
+          
+          // Show notification if bonus was just applied (used but profit >= 1000 before use)
+          if (bonus.bonusUsed && bonus.dailyProfit >= 800) {
+            const userType = localStorage.getItem('userType') || 'prepaid';
+            if (userType === 'postpaid') {
+              setBonusNotification(`🎉 House Bonus Applied! 200 Birr deducted from your daily profit`);
+            } else {
+              setBonusNotification(`🎉 House Bonus Applied! 200 Birr added to your balance`);
+            }
+            
+            // Auto-hide notification after 10 seconds
+            setTimeout(() => setBonusNotification(null), 10000);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking bonus status:', error);
+      }
+    };
+
+    checkBonusStatus();
+  }, []);
 
   // Load pattern from settings
   React.useEffect(() => {
@@ -167,11 +210,11 @@ const NewGame: React.FC = () => {
     }
   };
 
-  // Function to select all 1200 cartelas manually
-  const selectAll1200Cartelas = () => {
+  // Function to select all 2000 cartelas manually
+  const selectAll2000Cartelas = () => {
     if (cartelas.length > 0) {
-      // Select all available cartelas (up to 1200)
-      const allCartelaIds = cartelas.slice(0, 1200).map(cartela => cartela.card_id);
+      // Select all available cartelas (up to 2000)
+      const allCartelaIds = cartelas.slice(0, 2000).map(cartela => cartela.card_id);
       setSelectedCards(allCartelaIds);
       console.log(`✅ Selected ${allCartelaIds.length} cartelas automatically`);
     }
@@ -291,6 +334,11 @@ const NewGame: React.FC = () => {
       const result = await response.json();
       console.log('✅ Game session saved to database:', result);
 
+      // Show warning if present (for postpaid users approaching balance limit)
+      if (result.warning) {
+        alert(result.warning);
+      }
+
       return { ...result, gameNumber };
     } catch (error) {
       console.error('❌ Error saving game session:', error);
@@ -340,6 +388,21 @@ const NewGame: React.FC = () => {
     const houseCutAmount = (totalBet * housePercentage) / 100; // House profit
     const playerContributionToPrizePool = totalBet - houseCutAmount; // Goes to prize pool
 
+    // Check if prepaid user has sufficient balance
+    if (user && user.userType === 'prepaid') {
+      const currentBalance = user.balance || 0;
+      if (currentBalance < houseCutAmount) {
+        alert(
+          `Insufficient Balance!\n\n` +
+          `Your current balance: ${currentBalance.toFixed(2)} Birr\n` +
+          `House cut required: ${houseCutAmount.toFixed(2)} Birr\n` +
+          `Shortage: ${(houseCutAmount - currentBalance).toFixed(2)} Birr\n\n` +
+          `Please contact admin to add balance to your account.`
+        );
+        return;
+      }
+    }
+
     // Update game stats
     setGamesPlayed(prev => prev + 1);
     // Don't set winBirr here - actual win is calculated when winning occurs
@@ -356,6 +419,9 @@ const NewGame: React.FC = () => {
     };
 
     try {
+      // OPTIMIZATION: Start sound playback immediately (non-blocking)
+      playStartSound();
+
       // Save to database - no fallback to localStorage
       const gameSessionResult = await saveGameSession(gameData);
 
@@ -365,11 +431,13 @@ const NewGame: React.FC = () => {
         localStorage.removeItem('selectedCards');
       }
 
-      // Play start sound on successful game creation
-      playStartSound();
-
-      // Navigate to GamePage after successful game creation
+      // OPTIMIZATION: Navigate immediately, refresh user balance in background
       navigate('/game');
+
+      // Refresh user balance in background (non-blocking)
+      if (refreshUser) {
+        refreshUser().catch(err => console.warn('Background user refresh failed:', err));
+      }
 
     } catch (error) {
       console.error('Failed to save game session:', error);
@@ -384,6 +452,16 @@ const NewGame: React.FC = () => {
       setRegistrationStatus({
         type: 'error',
         message: 'Please enter a Cartela ID'
+      });
+      return;
+    }
+
+    // Validate ID is a number and within range 1-2000
+    const idNumber = parseInt(currentIdInput.trim());
+    if (isNaN(idNumber) || idNumber < 1 || idNumber > 2000) {
+      setRegistrationStatus({
+        type: 'error',
+        message: `Invalid ID: Must be between 1 and 2000`
       });
       return;
     }
@@ -414,10 +492,19 @@ const NewGame: React.FC = () => {
         // Increment registered count
         setRegisteredCount(prev => prev + 1);
 
+        // Show success message
+        setRegistrationStatus({
+          type: 'success',
+          message: `✓ Cartela ${currentIdInput} registered successfully`
+        });
+
         // Clear input for next entry
         setCurrentIdInput('');
 
-        // No success message - just register silently
+        // Clear success message after 2 seconds
+        setTimeout(() => {
+          setRegistrationStatus({type: '', message: ''});
+        }, 2000);
 
       } else {
         setRegistrationStatus({
@@ -437,6 +524,22 @@ const NewGame: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#001A23] flex flex-col">
+      {/* Bonus Notification Banner */}
+      {bonusNotification && (
+        <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 py-3 shadow-lg animate-slide-down">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <span className="font-semibold text-sm sm:text-base">{bonusNotification}</span>
+            <button
+              onClick={() => setBonusNotification(null)}
+              className="ml-4 text-white hover:text-gray-200 font-bold text-xl"
+              aria-label="Close notification"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Sticky Header Section */}
       <div className="sticky top-0 z-20 bg-[#001A23] border-b border-slate-700 shadow-lg">
         <div className="py-2 px-2 sm:py-4 sm:px-4 md:px-8 lg:px-16 xl:px-[87px] relative">
@@ -465,6 +568,33 @@ const NewGame: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm mb-3 sm:mb-4">
               <span>Games Played: <span className="text-blue-400 font-bold">{gamesPlayed}</span></span>
               <span>Bonus Played: <span className="text-green-400 font-bold">{bonusPlayed}</span></span>
+              
+              {/* Balance Display for Prepaid Users */}
+              {user && user.userType === 'prepaid' && (
+                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-700/50 border border-slate-600">
+                  <span className="text-slate-300">Balance:</span>
+                  <span className={`font-bold ${
+                    (user.balance || 0) < 100 ? 'text-red-400' : 
+                    (user.balance || 0) < 500 ? 'text-yellow-400' : 
+                    'text-green-400'
+                  }`}>
+                    {(user.balance || 0).toFixed(2)} Birr
+                  </span>
+                  {(user.balance || 0) < 100 && (
+                    <span title="Low balance warning">
+                      <AlertCircle size={14} className="text-red-400 ml-1" />
+                    </span>
+                  )}
+                </div>
+              )}
+              
+              {/* Credit Display for Postpaid Users */}
+              {user && user.userType === 'postpaid' && (
+                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-700/50 border border-slate-600">
+                  <span className="text-slate-300">Credit:</span>
+                  <span className="font-bold text-blue-400">Unlimited</span>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4 sm:mb-6">
@@ -568,6 +698,26 @@ const NewGame: React.FC = () => {
                       {((selectedCards.length * betBirr) - ((selectedCards.length * betBirr * housePercentage) / 100)).toLocaleString()}
                     </span>
                   </div>
+                  
+                  {/* Balance Warning for Prepaid Users */}
+                  {user && user.userType === 'prepaid' && (() => {
+                    const totalBet = selectedCards.length * betBirr;
+                    const houseCut = (totalBet * housePercentage) / 100;
+                    const currentBalance = user.balance || 0;
+                    const insufficient = currentBalance < houseCut;
+                    
+                    if (insufficient) {
+                      return (
+                        <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/20 border border-red-500 text-red-400 text-xs sm:text-sm">
+                          <AlertCircle size={14} />
+                          <span className="font-semibold">
+                            Insufficient! Need {houseCut.toFixed(2)} Birr (Have {currentBalance.toFixed(2)})
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </>
               )}
             </div>
@@ -630,9 +780,9 @@ const NewGame: React.FC = () => {
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <span className="text-white font-medium text-xs sm:text-sm md:text-base">
                   Selected Cards ({selectedCards.length})
-                  {selectedCards.length >= 1200 && (
+                  {selectedCards.length >= 2000 && (
                     <span className="ml-2 px-2 py-1 bg-green-600 text-white rounded-full text-xs font-bold">
-                      ALL 1200 ACTIVE! 🎯
+                      ALL 2000 ACTIVE! 🎯
                     </span>
                   )}
                 </span>
@@ -722,9 +872,10 @@ const NewGame: React.FC = () => {
                     ? 'bg-blue-600 text-white shadow-lg transform scale-105'
                     : 'bg-[#c5c9c8] active:bg-[#b0b5b4] sm:hover:bg-[#b0b5b4] text-black border border-gray-300'
                 }`}
+                title={`Card ID: ${cartela.card_id}`}
               >
                 <div className="text-center h-full flex items-center justify-center">
-                  <div className="text-[12px] font-semibold leading-tight">{cartela.card_id}</div>
+                  <div className="text-[12px] font-semibold leading-tight">{index + 1}</div>
                 </div>
               </button>
             ))}
@@ -732,57 +883,86 @@ const NewGame: React.FC = () => {
         )}
       </div>
 
-      {/* Centered ID Modal */}
+      {/* Centered ID Modal - Fully Responsive */}
       {isIdModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-slate-800 rounded-lg border-2 border-blue-400 shadow-2xl w-full max-w-md">
-            <div className="p-3 sm:p-4">
-              <div className="flex items-center justify-between mb-3 sm:mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-2 sm:p-4">
+          <div className="bg-slate-800 rounded-lg border-2 border-blue-400 shadow-2xl w-full max-w-[95vw] sm:max-w-md mx-auto">
+            <div className="p-4 sm:p-5 md:p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4 sm:mb-5">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <h3 className="text-base sm:text-lg font-bold text-white truncate">
+                  <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white truncate">
                     Enter Cartela ID
                   </h3>
                   {registeredCount > 0 && (
-                    <span className="px-2 py-1 bg-green-600 text-green-100 rounded-full text-xs font-bold shrink-0">
-                      {registeredCount} registered
+                    <span className="px-2 py-1 bg-green-600 text-green-100 rounded-full text-xs sm:text-sm font-bold shrink-0">
+                      {registeredCount}
                     </span>
                   )}
                 </div>
                 <button
                   onClick={() => setIsIdModalOpen(false)}
-                  className="text-slate-400 hover:text-white transition-colors text-lg sm:text-xl shrink-0 ml-2"
+                  className="text-slate-400 hover:text-white transition-colors text-xl sm:text-2xl shrink-0 ml-2 p-1"
                   title="Close"
+                  aria-label="Close modal"
                 >
                   ✕
                 </button>
               </div>
 
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  value={currentIdInput}
-                  onChange={(e) => setCurrentIdInput(e.target.value)}
-                  placeholder="Enter Cartela ID..."
-                  className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-blue-400 focus:outline-none"
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      handleIdRegistration();
-                    }
-                  }}
-                  autoFocus
-                />
+              {/* Content */}
+              <div className="space-y-3 sm:space-y-4">
+                {/* Input Field */}
+                <div>
+                  <label htmlFor="cartelaIdInput" className="block text-sm sm:text-base text-slate-300 mb-2">
+                    Cartela ID (1-2000)
+                  </label>
+                  <input
+                    id="cartelaIdInput"
+                    type="number"
+                    value={currentIdInput}
+                    onChange={(e) => setCurrentIdInput(e.target.value)}
+                    placeholder="Enter ID..."
+                    min="1"
+                    max="2000"
+                    className="w-full px-3 sm:px-4 py-2 sm:py-3 text-base sm:text-lg bg-slate-700 text-white rounded-lg border-2 border-slate-600 focus:border-blue-400 focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleIdRegistration();
+                      }
+                    }}
+                    autoFocus
+                  />
+                </div>
 
+                {/* Registration Status Message */}
+                {registrationStatus.message && (
+                  <div className={`p-3 sm:p-4 rounded-lg text-sm sm:text-base font-medium transition-all ${
+                    registrationStatus.type === 'success' 
+                      ? 'bg-green-600/20 text-green-400 border-2 border-green-600' 
+                      : registrationStatus.type === 'error'
+                      ? 'bg-red-600/20 text-red-400 border-2 border-red-600'
+                      : 'bg-blue-600/20 text-blue-400 border-2 border-blue-600'
+                  }`}>
+                    {registrationStatus.message}
+                  </div>
+                )}
 
-
-                <div className="flex flex-col sm:flex-row gap-2">
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-2">
                   <button
                     onClick={handleIdRegistration}
                     disabled={isRegistering || !currentIdInput.trim()}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed px-4 py-2 rounded font-medium transition-colors text-sm sm:text-base"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-slate-600 disabled:cursor-not-allowed px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold transition-all text-base sm:text-lg shadow-lg hover:shadow-xl disabled:shadow-none"
                   >
-                    {isRegistering ? 'Registering...' : 'Register'}
+                    {isRegistering ? '⏳ Registering...' : '✓ Register'}
                   </button>
-                  
+                  <button
+                    onClick={() => setIsIdModalOpen(false)}
+                    className="sm:flex-none bg-slate-700 hover:bg-slate-600 active:bg-slate-500 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold transition-all text-base sm:text-lg"
+                  >
+                    Close
+                  </button>
                 </div>
               </div>
             </div>

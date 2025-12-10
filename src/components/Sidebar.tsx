@@ -14,6 +14,19 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange, isOpen, onClose, onToggle }) => {
   const { user, signOut } = useAuth();
 
+  // Debug: Log user type
+  React.useEffect(() => {
+    if (user) {
+      console.log('=== SIDEBAR DEBUG ===');
+      console.log('User Type:', user.userType);
+      console.log('Role:', user.role);
+      console.log('Balance:', user.balance);
+      console.log('Balance Limit:', user.balanceLimit);
+      console.log('Full User Object:', user);
+      console.log('===================');
+    }
+  }, [user]);
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'game', label: 'Play Bingo', icon: Play },
@@ -71,7 +84,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange, isOpen, on
               <User size={18} className="text-slate-400 sm:w-5 sm:h-5" />
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-sm sm:text-base truncate">{user?.email?.split('@')[0] || 'User'}</p>
-                <p className="text-xs sm:text-sm text-slate-400">House Profit: {user?.balance?.toFixed(2) || '0.00'} Birr</p>
               </div>
             </div>
             <div className="mt-3 space-y-2">

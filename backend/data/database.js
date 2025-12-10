@@ -22,15 +22,17 @@ const dbConfig = process.env.DATABASE_URL ? {
   ssl: {
     rejectUnauthorized: false
   },
-  max: 10, // Reduced pool size for better connection management
-  min: 2, // Minimum connections to keep alive
-  idleTimeoutMillis: 60000, // 60 seconds
-  connectionTimeoutMillis: 30000, // 30 seconds - increased from 2 seconds
-  acquireTimeoutMillis: 60000, // 60 seconds to acquire connection
-  createTimeoutMillis: 30000, // 30 seconds to create connection
+  max: 10, // Reduced pool size to avoid overwhelming remote database
+  min: 2, // Keep minimal connections alive
+  idleTimeoutMillis: 60000, // 60 seconds - allow connections to stay idle longer
+  connectionTimeoutMillis: 30000, // 30 seconds - increased for remote database
+  acquireTimeoutMillis: 30000, // 30 seconds - increased for remote database
+  createTimeoutMillis: 30000, // 30 seconds - increased for remote database
   destroyTimeoutMillis: 5000, // 5 seconds to destroy connection
-  reapIntervalMillis: 1000, // Check for idle connections every second
-  createRetryIntervalMillis: 200, // Retry connection creation every 200ms
+  reapIntervalMillis: 10000, // Check for idle connections every 10 seconds
+  createRetryIntervalMillis: 500, // Retry connection creation every 500ms
+  statement_timeout: 60000, // 60 second query timeout - increased for remote database
+  query_timeout: 60000 // 60 second query timeout - increased for remote database
 } : {
   user: process.env.DB_USER || 'postgres',
   host: process.env.DB_HOST || 'localhost',
@@ -38,33 +40,44 @@ const dbConfig = process.env.DATABASE_URL ? {
   password: process.env.DB_PASSWORD || 'postgres',
   port: parseInt(process.env.DB_PORT) || 5432,
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-  max: 10, // Reduced pool size for better connection management
-  min: 2, // Minimum connections to keep alive
-  idleTimeoutMillis: 60000, // 60 seconds
-  connectionTimeoutMillis: 30000, // 30 seconds - increased from 2 seconds
-  acquireTimeoutMillis: 60000, // 60 seconds to acquire connection
-  createTimeoutMillis: 30000, // 30 seconds to create connection
+  max: 20, // Increased pool size for better concurrency
+  min: 5, // Keep more connections alive for faster response
+  idleTimeoutMillis: 30000, // 30 seconds
+  connectionTimeoutMillis: 10000, // 10 seconds
+  acquireTimeoutMillis: 10000, // 10 seconds
+  createTimeoutMillis: 10000, // 10 seconds
   destroyTimeoutMillis: 5000, // 5 seconds to destroy connection
   reapIntervalMillis: 1000, // Check for idle connections every second
   createRetryIntervalMillis: 200, // Retry connection creation every 200ms
+  statement_timeout: 120000, // 120 second query timeout (increased for large queries)
+  query_timeout: 120000 // 120 second query timeout (increased for large queries)
 };
 
 // Create connection pool
 const pool = new Pool(dbConfig);
 
 // Test the connection
-pool.on('connect', () => {
-  console.log('✅ Connected to PostgreSQL database');
-});
-
-// Also configure the pool to handle boolean values correctly
+let connectionCount = 0;
 pool.on('connect', (client) => {
+  connectionCount++;
+  console.log(`✅ Connected to PostgreSQL database (connection #${connectionCount})`);
+  // Configure the client to handle boolean values correctly
   client.query('SET datestyle = ISO, MDY');
 });
 
+pool.on('acquire', () => {
+  console.log('🔵 Client acquired from pool');
+});
+
+pool.on('remove', () => {
+  connectionCount--;
+  console.log(`🔴 Client removed from pool (remaining: ${connectionCount})`);
+});
+
 pool.on('error', (err) => {
-  console.error('❌ Unexpected error on idle client', err);
-  process.exit(-1);
+  console.error('❌ Unexpected error on idle client:', err.message);
+  // Don't exit process on idle client errors - just log them
+  console.error('Stack:', err.stack);
 });
 
 // Helper function to retry database operations
@@ -73,14 +86,20 @@ const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
     try {
       return await operation();
     } catch (error) {
-      console.log(`Database operation attempt ${attempt} failed:`, error.message);
+      const isTimeout = error.message && error.message.includes('timeout');
+      const isConnectionError = error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT';
+      
+      console.log(`⚠️ Database operation attempt ${attempt}/${maxRetries} failed:`, error.message);
       
       if (attempt === maxRetries) {
+        console.error(`❌ All ${maxRetries} attempts failed. Last error:`, error.message);
         throw error;
       }
       
-      // Wait before retrying
-      await new Promise(resolve => setTimeout(resolve, delay * attempt));
+      // Use exponential backoff for retries, especially for timeouts
+      const backoffDelay = isTimeout || isConnectionError ? delay * Math.pow(2, attempt - 1) : delay * attempt;
+      console.log(`⏳ Retrying in ${backoffDelay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, backoffDelay));
     }
   }
 };
@@ -88,40 +107,58 @@ const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
 // Promisify database operations for async/await support with retry logic
 const run = async (sql, params = []) => {
   return retryOperation(async () => {
-    const client = await pool.connect();
+    let client;
     try {
+      client = await pool.connect();
       const result = await client.query(sql, params);
       return {
         id: result.rows[0]?.id,
         changes: result.rowCount,
         rows: result.rows
       };
+    } catch (error) {
+      console.error('❌ Query error in run():', error.message);
+      throw error;
     } finally {
-      client.release();
+      if (client) {
+        client.release();
+      }
     }
   });
 };
 
 const get = async (sql, params = []) => {
   return retryOperation(async () => {
-    const client = await pool.connect();
+    let client;
     try {
+      client = await pool.connect();
       const result = await client.query(sql, params);
       return result.rows[0] || null;
+    } catch (error) {
+      console.error('❌ Query error in get():', error.message);
+      throw error;
     } finally {
-      client.release();
+      if (client) {
+        client.release();
+      }
     }
   });
 };
 
 const all = async (sql, params = []) => {
   return retryOperation(async () => {
-    const client = await pool.connect();
+    let client;
     try {
+      client = await pool.connect();
       const result = await client.query(sql, params);
       return result.rows;
+    } catch (error) {
+      console.error('❌ Query error in all():', error.message);
+      throw error;
     } finally {
-      client.release();
+      if (client) {
+        client.release();
+      }
     }
   });
 };
@@ -160,6 +197,11 @@ const createTables = async () => {
         )
       `);
 
+      // Create indexes for faster queries
+      await run(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
+      await run(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+      await run(`CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active)`);
+
       // Games table
       await run(`
         CREATE TABLE IF NOT EXISTS games (
@@ -181,6 +223,12 @@ const createTables = async () => {
           FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
         )
       `);
+
+      // Create indexes for faster game queries
+      await run(`CREATE INDEX IF NOT EXISTS idx_games_status ON games(status)`);
+      await run(`CREATE INDEX IF NOT EXISTS idx_games_user_id ON games(user_id)`);
+      await run(`CREATE INDEX IF NOT EXISTS idx_games_created_at ON games(created_at DESC)`);
+      await run(`CREATE INDEX IF NOT EXISTS idx_games_user_created ON games(user_id, created_at DESC)`);
 
       // Add missing columns to existing tables if missing
       try {
@@ -208,6 +256,15 @@ const createTables = async () => {
           FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
         )
       `);
+
+      // Create indexes for faster cartela queries
+      await run(`CREATE INDEX IF NOT EXISTS idx_cartelas_user_id ON cartelas(user_id)`);
+      await run(`CREATE INDEX IF NOT EXISTS idx_cartelas_game_id ON cartelas(game_id)`);
+      await run(`CREATE INDEX IF NOT EXISTS idx_cartelas_card_id ON cartelas(card_id)`);
+      await run(`CREATE INDEX IF NOT EXISTS idx_cartelas_is_active ON cartelas(is_active)`);
+      await run(`CREATE INDEX IF NOT EXISTS idx_cartelas_purchased_at ON cartelas(purchased_at DESC)`);
+      // Composite index for optimized findAll query
+      await run(`CREATE INDEX IF NOT EXISTS idx_cartelas_active_cardid ON cartelas(is_active, card_id)`);
 
       // Admin logs table
       await run(`
@@ -293,6 +350,10 @@ const createTables = async () => {
           UNIQUE(user_id, bonus_date)
         )
       `);
+
+      // Create indexes for faster bonus queries
+      await run(`CREATE INDEX IF NOT EXISTS idx_daily_bonuses_user_date ON daily_bonuses(user_id, bonus_date DESC)`);
+      await run(`CREATE INDEX IF NOT EXISTS idx_daily_bonuses_date ON daily_bonuses(bonus_date DESC)`);
 
       console.log('✅ Database schema initialized successfully');
       return; // Success, exit the retry loop
@@ -631,7 +692,9 @@ const gameOperations = {
 
 // Database operations for cartelas
 const cartelaOperations = {
-  findAll: () => all('SELECT * FROM cartelas ORDER BY purchased_at DESC'),
+  // Optimized: Fetch first 2000 active cartelas (fastest query possible)
+  // Using indexed column for WHERE, no complex ORDER BY for speed
+  findAll: () => all('SELECT id, card_id, user_id, game_id, numbers, pattern, is_active, is_winner, purchased_at FROM cartelas WHERE is_active = 1 LIMIT 2000'),
 
   findByUserId: (userId) => all('SELECT * FROM cartelas WHERE user_id = $1', [userId]),
 
@@ -899,12 +962,39 @@ const dailyBonusOperations = {
   }
 };
 
+// Health check function
+const checkConnection = async () => {
+  try {
+    const result = await pool.query('SELECT NOW() as current_time, version() as pg_version');
+    console.log('✅ Database health check passed:', {
+      time: result.rows[0].current_time,
+      version: result.rows[0].pg_version.split(' ')[0] + ' ' + result.rows[0].pg_version.split(' ')[1]
+    });
+    return true;
+  } catch (error) {
+    console.error('❌ Database health check failed:', error.message);
+    return false;
+  }
+};
+
+// Graceful shutdown
+const closePool = async () => {
+  try {
+    await pool.end();
+    console.log('✅ Database pool closed gracefully');
+  } catch (error) {
+    console.error('❌ Error closing database pool:', error.message);
+  }
+};
+
 module.exports = {
   pool,
   run,
   get,
   all,
   createTables,
+  checkConnection,
+  closePool,
   users: userOperations,
   games: gameOperations,
   cartelas: cartelaOperations,
