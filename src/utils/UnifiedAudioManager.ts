@@ -167,7 +167,14 @@ export class UnifiedAudioManager {
 
       console.log(`📥 Need to download ${missingFiles.length} missing files`);
       console.log(`📊 Cache status: ${status.cachedFiles} cached, ${status.totalFiles} total expected`);
-      console.log(`📋 Missing files sample:`, missingFiles.slice(0, 10));
+      console.log(`📋 Missing files sample:`, missingFiles.slice(0, 5));
+      console.log(`📋 Expected total files: ${status.totalFiles} (should be 156: 79 boy + 77 girl)`);
+      
+      if (missingFiles.length > 200) {
+        console.error(`🚨 DUPLICATE FILES DETECTED: ${missingFiles.length} missing files is too many!`);
+        console.log(`📋 All missing files:`, missingFiles);
+        return; // Don't download if there are duplicates
+      }
       
       let completed = status.cachedFiles;
       const total = status.totalFiles;
@@ -175,27 +182,36 @@ export class UnifiedAudioManager {
       // Process downloads with concurrency limit
       const downloadPromises: Promise<void>[] = [];
       
-      for (const fileId of missingFiles) {
+      for (const cacheKey of missingFiles) {
+        // Parse voice category and file ID from cache key (e.g., "boy_1.wav" -> category="boy", fileId="1.wav")
+        const [category, ...fileIdParts] = cacheKey.split('_');
+        const fileId = fileIdParts.join('_'); // Handle files with underscores in name
+        
+        if (!category || !fileId || (category !== 'boy' && category !== 'girl')) {
+          console.warn(`⚠️ Invalid cache key format: ${cacheKey}`);
+          continue;
+        }
+        
         // Wait if we've reached the concurrent download limit
         while (this.activeDownloads >= this.config.maxConcurrentDownloads) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         
         // Add to download queue
-        this.downloadQueue.add(fileId);
+        this.downloadQueue.add(cacheKey);
         this.activeDownloads++;
         
-        // Start download
-        const downloadPromise = this.downloadFile(fileId)
+        // Start download with proper voice category
+        const downloadPromise = this.downloadFile(fileId, category as VoiceCategory)
           .then(() => {
             completed++;
             onProgress?.(completed, total);
           })
           .catch(error => {
-            console.error(`❌ Failed to download ${fileId}:`, error);
+            console.error(`❌ Failed to download ${fileId} (${category}):`, error);
           })
           .finally(() => {
-            this.downloadQueue.delete(fileId);
+            this.downloadQueue.delete(cacheKey);
             this.activeDownloads--;
           });
         
