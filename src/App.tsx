@@ -5,6 +5,7 @@ import { useAuth } from './hooks/useAuth';
 import { UnifiedAudioManager } from './utils/UnifiedAudioManager';
 import { cartelaCacheDB } from './utils/cartelaCache';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import AutoPreloader from './components/AutoPreloader';
 import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
 import GamePage from './components/GamePageOptimized';
@@ -22,15 +23,15 @@ import PackageManagement from './components/PackageManagement';
 import NewAccountPage from './components/NewAccountPage';
 import NewGame from './components/NewGame';
 
-// Initialize audio manager with cache-first strategy
+// Initialize audio manager with automatic preloading
 const initializeAudioManager = async () => {
-  console.log('🔊 Initializing UnifiedAudioManager...');
+  console.log('🔊 Initializing UnifiedAudioManager with auto-preload...');
   try {
     const audioManager = UnifiedAudioManager.getInstance({
-      maxConcurrentDownloads: 5,
+      maxConcurrentDownloads: 6,
       retryAttempts: 3,
       retryDelay: 1000,
-      preloadOnInit: false // Don't auto-download, only download on-demand
+      preloadOnInit: true // Enable automatic preloading
     });
     
     await audioManager.initialize();
@@ -42,16 +43,26 @@ const initializeAudioManager = async () => {
     if (status.isComplete) {
       console.log('✅ All audio files cached - ready for offline use');
     } else {
-      console.log(`⚠️ ${status.missingFiles.length} audio files not cached - will download on-demand`);
+      console.log(`📥 Auto-downloading ${status.missingFiles.length} missing audio files...`);
+      
+      // Start automatic download in background
+      audioManager.downloadMissingAudio((current, total) => {
+        const progress = Math.round((current / total) * 100);
+        console.log(`📥 Audio download progress: ${current}/${total} (${progress}%)`);
+      }).then(() => {
+        console.log('✅ All audio files automatically downloaded and cached');
+      }).catch(error => {
+        console.error('❌ Auto-download failed:', error);
+      });
     }
   } catch (error) {
     console.error('❌ Failed to initialize audio manager:', error);
   }
 };
 
-// Initialize IndexedDB for cartela caching
+// Initialize IndexedDB for cartela caching with automatic preloading
 const initializeCartelaCache = async () => {
-  console.log('💾 Initializing Cartela IndexedDB cache...');
+  console.log('💾 Initializing Cartela IndexedDB cache with auto-preload...');
   try {
     await cartelaCacheDB.init();
     
@@ -63,16 +74,52 @@ const initializeCartelaCache = async () => {
       const cacheAge = Date.now() - stats.newestCache;
       const hoursOld = (cacheAge / (1000 * 60 * 60)).toFixed(1);
       console.log(`✅ Cartela cache ready - last updated ${hoursOld}h ago`);
+      
+      // Auto-refresh if cache is older than 12 hours
+      if (cacheAge > 12 * 60 * 60 * 1000) {
+        console.log('🔄 Cache is old, refreshing cartelas in background...');
+        preloadCartelas();
+      }
     } else {
-      console.log('⚠️ Cartela cache empty - will populate on first load');
+      console.log('📥 Cartela cache empty - starting automatic preload...');
+      preloadCartelas();
     }
   } catch (error) {
     console.error('❌ Failed to initialize cartela cache:', error);
   }
 };
 
+// Preload cartelas in background
+const preloadCartelas = async () => {
+  try {
+    console.log('📥 Preloading cartelas from server...');
+    
+    // Import cartelaAPI dynamically to avoid circular dependencies
+    const { cartelaAPI } = await import('./lib/api');
+    
+    // Fetch all cartelas from public endpoint
+    const { data: cartelas, error } = await cartelaAPI.getAllCartelasPublic();
+    
+    if (error) {
+      console.warn('⚠️ Failed to preload cartelas:', error.message);
+      return;
+    }
+    
+    if (cartelas && cartelas.length > 0) {
+      // Save to IndexedDB cache
+      await cartelaCacheDB.saveCartelas(cartelas);
+      console.log(`✅ Successfully preloaded ${cartelas.length} cartelas to cache`);
+    } else {
+      console.log('⚠️ No cartelas received from server');
+    }
+  } catch (error) {
+    console.warn('⚠️ Cartela preload failed (will load on-demand):', error);
+  }
+};
+
 function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [preloadComplete, setPreloadComplete] = useState(false);
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -187,6 +234,16 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
+      {/* Auto Preloader */}
+      <AutoPreloader 
+        autoStart={true}
+        showProgress={true}
+        onComplete={() => {
+          console.log('✅ Auto-preload completed');
+          setPreloadComplete(true);
+        }}
+      />
+      
       {/* Offline Indicator */}
       <OfflineIndicator />
       

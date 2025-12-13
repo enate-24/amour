@@ -100,6 +100,21 @@ export class UnifiedAudioManager {
       const status = await this.getCacheStatus();
       console.log(`📊 Cache status: ${status.cachedFiles}/${status.totalFiles} files cached`);
       
+      // Auto-preload if enabled and files are missing
+      if (this.config.preloadOnInit && !status.isComplete) {
+        console.log(`🚀 Auto-preload enabled: starting background download of ${status.missingFiles.length} missing files...`);
+        
+        // Start preloading in background (don't await to avoid blocking initialization)
+        this.downloadMissingAudio((current, total) => {
+          const progress = Math.round((current / total) * 100);
+          console.log(`📥 Background preload: ${current}/${total} (${progress}%)`);
+        }).then(() => {
+          console.log('✅ Background preload completed successfully');
+        }).catch(error => {
+          console.warn('⚠️ Background preload failed (will download on-demand):', error);
+        });
+      }
+      
       this.initialized = true;
       console.log('✅ UnifiedAudioManager initialized successfully');
     } catch (error) {
