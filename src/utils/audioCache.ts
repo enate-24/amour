@@ -314,11 +314,9 @@ class AudioCacheDB {
         'boy_notwinner.wav',
         'boy_shuffle-audio-TfqyAnvz.mp3',
         
-        // Girl voice files (75 numbers + 4 special sounds)
+        // Girl voice files (75 numbers + 2 special sounds - no start or notwinner)
         ...Array.from({ length: 75 }, (_, i) => `girl_${i + 1}.mp3`),
-        'girl_start.mp3',
         'girl_winner.mp3',
-        'girl_notwinner.wav',
         'girl_shuffle-audio-TfqyAnvz.mp3'
       ];
 

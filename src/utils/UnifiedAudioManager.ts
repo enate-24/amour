@@ -291,11 +291,23 @@ export class UnifiedAudioManager {
       // Winner sound files
       actualFileId = category === 'boy' ? 'winner.wav' : 'winner.mp3';
     } else if (fileId === 'notwinner') {
-      // Notwinner sound files - both boy and girl have this
-      actualFileId = category === 'boy' ? 'notwinner.wav' : 'notwinner.wav';
+      // Notwinner sound - only for boy voice
+      if (category === 'boy') {
+        actualFileId = 'notwinner.wav';
+      } else {
+        // This shouldn't be called for girl voice due to early return in playSound
+        console.warn('⚠️ getAudioUrl called for girl notwinner - this should not happen');
+        return ''; // Return empty string as fallback
+      }
     } else if (fileId === 'start') {
-      // Start sound files
-      actualFileId = category === 'boy' ? 'start.wav' : 'start.mp3';
+      // Start sound - only for boy voice
+      if (category === 'boy') {
+        actualFileId = 'start.wav';
+      } else {
+        // This shouldn't be called for girl voice due to early return in playSound
+        console.warn('⚠️ getAudioUrl called for girl start - this should not happen');
+        return ''; // Return empty string as fallback
+      }
     } else if (fileId.includes('shuffle-audio')) {
       // Shuffle sound - same file for both
       actualFileId = 'shuffle-audio-TfqyAnvz.mp3';
@@ -371,6 +383,14 @@ export class UnifiedAudioManager {
       this.stopCurrentSound();
       
       const category = voiceCategory || this.currentVoiceCategory;
+      
+      // Check for silent sounds in girl voice category
+      if (category === 'girl' && typeof number === 'string') {
+        if (number === 'start' || number === 'notwinner') {
+          console.log(`🔇 Girl voice: ${number} sound is silent - not playing any sound`);
+          return; // Exit early for silent sounds
+        }
+      }
       
       // Warn if voice category hasn't been explicitly set
       if (!voiceCategory && !this.voiceCategoryExplicitlySet) {
@@ -471,6 +491,15 @@ export class UnifiedAudioManager {
   public async preloadSound(number: number | string, voiceCategory?: VoiceCategory): Promise<void> {
     try {
       const category = voiceCategory || this.currentVoiceCategory;
+      
+      // Skip preloading silent sounds for girl voice
+      if (category === 'girl' && typeof number === 'string') {
+        if (number === 'start' || number === 'notwinner') {
+          console.log(`🔇 Skipping preload for girl voice silent sound: ${number}`);
+          return; // Exit early for silent sounds
+        }
+      }
+      
       let fileId: string;
       
       if (typeof number === 'string') {
@@ -602,10 +631,12 @@ export class UnifiedAudioManager {
     console.log('📥 Starting download of all voice categories...');
     
     const numbers = Array.from({ length: 75 }, (_, i) => i + 1);
-    const specialSounds = ['start.wav', 'winner.wav', 'notwinner.wav', 'shuffle-audio-TfqyAnvz.mp3'];
+    // Special sounds - different for each voice category
+    const boySpecialSounds = ['start.wav', 'winner.wav', 'notwinner.wav', 'shuffle-audio-TfqyAnvz.mp3'];
+    const girlSpecialSounds = ['winner.wav', 'shuffle-audio-TfqyAnvz.mp3']; // No start or notwinner for girl
     
     let completed = 0;
-    const totalFiles = (numbers.length + specialSounds.length) * 2; // Both boy and girl
+    const totalFiles = numbers.length * 2 + boySpecialSounds.length + girlSpecialSounds.length; // Accurate count
     
     // Download boy sounds
     for (const num of numbers) {
@@ -620,7 +651,7 @@ export class UnifiedAudioManager {
       }
     }
     
-    for (const sound of specialSounds) {
+    for (const sound of boySpecialSounds) {
       try {
         await this.preloadSound(sound, 'boy');
         completed++;
@@ -645,7 +676,7 @@ export class UnifiedAudioManager {
       }
     }
     
-    for (const sound of specialSounds) {
+    for (const sound of girlSpecialSounds) {
       try {
         await this.preloadSound(sound, 'girl');
         completed++;
