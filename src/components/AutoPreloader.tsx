@@ -50,12 +50,26 @@ const AutoPreloader: React.FC<AutoPreloaderProps> = ({
 
   const checkStatusAndPreload = async () => {
     try {
+      // Check if we've already completed preload recently (within last hour)
+      const lastPreloadTime = localStorage.getItem('lastPreloadTime');
+      const oneHourAgo = Date.now() - (60 * 60 * 1000);
+      
+      if (lastPreloadTime && parseInt(lastPreloadTime) > oneHourAgo) {
+        console.log('✅ Preload completed recently - skipping check');
+        onComplete?.();
+        return;
+      }
+
       // Check audio status
       const audioManager = UnifiedAudioManager.getInstance();
       const audioStatus = await audioManager.getCacheStatus();
       
       // Check cartela status
       const cartelaStats = await cartelaCacheDB.getCacheStats();
+      
+      // Check if cartela cache is recent (less than 24 hours old)
+      const cartelaCacheAge = cartelaStats.count > 0 ? Date.now() - cartelaStats.newestCache : Infinity;
+      const cartelaCacheValid = cartelaCacheAge < 24 * 60 * 60 * 1000; // 24 hours
       
       const newStatus: PreloadStatus = {
         audio: {
@@ -65,30 +79,37 @@ const AutoPreloader: React.FC<AutoPreloaderProps> = ({
           complete: audioStatus.isComplete
         },
         cartelas: {
-          total: cartelaStats.count > 0 ? cartelaStats.count : 100, // Estimate if unknown
+          total: cartelaStats.count > 0 ? cartelaStats.count : 0,
           cached: cartelaStats.count,
           downloading: false,
-          complete: cartelaStats.count > 0
+          complete: cartelaCacheValid && cartelaStats.count > 0
         },
         overall: {
-          complete: audioStatus.isComplete && cartelaStats.count > 0,
+          complete: audioStatus.isComplete && cartelaCacheValid && cartelaStats.count > 0,
           downloading: false
         }
       };
 
       setStatus(newStatus);
 
-      // Show preloader if anything needs to be downloaded
+      // Only download if content is missing or outdated
       if (!newStatus.overall.complete) {
-        setIsVisible(true);
+        console.log('🔄 Starting silent background preload...');
+        if (showProgress) {
+          setIsVisible(true);
+        }
         await startPreloading(newStatus);
       } else {
-        console.log('✅ All content already cached');
+        console.log('✅ All content already cached and up-to-date - skipping download');
+        // Mark as completed to prevent repeated checks
+        localStorage.setItem('lastPreloadTime', Date.now().toString());
         onComplete?.();
       }
     } catch (error) {
       console.error('❌ Error checking preload status:', error);
       setError('Failed to check cache status');
+      // Still call onComplete to not block the app
+      onComplete?.();
     }
   };
 
@@ -117,11 +138,19 @@ const AutoPreloader: React.FC<AutoPreloaderProps> = ({
 
       console.log('✅ Auto-preload completed successfully');
       
-      // Hide after a short delay
-      setTimeout(() => {
+      // Mark completion time to prevent repeated downloads
+      localStorage.setItem('lastPreloadTime', Date.now().toString());
+      
+      // Hide immediately if not showing progress, otherwise after short delay
+      if (!showProgress) {
         setIsVisible(false);
         onComplete?.();
-      }, 2000);
+      } else {
+        setTimeout(() => {
+          setIsVisible(false);
+          onComplete?.();
+        }, 2000);
+      }
 
     } catch (error) {
       console.error('❌ Preload failed:', error);
@@ -181,7 +210,25 @@ const AutoPreloader: React.FC<AutoPreloaderProps> = ({
     }));
 
     try {
-      console.log('📥 Preloading cartelas...');
+      // Check if we already have recent cartelas
+      const currentStats = await cartelaCacheDB.getCacheStats();
+      const cacheAge = currentStats.count > 0 ? Date.now() - currentStats.newestCache : Infinity;
+      
+      if (currentStats.count > 0 && cacheAge < 24 * 60 * 60 * 1000) {
+        console.log('✅ Cartelas already cached and recent - skipping download');
+        setStatus(prev => ({
+          ...prev,
+          cartelas: {
+            total: currentStats.count,
+            cached: currentStats.count,
+            downloading: false,
+            complete: true
+          }
+        }));
+        return;
+      }
+      
+      console.log('📥 Preloading cartelas silently...');
       
       const { data: cartelas, error: apiError } = await cartelaAPI.getAllCartelasPublic();
       
@@ -202,17 +249,21 @@ const AutoPreloader: React.FC<AutoPreloaderProps> = ({
           }
         }));
 
-        console.log(`✅ Cartela preload completed: ${cartelas.length} cartelas cached`);
+        console.log(`✅ Cartela preload completed silently: ${cartelas.length} cartelas cached`);
       } else {
-        throw new Error('No cartelas received from server');
+        console.log('⚠️ No cartelas received from server - using existing cache');
+        setStatus(prev => ({
+          ...prev,
+          cartelas: { ...prev.cartelas, downloading: false, complete: true }
+        }));
       }
     } catch (error) {
-      console.error('❌ Cartela preload failed:', error);
+      console.error('❌ Cartela preload failed (will use existing cache):', error);
       setStatus(prev => ({
         ...prev,
-        cartelas: { ...prev.cartelas, downloading: false }
+        cartelas: { ...prev.cartelas, downloading: false, complete: true }
       }));
-      throw error;
+      // Don't throw error - just continue with existing cache
     }
   };
 
@@ -222,7 +273,12 @@ const AutoPreloader: React.FC<AutoPreloaderProps> = ({
     return Math.round(((audioProgress + cartelaProgress) / 2) * 100);
   };
 
-  if (!isVisible || !showProgress) {
+  // Always return null if showProgress is false (silent mode)
+  if (!showProgress) {
+    return null;
+  }
+
+  if (!isVisible) {
     return null;
   }
 
