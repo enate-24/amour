@@ -214,7 +214,7 @@ const GamePageOptimized = (): JSX.Element => {
               gameNumber: result.game.gameNumber,
               status: result.game.status,
               cartelasSelected: result.game.cartelasSelected,
-              betAmount: result.game.betAmountPerCartela
+              betAmount: result.game.betAmountPerCartela || 5
             });
             setIsInitialLoading(false);
             

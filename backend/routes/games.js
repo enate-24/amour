@@ -30,10 +30,12 @@ const transformGameData = (gameRow) => {
 
   // Calculate bet_amount_per_cartela if not present
   let betAmountPerCartela = parseFloat(gameRow.bet_amount_per_cartela);
-  if (!betAmountPerCartela && gameRow.cartelas_selected > 0) {
-    betAmountPerCartela = parseFloat(gameRow.bet_money) / gameRow.cartelas_selected;
-  } else if (!betAmountPerCartela) {
-    betAmountPerCartela = 5.0; // Default fallback
+  if (isNaN(betAmountPerCartela) || betAmountPerCartela === null || betAmountPerCartela === undefined) {
+    if (gameRow.cartelas_selected > 0) {
+      betAmountPerCartela = parseFloat(gameRow.bet_money) / gameRow.cartelas_selected;
+    } else {
+      betAmountPerCartela = 5.0; // Default fallback
+    }
   }
 
   // Return only camelCase fields (no duplication)
