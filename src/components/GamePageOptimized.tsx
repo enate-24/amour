@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { logGameState } from "../utils/gameDebug";
 import { UnifiedAudioManager } from "../utils/UnifiedAudioManager";
+import VoiceCategoryManager from "../utils/voiceCategoryManager";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { createPoller, type OptimizedPoller } from "../utils/optimizedPolling";
 import { offlineGameState } from "../utils/offlineGameState";
@@ -460,7 +461,28 @@ const GamePageOptimized = (): JSX.Element => {
   
   // Initialize audio manager with UnifiedAudioManager
   useEffect(() => {
-    audioManagerRef.current = UnifiedAudioManager.getInstance();
+    const initializeAudioManager = async () => {
+      console.log('🎵 Initializing audio manager...');
+      
+      // Load voice category using the manager
+      console.log('🔑 Loading voice settings...');
+      const token = localStorage.getItem('auth_token');
+      const voiceCategory = await VoiceCategoryManager.initializeVoiceCategory(API_BASE_URL, token || undefined);
+      
+      // Initialize audio manager
+      console.log('🎵 Creating UnifiedAudioManager...');
+      audioManagerRef.current = UnifiedAudioManager.getInstance();
+      
+      // Only set voice category if we have a user selection
+      if (voiceCategory) {
+        audioManagerRef.current.setVoiceCategory(voiceCategory);
+        console.log('✅ Audio manager initialized with user voice category:', voiceCategory);
+      } else {
+        console.warn('⚠️ No voice category available - user must select one in Settings');
+      }
+    };
+    
+    initializeAudioManager();
     
     // Expose debug methods to window for debugging
     if (process.env.NODE_ENV === 'development') {
@@ -478,6 +500,17 @@ const GamePageOptimized = (): JSX.Element => {
           }, index * 1000);
         });
       };
+      
+      (window as any).checkVoiceCategory = () => {
+        const debugInfo = audioManagerRef.current?.getDebugInfo();
+        console.log('🎤 Audio Manager Debug Info:', debugInfo);
+        return debugInfo;
+      };
+      
+      (window as any).setVoiceCategory = (category: 'boy' | 'girl') => {
+        console.log(`🎤 Manually setting voice category to: ${category}`);
+        audioManagerRef.current?.setVoiceCategory(category);
+      };
     }
     
     return () => {
@@ -487,7 +520,7 @@ const GamePageOptimized = (): JSX.Element => {
         delete (window as any).testAudioMultiple;
       }
     };
-  }, []);
+  }, [API_BASE_URL]);
 
   // Pre-warm audio pool when called numbers change
   useEffect(() => {
@@ -693,15 +726,17 @@ const GamePageOptimized = (): JSX.Element => {
     // Start shaking animation
     setIsShuffling(true);
     
-    // Play shuffle sound from LOCAL file without blocking
+    // Play shuffle sound using UnifiedAudioManager
     const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
     schedulePlay(() => {
       try {
-        const shuffleAudio = new Audio('/sounds/shuffle-audio-TfqyAnvz.mp3');
-        shuffleAudio.volume = 0.7;
-        shuffleAudio.play().catch((error) => {
-          console.warn('Shuffle audio play failed:', error);
-        });
+        if (audioManagerRef.current) {
+          audioManagerRef.current.playSound('shuffle-audio-TfqyAnvz.mp3').catch((error) => {
+            console.warn('Shuffle audio play failed:', error);
+          });
+        } else {
+          console.warn('Audio manager not available for shuffle sound');
+        }
       } catch (error) {
         console.warn('Shuffle audio error:', error);
       }
@@ -853,13 +888,15 @@ const GamePageOptimized = (): JSX.Element => {
         // Show simple notification message for 2 seconds
         setNotificationMessage(`Cartela ${inputId.trim()} not registered`);
         
-        // Play notwinner sound from LOCAL file without blocking
+        // Play notwinner sound using UnifiedAudioManager
         const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
         schedulePlay(() => {
           try {
-            const audio = new Audio('/sounds/notwinner.wav');
-            audio.volume = 0.7;
-            audio.play().catch(() => {});
+            if (audioManagerRef.current) {
+              audioManagerRef.current.playSound('notwinner').catch((error) => {
+                console.warn('⚠️ Could not play notwinner sound:', error);
+              });
+            }
           } catch (error) {
             // Silent fail
           }
@@ -958,21 +995,22 @@ const GamePageOptimized = (): JSX.Element => {
         setCartelaCheckResult(result);
         setShowCartelaCheckModal(true);
         
-        // Play sound based on result from LOCAL files without blocking
+        // Play sound based on result using UnifiedAudioManager
         const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
         schedulePlay(() => {
           try {
-            const soundUrl = result.win 
-              ? '/sounds/winner.mp3'
-              : '/sounds/notwinner.mp3';
-            console.log(`🔊 Playing ${result.win ? 'winner' : 'not winner'} sound:`, soundUrl);
-            const audio = new Audio(soundUrl);
-            audio.volume = 0.7;
-            audio.play().catch((error) => {
-              console.warn(`⚠️ Could not play ${result.win ? 'winner' : 'not winner'} sound:`, error);
-            });
+            const soundName = result.win ? 'winner' : 'notwinner';
+            console.log(`🔊 Playing ${soundName} sound with voice category`);
+            
+            if (audioManagerRef.current) {
+              audioManagerRef.current.playSound(soundName).catch((error) => {
+                console.warn(`⚠️ Could not play ${soundName} sound:`, error);
+              });
+            } else {
+              console.warn('⚠️ Audio manager not available for winner sound');
+            }
           } catch (error) {
-            console.warn('⚠️ Error creating audio for winner sound:', error);
+            console.warn('⚠️ Error playing winner sound:', error);
           }
         });
       } else {

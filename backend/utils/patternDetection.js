@@ -144,30 +144,37 @@ function checkFullHouse(grid, calledNumbers) {
  */
 function checkWinningPatterns(calledNumbers, cartela, selectedPatterns) {
   try {
-    console.log('🔍 === PATTERN CHECK START ===');
-    console.log(`   Cartela ID: ${cartela.card_id}`);
-    console.log(`   Called numbers: ${calledNumbers.length} numbers`);
-    console.log(`   Patterns to check: ${JSON.stringify(selectedPatterns)}`);
+    const isDebugMode = process.env.NODE_ENV === 'development';
+    
+    if (isDebugMode) {
+      console.log('🔍 === PATTERN CHECK START ===');
+      console.log(`   Cartela ID: ${cartela.card_id}`);
+      console.log(`   Called numbers: ${calledNumbers.length} numbers`);
+      console.log(`   Patterns to check: ${JSON.stringify(selectedPatterns)}`);
+    }
 
     // Convert cartela to grid
     const grid = convertCartelaToGrid(cartela);
 
     // Count completed lines
     const { count: lineCount, lines: completedLines } = countCompletedLines(grid, calledNumbers);
-    console.log(`   Completed lines: ${lineCount}`);
-    console.log(`   Lines: ${completedLines.join(', ')}`);
+    
+    if (isDebugMode) {
+      console.log(`   Completed lines: ${lineCount}`);
+      console.log(`   Lines: ${completedLines.join(', ')}`);
 
-    // Display grid state
-    console.log('   Grid state:');
-    for (let row = 0; row < 5; row++) {
-      let rowStr = '   ';
-      for (let col = 0; col < 5; col++) {
-        const num = grid[row][col];
-        const called = isNumberCalled(num, calledNumbers);
-        const display = num === null ? 'FR' : String(num).padStart(2, '0');
-        rowStr += called ? `[✓${display}] ` : `[ ${display}] `;
+      // Display grid state only in debug mode
+      console.log('   Grid state:');
+      for (let row = 0; row < 5; row++) {
+        let rowStr = '   ';
+        for (let col = 0; col < 5; col++) {
+          const num = grid[row][col];
+          const called = isNumberCalled(num, calledNumbers);
+          const display = num === null ? 'FR' : String(num).padStart(2, '0');
+          rowStr += called ? `[✓${display}] ` : `[ ${display}] `;
+        }
+        console.log(rowStr);
       }
-      console.log(rowStr);
     }
 
     const winningPatterns = [];
@@ -177,54 +184,56 @@ function checkWinningPatterns(calledNumbers, cartela, selectedPatterns) {
       selectedPatterns = getWinningPatterns().map(p => p.name);
     }
 
-    // Check each selected pattern
+    // Check each selected pattern (optimized for speed)
     for (const patternName of selectedPatterns) {
-      console.log(`   Checking pattern: "${patternName}"`);
+      if (isDebugMode) console.log(`   Checking pattern: "${patternName}"`);
 
       switch (patternName) {
         case "Full House":
           if (checkFullHouse(grid, calledNumbers)) {
-            console.log(`   ✅ FULL HOUSE WIN!`);
+            if (isDebugMode) console.log(`   ✅ FULL HOUSE WIN!`);
             winningPatterns.push("Full House");
-          } else {
+          } else if (isDebugMode) {
             console.log(`   ❌ Full House not complete`);
           }
           break;
 
         case "Three Lines":
           if (lineCount >= 3) {
-            console.log(`   ✅ THREE LINES WIN! (${lineCount} lines)`);
+            if (isDebugMode) console.log(`   ✅ THREE LINES WIN! (${lineCount} lines)`);
             winningPatterns.push("Three Lines");
-          } else {
+          } else if (isDebugMode) {
             console.log(`   ❌ Three Lines not complete (need >= 3, have ${lineCount})`);
           }
           break;
 
         case "Two Lines":
           if (lineCount >= 2) {
-            console.log(`   ✅ TWO LINES WIN! (${lineCount} lines)`);
+            if (isDebugMode) console.log(`   ✅ TWO LINES WIN! (${lineCount} lines)`);
             winningPatterns.push("Two Lines");
-          } else {
+          } else if (isDebugMode) {
             console.log(`   ❌ Two Lines not complete (need >= 2, have ${lineCount})`);
           }
           break;
 
         case "One Line":
           if (lineCount >= 1) {
-            console.log(`   ✅ ONE LINE WIN! (${lineCount} lines)`);
+            if (isDebugMode) console.log(`   ✅ ONE LINE WIN! (${lineCount} lines)`);
             winningPatterns.push("One Line");
-          } else {
+          } else if (isDebugMode) {
             console.log(`   ❌ One Line not complete (need >= 1, have ${lineCount})`);
           }
           break;
 
         default:
-          console.log(`   ⚠️ Unknown pattern: "${patternName}"`);
+          if (isDebugMode) console.log(`   ⚠️ Unknown pattern: "${patternName}"`);
       }
     }
 
-    console.log(`🔍 === PATTERN CHECK END ===`);
-    console.log(`   Result: ${winningPatterns.length > 0 ? winningPatterns.join(', ') : 'NO WIN'}`);
+    if (isDebugMode) {
+      console.log(`🔍 === PATTERN CHECK END ===`);
+      console.log(`   Result: ${winningPatterns.length > 0 ? winningPatterns.join(', ') : 'NO WIN'}`);
+    }
 
     return winningPatterns;
   } catch (error) {

@@ -818,6 +818,7 @@ const userSettingsOperations = {
         selectedPattern: settings.selected_pattern,
         betAmount: parseFloat(settings.bet_amount),
         houseCutPercentage: parseFloat(settings.house_cut_percentage),
+        voiceCategory: settings.voice_category, // No default - can be null/undefined
         createdAt: settings.created_at,
         updatedAt: settings.updated_at
       };
@@ -826,23 +827,39 @@ const userSettingsOperations = {
   },
 
   create: async (userId, settingsData) => {
-    const result = await run(`
-      INSERT INTO user_settings (user_id, selected_pattern, bet_amount, house_cut_percentage, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (user_id) DO UPDATE SET
-        selected_pattern = EXCLUDED.selected_pattern,
-        bet_amount = EXCLUDED.bet_amount,
-        house_cut_percentage = EXCLUDED.house_cut_percentage,
-        updated_at = EXCLUDED.updated_at
-      RETURNING *
-    `, [
+    // Build dynamic SQL based on provided data
+    const fields = ['user_id', 'selected_pattern', 'bet_amount', 'house_cut_percentage', 'created_at', 'updated_at'];
+    const values = [
       userId,
       settingsData.selectedPattern || 'Two Lines',
       settingsData.betAmount || 5.0,
       settingsData.houseCutPercentage || 10.0,
       new Date().toISOString(),
       new Date().toISOString()
-    ]);
+    ];
+    const placeholders = ['$1', '$2', '$3', '$4', '$5', '$6'];
+    const updateFields = [
+      'selected_pattern = EXCLUDED.selected_pattern',
+      'bet_amount = EXCLUDED.bet_amount',
+      'house_cut_percentage = EXCLUDED.house_cut_percentage',
+      'updated_at = EXCLUDED.updated_at'
+    ];
+
+    // Only include voice_category if explicitly provided
+    if (settingsData.voiceCategory !== undefined) {
+      fields.push('voice_category');
+      values.push(settingsData.voiceCategory);
+      placeholders.push('$7');
+      updateFields.push('voice_category = EXCLUDED.voice_category');
+    }
+
+    const result = await run(`
+      INSERT INTO user_settings (${fields.join(', ')})
+      VALUES (${placeholders.join(', ')})
+      ON CONFLICT (user_id) DO UPDATE SET
+        ${updateFields.join(', ')}
+      RETURNING *
+    `, values);
     return result;
   },
 
@@ -864,6 +881,11 @@ const userSettingsOperations = {
     if (updateData.houseCutPercentage !== undefined) {
       fields.push(`house_cut_percentage = $${paramCount}`);
       values.push(updateData.houseCutPercentage);
+      paramCount++;
+    }
+    if (updateData.voiceCategory !== undefined) {
+      fields.push(`voice_category = $${paramCount}`);
+      values.push(updateData.voiceCategory);
       paramCount++;
     }
 

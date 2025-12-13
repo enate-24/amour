@@ -31,10 +31,12 @@ router.post('/', [
     console.log('📥 Winner check request body:', { cartelaId, gameId, patterns, clientCalledNumbers: clientCalledNumbers?.length || 0 });
 
     // Find the cartela by ID or card_id from PostgreSQL database (single optimized query)
+    const startTime = Date.now();
     const cartela = await db.get(
       'SELECT * FROM cartelas WHERE (id = $1 OR card_id = $1) AND is_active = 1 LIMIT 1',
       [cartelaId]
     );
+    console.log(`⏱️ Cartela lookup took: ${Date.now() - startTime}ms`);
 
     if (!cartela) {
       console.error('❌ Cartela not found:', cartelaId);
@@ -59,7 +61,9 @@ router.post('/', [
     }
 
     // Get the game from PostgreSQL database
+    const gameStartTime = Date.now();
     const game = await db.get('SELECT * FROM games WHERE id = $1', [targetGameId]);
+    console.log(`⏱️ Game lookup took: ${Date.now() - gameStartTime}ms`);
     if (!game) {
       console.error('❌ Game not found:', targetGameId);
       return res.status(404).json({
@@ -208,8 +212,10 @@ router.post('/', [
 
     // Check winning patterns
     console.log(`🔍 About to check patterns with selectedPatterns: ${JSON.stringify(selectedPatterns)}`);
+    const patternStartTime = Date.now();
     const winningPatterns = checkWinningPatterns(calledNumbers, formattedCartela, selectedPatterns);
     const isWinner = winningPatterns.length > 0;
+    console.log(`⏱️ Pattern checking took: ${Date.now() - patternStartTime}ms`);
 
     console.log(`🎯 Winner check result for cartela ${cartela.card_id}: ${isWinner ? 'WINNER' : 'NOT WINNER'}`);
     console.log(`🎯 Winning patterns returned: ${JSON.stringify(winningPatterns)}`);

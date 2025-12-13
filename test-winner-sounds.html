@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Winner Sounds Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <h1>🎵 Winner Sounds Test</h1>
+    <p>Test the winner and notwinner sounds for both boy and girl voices.</p>
+
+    <div class="test-section">
+        <h3>🎤 Voice Category Selection</h3>
+        <button onclick="setVoice('boy')">👦 Set Boy Voice</button>
+        <button onclick="setVoice('girl')">👧 Set Girl Voice</button>
+        <div id="voiceStatus" class="status"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>🏆 Winner Sounds</h3>
+        <button onclick="testSound('winner')">🎉 Play Winner Sound</button>
+        <button onclick="testSound('notwinner')">❌ Play Not Winner Sound</button>
+        <button onclick="testSound('shuffle-audio-TfqyAnvz.mp3')">🔀 Play Shuffle Sound</button>
+        <div id="soundStatus" class="status"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>🔢 Number Sounds</h3>
+        <button onclick="testSound(25)">🔊 Play Number 25</button>
+        <button onclick="testSound(50)">🔊 Play Number 50</button>
+        <button onclick="testSound(75)">🔊 Play Number 75</button>
+    </div>
+
+    <div class="test-section">
+        <h3>📋 File Availability Check</h3>
+        <button onclick="checkFiles()">🔍 Check All Sound Files</button>
+        <div id="fileStatus" class="status"></div>
+    </div>
+
+    <script>
+        let currentVoice = 'girl';
+
+        function setVoice(voice) {
+            currentVoice = voice;
+            updateStatus('voiceStatus', `Voice set to: ${voice}`, 'success');
+        }
+
+        function testSound(sound) {
+            const voicePath = `${currentVoice} sound`;
+            let fileName;
+            
+            if (typeof sound === 'number') {
+                fileName = currentVoice === 'boy' ? `${sound}.wav` : `${sound}.mp3`;
+            } else if (sound === 'winner') {
+                fileName = currentVoice === 'boy' ? 'winner.wav' : 'winner.mp3';
+            } else if (sound === 'notwinner') {
+                if (currentVoice === 'boy') {
+                    fileName = 'notwinner.wav';
+                } else {
+                    updateStatus('soundStatus', 'Girl voice does not have notwinner sound, using winner sound', 'warning');
+                    fileName = 'winner.mp3';
+                }
+            } else {
+                fileName = sound;
+            }
+            
+            const audioUrl = `/sounds/${voicePath}/${fileName}`;
+            
+            updateStatus('soundStatus', `Playing: ${audioUrl}`, 'success');
+            
+            const audio = new Audio(audioUrl);
+            audio.volume = 0.7;
+            
+            audio.addEventListener('loadstart', () => {
+                console.log('Audio loading started:', audioUrl);
+            });
+            
+            audio.addEventListener('canplay', () => {
+                console.log('Audio can play:', audioUrl);
+            });
+            
+            audio.addEventListener('error', (e) => {
+                console.error('Audio error:', e);
+                updateStatus('soundStatus', `Error loading: ${audioUrl}`, 'error');
+            });
+            
+            audio.play().catch(error => {
+                console.error('Play error:', error);
+                updateStatus('soundStatus', `Play error: ${error.message}`, 'error');
+            });
+        }
+
+        function checkFiles() {
+            const files = [
+                // Boy sounds
+                { voice: 'boy', file: '1.wav' },
+                { voice: 'boy', file: '25.wav' },
+                { voice: 'boy', file: '75.wav' },
+                { voice: 'boy', file: 'winner.wav' },
+                { voice: 'boy', file: 'notwinner.wav' },
+                { voice: 'boy', file: 'start.wav' },
+                { voice: 'boy', file: 'shuffle-audio-TfqyAnvz.mp3' },
+                
+                // Girl sounds
+                { voice: 'girl', file: '1.mp3' },
+                { voice: 'girl', file: '25.mp3' },
+                { voice: 'girl', file: '75.mp3' },
+                { voice: 'girl', file: 'winner.mp3' },
+                { voice: 'girl', file: 'shuffle-audio-TfqyAnvz.mp3' }
+            ];
+            
+            let results = [];
+            let completed = 0;
+            
+            updateStatus('fileStatus', 'Checking files...', 'warning');
+            
+            files.forEach(({ voice, file }) => {
+                const url = `/sounds/${voice} sound/${file}`;
+                
+                fetch(url, { method: 'HEAD' })
+                    .then(response => {
+                        const status = response.ok ? '✅' : '❌';
+                        results.push(`${status} ${voice}/${file}`);
+                    })
+                    .catch(() => {
+                        results.push(`❌ ${voice}/${file} (network error)`);
+                    })
+                    .finally(() => {
+                        completed++;
+                        if (completed === files.length) {
+                            updateStatus('fileStatus', results.join('<br>'), 'success');
+                        }
+                    });
+            });
+        }
+
+        function updateStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = message;
+            element.className = `status ${type}`;
+        }
+
+        // Initialize
+        updateStatus('voiceStatus', 'Voice set to: girl (default)', 'success');
+    </script>
+</body>
+</html>

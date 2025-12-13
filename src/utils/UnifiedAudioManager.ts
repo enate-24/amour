@@ -2,6 +2,11 @@ import { audioCacheDB, type CacheStatus } from './audioCache';
 import { networkStatusManager } from './networkStatus';
 
 /**
+ * Voice category type for audio selection
+ */
+export type VoiceCategory = 'boy' | 'girl';
+
+/**
  * Configuration interface for UnifiedAudioManager
  */
 export interface AudioManagerConfig {
@@ -19,6 +24,7 @@ const DEFAULT_CONFIG: AudioManagerConfig = {
   retryAttempts: 3,
   retryDelay: 1000, // 1 second base delay
   preloadOnInit: false
+  // No defaultVoiceCategory - must be set explicitly
 };
 
 /**
@@ -40,19 +46,24 @@ export type ProgressCallback = (current: number, total: number) => void;
  */
 export class UnifiedAudioManager {
   private static instance: UnifiedAudioManager | null = null;
-  private audioPool: Map<number, HTMLAudioElement> = new Map();
+  private audioPool: Map<string, HTMLAudioElement> = new Map(); // Changed to string key for voice categories
   private downloadQueue: Set<string> = new Set();
   private activeDownloads: number = 0;
   private config: AudioManagerConfig;
   private initialized: boolean = false;
   private currentAudio: HTMLAudioElement | null = null;
+  private currentVoiceCategory: VoiceCategory;
+  private voiceCategoryExplicitlySet: boolean = false;
 
   /**
    * Private constructor to enforce singleton pattern
    */
   private constructor(config?: Partial<AudioManagerConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    // No default voice category - must be set explicitly via setVoiceCategory()
+    this.currentVoiceCategory = 'girl'; // Temporary until setVoiceCategory is called
     console.log('🔊 UnifiedAudioManager instance created with config:', this.config);
+    console.log('⚠️ Voice category not set - must call setVoiceCategory() before playing audio');
   }
 
   /**
@@ -188,42 +199,133 @@ export class UnifiedAudioManager {
   }
 
   /**
-   * Get audio URL with CDN support
+   * Set the current voice category for audio playback
+   * 
+   * @param category - The voice category to use ('boy' or 'girl')
+   */
+  public setVoiceCategory(category: VoiceCategory): void {
+    if (this.currentVoiceCategory !== category) {
+      console.log(`🎤 Switching voice category from ${this.currentVoiceCategory} to ${category}`);
+      this.currentVoiceCategory = category;
+      this.voiceCategoryExplicitlySet = true;
+      
+      // Clear audio pool when switching categories to force reload with new voice
+      this.clearAudioPool();
+      console.log('🧹 Audio pool cleared for voice category switch');
+    } else {
+      console.log(`🎤 Voice category already set to ${category}, no change needed`);
+      this.voiceCategoryExplicitlySet = true;
+    }
+  }
+
+  /**
+   * Clear the audio pool (useful when switching voice categories)
+   */
+  private clearAudioPool(): void {
+    // Stop and cleanup existing audio elements
+    this.audioPool.forEach((audio) => {
+      try {
+        audio.pause();
+        audio.src = '';
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    });
+    this.audioPool.clear();
+    console.log('🧹 Audio pool cleared');
+  }
+
+  /**
+   * Get the current voice category
+   * 
+   * @returns The current voice category
+   */
+  public getVoiceCategory(): VoiceCategory {
+    return this.currentVoiceCategory;
+  }
+
+  /**
+   * Check if voice category has been explicitly set
+   * 
+   * @returns True if voice category has been set by user
+   */
+  public hasVoiceCategorySet(): boolean {
+    return this.voiceCategoryExplicitlySet;
+  }
+
+  /**
+   * Get audio URL with voice category and CDN support
    * 
    * @param fileId - The file identifier (e.g., "1.mp3", "start.wav")
+   * @param voiceCategory - Optional voice category override
    * @returns URL string (CDN or local)
    */
-  private getAudioUrl(fileId: string): string {
+  private getAudioUrl(fileId: string, voiceCategory?: VoiceCategory): string {
+    const category = voiceCategory || this.currentVoiceCategory;
     const cdnEnabled = import.meta.env.VITE_CDN_ENABLED === 'true';
     const cdnBaseUrl = import.meta.env.VITE_CDN_BASE_URL || '';
     
+    // Determine file extension based on voice category and file type
+    let actualFileId = fileId;
+    
+    if (fileId.match(/^\d+\.(mp3|wav)$/)) {
+      // For numbered files, use appropriate extension
+      const number = fileId.split('.')[0];
+      actualFileId = category === 'boy' ? `${number}.wav` : `${number}.mp3`;
+    } else if (fileId === 'winner') {
+      // Winner sound files
+      actualFileId = category === 'boy' ? 'winner.wav' : 'winner.mp3';
+    } else if (fileId === 'notwinner') {
+      // Notwinner sound files - only boy has this
+      if (category === 'boy') {
+        actualFileId = 'notwinner.wav';
+      } else {
+        // Girl voice doesn't have notwinner sound, use winner sound instead
+        console.warn('⚠️ Girl voice does not have notwinner sound, using winner sound');
+        actualFileId = 'winner.mp3';
+      }
+    } else if (fileId === 'start') {
+      // Start sound files
+      actualFileId = category === 'boy' ? 'start.wav' : 'start.mp3';
+    } else if (fileId.includes('shuffle-audio')) {
+      // Shuffle sound - same file for both
+      actualFileId = 'shuffle-audio-TfqyAnvz.mp3';
+    }
+    
+    const voicePath = `${category} sound`;
+    
     if (cdnEnabled && cdnBaseUrl) {
-      const cdnUrl = `${cdnBaseUrl}/sounds/${fileId}`;
-      console.log(`🌐 Using CDN URL: ${cdnUrl}`);
+      const cdnUrl = `${cdnBaseUrl}/sounds/${voicePath}/${actualFileId}`;
+      console.log(`🌐 Using CDN URL (${category}): ${cdnUrl}`);
       return cdnUrl;
     }
     
     // Fallback to local
-    return `/sounds/${fileId}`;
+    const localUrl = `/sounds/${voicePath}/${actualFileId}`;
+    console.log(`🔊 Using local URL (${category}): ${localUrl}`);
+    return localUrl;
   }
 
   /**
-   * Download a single audio file (with offline detection)
+   * Download a single audio file (with offline detection and voice category support)
    * 
    * @param fileId - The file identifier (e.g., "1.mp3", "start.wav")
+   * @param voiceCategory - Optional voice category override
    * @returns Promise that resolves when download completes
    */
-  private async downloadFile(fileId: string): Promise<void> {
+  private async downloadFile(fileId: string, voiceCategory?: VoiceCategory): Promise<void> {
     // Check if offline
     if (networkStatusManager.isOffline) {
       console.warn(`📡 Offline: Cannot download ${fileId}`);
       throw new Error('Network offline - cannot download audio');
     }
 
-    const url = this.getAudioUrl(fileId);
+    const category = voiceCategory || this.currentVoiceCategory;
+    const url = this.getAudioUrl(fileId, category);
+    const cacheKey = `${category}_${fileId}`;
     
     try {
-      console.log(`📥 Downloading: ${fileId} from ${url}`);
+      console.log(`📥 Downloading (${category}): ${fileId} from ${url}`);
       
       const response = await fetch(url);
       if (!response.ok) {
@@ -237,12 +339,12 @@ export class UnifiedAudioManager {
         throw new Error('Downloaded file is empty');
       }
       
-      // Save to cache
-      await audioCacheDB.saveAudio(fileId, blob);
+      // Save to cache with voice category prefix
+      await audioCacheDB.saveAudio(cacheKey, blob);
       
-      console.log(`✅ Downloaded and cached: ${fileId}`);
+      console.log(`✅ Downloaded and cached (${category}): ${fileId}`);
     } catch (error) {
-      console.error(`❌ Failed to download ${fileId}:`, error);
+      console.error(`❌ Failed to download ${fileId} (${category}):`, error);
       throw error;
     }
   }
@@ -251,52 +353,68 @@ export class UnifiedAudioManager {
    * Play a sound by number (optimized with audio pool and offline support)
    * 
    * @param number - The number to play (1-75) or special sound name
+   * @param voiceCategory - Optional voice category override
    * @returns Promise that resolves when playback starts
    */
-  public async playSound(number: number | string): Promise<void> {
+  public async playSound(number: number | string, voiceCategory?: VoiceCategory): Promise<void> {
     try {
       // Stop any currently playing sound
       this.stopCurrentSound();
       
-      // Determine file ID
-      const fileId = typeof number === 'string' ? number : `${number}.mp3`;
-      const numericKey = typeof number === 'number' ? number : 0;
+      const category = voiceCategory || this.currentVoiceCategory;
+      
+      // Warn if voice category hasn't been explicitly set
+      if (!voiceCategory && !this.voiceCategoryExplicitlySet) {
+        console.warn('⚠️ Playing audio with default voice category - user should select a voice in Settings');
+      }
+      
+      // Determine file ID based on voice category
+      let fileId: string;
+      if (typeof number === 'string') {
+        fileId = number;
+      } else {
+        // Use appropriate extension for voice category
+        fileId = category === 'boy' ? `${number}.wav` : `${number}.mp3`;
+      }
+      
+      const poolKey = `${category}_${fileId}`;
+      const cacheKey = `${category}_${fileId}`;
       
       // Check if we have a pre-loaded audio element in the pool
-      if (numericKey > 0 && this.audioPool.has(numericKey)) {
-        const audio = this.audioPool.get(numericKey)!;
+      if (this.audioPool.has(poolKey)) {
+        const audio = this.audioPool.get(poolKey)!;
         this.currentAudio = audio;
         
         // Reset and play
         audio.currentTime = 0;
         await audio.play();
-        console.log(`⚡ Playing from pool: ${fileId}`);
+        console.log(`⚡ Playing from pool (${category}): ${fileId}`);
         return;
       }
       
       // Not in pool - check cache and create new audio element
       let audioUrl: string;
-      const cachedBlob = await audioCacheDB.getAudio(fileId);
+      const cachedBlob = await audioCacheDB.getAudio(cacheKey);
       
       if (cachedBlob) {
         // Use cached audio (works offline)
         audioUrl = URL.createObjectURL(cachedBlob);
-        console.log(`🔊 Playing cached audio: ${fileId}${networkStatusManager.isOffline ? ' (offline mode)' : ''}`);
+        console.log(`🔊 Playing cached audio (${category}): ${fileId}${networkStatusManager.isOffline ? ' (offline mode)' : ''}`);
       } else {
         // Check if offline
         if (networkStatusManager.isOffline) {
-          console.error(`❌ Cannot play ${fileId}: offline and not cached`);
-          throw new Error(`Audio not available offline: ${fileId}`);
+          console.error(`❌ Cannot play ${fileId} (${category}): offline and not cached`);
+          throw new Error(`Audio not available offline: ${fileId} (${category})`);
         }
 
         // Download on-demand
-        console.log(`📥 Audio not cached, downloading on-demand: ${fileId}`);
-        await this.downloadFile(fileId);
+        console.log(`📥 Audio not cached, downloading on-demand (${category}): ${fileId}`);
+        await this.downloadFile(fileId, category);
         
         // Get from cache after download
-        const blob = await audioCacheDB.getAudio(fileId);
+        const blob = await audioCacheDB.getAudio(cacheKey);
         if (!blob) {
-          throw new Error(`Failed to cache ${fileId}`);
+          throw new Error(`Failed to cache ${fileId} (${category})`);
         }
         audioUrl = URL.createObjectURL(blob);
       }
@@ -306,10 +424,8 @@ export class UnifiedAudioManager {
       audio.volume = 0.7;
       this.currentAudio = audio;
       
-      // Add to pool for future use if it's a number
-      if (numericKey > 0) {
-        this.audioPool.set(numericKey, audio);
-      }
+      // Add to pool for future use
+      this.audioPool.set(poolKey, audio);
       
       // Clean up object URL after playback (but keep audio element in pool)
       audio.addEventListener('ended', () => {
@@ -319,19 +435,17 @@ export class UnifiedAudioManager {
       });
       
       audio.addEventListener('error', (e) => {
-        console.error(`❌ Error playing audio ${fileId}:`, e);
+        console.error(`❌ Error playing audio ${fileId} (${category}):`, e);
         URL.revokeObjectURL(audioUrl);
         if (this.currentAudio === audio) {
           this.currentAudio = null;
         }
         // Remove from pool on error
-        if (numericKey > 0) {
-          this.audioPool.delete(numericKey);
-        }
+        this.audioPool.delete(poolKey);
       });
       
       await audio.play();
-      console.log(`✅ Playing: ${fileId}`);
+      console.log(`✅ Playing (${category}): ${fileId}`);
     } catch (error) {
       console.error(`❌ Failed to play sound ${number}:`, error);
       throw error;
@@ -342,23 +456,33 @@ export class UnifiedAudioManager {
    * Preload a sound into the audio pool
    * 
    * @param number - The number to preload (1-75) or special sound name
+   * @param voiceCategory - Optional voice category override
    * @returns Promise that resolves when preload completes
    */
-  public async preloadSound(number: number | string): Promise<void> {
+  public async preloadSound(number: number | string, voiceCategory?: VoiceCategory): Promise<void> {
     try {
-      const fileId = typeof number === 'string' ? number : `${number}.mp3`;
+      const category = voiceCategory || this.currentVoiceCategory;
+      let fileId: string;
+      
+      if (typeof number === 'string') {
+        fileId = number;
+      } else {
+        fileId = category === 'boy' ? `${number}.wav` : `${number}.mp3`;
+      }
+      
+      const cacheKey = `${category}_${fileId}`;
       
       // Check if already cached
-      const hasAudio = await audioCacheDB.hasAudio(fileId);
+      const hasAudio = await audioCacheDB.hasAudio(cacheKey);
       if (hasAudio) {
-        console.log(`✅ Audio already cached: ${fileId}`);
+        console.log(`✅ Audio already cached (${category}): ${fileId}`);
         return;
       }
       
       // Download and cache
-      console.log(`📥 Preloading: ${fileId}`);
-      await this.downloadFile(fileId);
-      console.log(`✅ Preloaded: ${fileId}`);
+      console.log(`📥 Preloading (${category}): ${fileId}`);
+      await this.downloadFile(fileId, category);
+      console.log(`✅ Preloaded (${category}): ${fileId}`);
     } catch (error) {
       console.error(`❌ Failed to preload ${number}:`, error);
       throw error;
@@ -370,20 +494,25 @@ export class UnifiedAudioManager {
    * Loads audio elements into memory for zero-delay playback
    * 
    * @param numbers - Array of numbers to pre-warm (e.g., recently called numbers)
+   * @param voiceCategory - Optional voice category override
    * @returns Promise that resolves when pre-warming completes
    */
-  public async prewarmAudioPool(numbers: number[]): Promise<void> {
-    console.log(`🔥 Pre-warming audio pool with ${numbers.length} numbers...`);
+  public async prewarmAudioPool(numbers: number[], voiceCategory?: VoiceCategory): Promise<void> {
+    const category = voiceCategory || this.currentVoiceCategory;
+    console.log(`🔥 Pre-warming audio pool with ${numbers.length} numbers (${category})...`);
     
     const promises = numbers.map(async (num) => {
       try {
+        const fileId = category === 'boy' ? `${num}.wav` : `${num}.mp3`;
+        const poolKey = `${category}_${fileId}`;
+        const cacheKey = `${category}_${fileId}`;
+        
         // Skip if already in pool
-        if (this.audioPool.has(num)) {
+        if (this.audioPool.has(poolKey)) {
           return;
         }
 
-        const fileId = `${num}.mp3`;
-        const cachedBlob = await audioCacheDB.getAudio(fileId);
+        const cachedBlob = await audioCacheDB.getAudio(cacheKey);
         
         if (cachedBlob) {
           const audioUrl = URL.createObjectURL(cachedBlob);
@@ -392,16 +521,16 @@ export class UnifiedAudioManager {
           audio.preload = 'auto';
           
           // Add to pool
-          this.audioPool.set(num, audio);
-          console.log(`⚡ Pre-warmed: ${fileId}`);
+          this.audioPool.set(poolKey, audio);
+          console.log(`⚡ Pre-warmed (${category}): ${fileId}`);
         }
       } catch (error) {
-        console.warn(`⚠️ Failed to pre-warm ${num}:`, error);
+        console.warn(`⚠️ Failed to pre-warm ${num} (${category}):`, error);
       }
     });
 
     await Promise.all(promises);
-    console.log(`✅ Audio pool pre-warmed: ${this.audioPool.size} elements ready`);
+    console.log(`✅ Audio pool pre-warmed (${category}): ${this.audioPool.size} elements ready`);
   }
 
   /**
@@ -452,6 +581,86 @@ export class UnifiedAudioManager {
    */
   public isInitialized(): boolean {
     return this.initialized;
+  }
+
+  /**
+   * Preload all audio files for both voice categories
+   * 
+   * @param onProgress - Optional callback for progress updates
+   * @returns Promise that resolves when all downloads complete
+   */
+  public async preloadAllVoiceCategories(onProgress?: ProgressCallback): Promise<void> {
+    console.log('📥 Starting download of all voice categories...');
+    
+    const numbers = Array.from({ length: 75 }, (_, i) => i + 1);
+    const specialSounds = ['start.wav', 'winner.wav', 'shuffle-audio-TfqyAnvz.mp3'];
+    
+    let completed = 0;
+    const totalFiles = (numbers.length + specialSounds.length) * 2; // Both boy and girl
+    
+    // Download boy sounds
+    for (const num of numbers) {
+      try {
+        await this.preloadSound(num, 'boy');
+        completed++;
+        onProgress?.(completed, totalFiles);
+      } catch (error) {
+        console.warn(`⚠️ Failed to preload boy sound ${num}:`, error);
+        completed++;
+        onProgress?.(completed, totalFiles);
+      }
+    }
+    
+    for (const sound of specialSounds) {
+      try {
+        await this.preloadSound(sound, 'boy');
+        completed++;
+        onProgress?.(completed, totalFiles);
+      } catch (error) {
+        console.warn(`⚠️ Failed to preload boy sound ${sound}:`, error);
+        completed++;
+        onProgress?.(completed, totalFiles);
+      }
+    }
+    
+    // Download girl sounds
+    for (const num of numbers) {
+      try {
+        await this.preloadSound(num, 'girl');
+        completed++;
+        onProgress?.(completed, totalFiles);
+      } catch (error) {
+        console.warn(`⚠️ Failed to preload girl sound ${num}:`, error);
+        completed++;
+        onProgress?.(completed, totalFiles);
+      }
+    }
+    
+    for (const sound of specialSounds) {
+      try {
+        await this.preloadSound(sound, 'girl');
+        completed++;
+        onProgress?.(completed, totalFiles);
+      } catch (error) {
+        console.warn(`⚠️ Failed to preload girl sound ${sound}:`, error);
+        completed++;
+        onProgress?.(completed, totalFiles);
+      }
+    }
+    
+    console.log('✅ All voice categories preloaded');
+  }
+
+  /**
+   * Get debug information about the audio manager
+   */
+  public getDebugInfo(): any {
+    return {
+      currentVoiceCategory: this.currentVoiceCategory,
+      audioPoolSize: this.audioPool.size,
+      isInitialized: this.initialized,
+      config: this.config
+    };
   }
 
   /**

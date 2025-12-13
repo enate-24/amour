@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Settings as SettingsIcon, DollarSign, Percent } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, DollarSign, Percent, Volume2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AudioCacheManager from './AudioCacheManager';
+import { UnifiedAudioManager, type VoiceCategory } from '../utils/UnifiedAudioManager';
+import VoiceCategoryManager from '../utils/voiceCategoryManager';
 
 const Settings: React.FC = () => {
   const navigate = useNavigate();
@@ -10,10 +12,12 @@ const Settings: React.FC = () => {
   const [selectedPattern, setSelectedPattern] = useState<string>("Two Lines");
   const [betAmount, setBetAmount] = useState<number>(5);
   const [houseCutPercentage, setHouseCutPercentage] = useState<number>(10);
+  const [voiceCategory, setVoiceCategory] = useState<VoiceCategory | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [saveMessage, setSaveMessage] = useState<string>("");
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
+  const [isPlayingVoiceSample, setIsPlayingVoiceSample] = useState<boolean>(false);
 
   const patternOptions = [
     "One Line",
@@ -59,6 +63,23 @@ const Settings: React.FC = () => {
     }
   }, [houseCutPercentage]);
 
+  // Auto-save when voice category changes
+  useEffect(() => {
+    if (!isLoading && !isInitialLoad && voiceCategory) {
+      console.log('🔄 Voice category changed to:', voiceCategory, '- Auto-saving...');
+      console.log('🔄 Settings state - isLoading:', isLoading, 'isInitialLoad:', isInitialLoad);
+      
+      // Save to database
+      saveSettings();
+      
+      // Use voice category manager for persistence
+      VoiceCategoryManager.setVoiceCategory(voiceCategory);
+      console.log('💾 Voice category persisted as user default:', voiceCategory);
+    } else {
+      console.log('🔄 Voice category change skipped - isLoading:', isLoading, 'isInitialLoad:', isInitialLoad, 'voiceCategory:', voiceCategory);
+    }
+  }, [voiceCategory]);
+
   const loadSettings = async () => {
     try {
       setIsLoading(true);
@@ -83,7 +104,31 @@ const Settings: React.FC = () => {
         setSelectedPattern(data.selectedPattern || "Two Lines");
         setBetAmount(data.betAmount || 5);
         setHouseCutPercentage(data.houseCutPercentage || 10);
-        console.log('✅ Settings loaded from backend:', data);
+        
+        // Load voice category using the manager
+        const voiceCategory = VoiceCategoryManager.getVoiceCategoryWithFallback(data.voiceCategory);
+        
+        if (voiceCategory) {
+          setVoiceCategory(voiceCategory);
+          console.log('✅ Settings loaded from backend:', data);
+          console.log('🎤 Voice category resolved:', voiceCategory);
+          
+          // Update audio manager with loaded voice category
+          const audioManager = UnifiedAudioManager.getInstance();
+          audioManager.setVoiceCategory(voiceCategory);
+          console.log('🎤 Audio manager set to voice category:', voiceCategory);
+          
+          // If voice came from localStorage, save to backend
+          if (!data.voiceCategory && voiceCategory) {
+            console.log('🔄 Syncing localStorage voice category to backend');
+            setTimeout(() => {
+              saveSettings();
+            }, 1000);
+          }
+        } else {
+          console.warn('⚠️ No voice category available - user must select one');
+          console.log('✅ Other settings loaded from backend:', data);
+        }
       } else if (response.status === 401) {
         console.warn('⚠️ Authentication error loading settings - using defaults');
         // Don't logout - just use default settings
@@ -104,11 +149,16 @@ const Settings: React.FC = () => {
     setIsSaving(true);
     setSaveMessage("");
 
-    const settings = {
+    const settings: any = {
       selectedPattern,
       betAmount: parseFloat(betAmount.toString()),
       houseCutPercentage: parseFloat(houseCutPercentage.toString())
     };
+    
+    // Only include voiceCategory if user has selected one
+    if (voiceCategory) {
+      settings.voiceCategory = voiceCategory;
+    }
 
     try {
       const token = localStorage.getItem('auth_token');
@@ -207,6 +257,24 @@ const Settings: React.FC = () => {
     }
   };
 
+  // Play voice sample
+  const playVoiceSample = async (category: VoiceCategory) => {
+    if (isPlayingVoiceSample) return;
+    
+    setIsPlayingVoiceSample(true);
+    
+    try {
+      const audioManager = UnifiedAudioManager.getInstance();
+      const sampleNumber = Math.floor(Math.random() * 75) + 1;
+      await audioManager.playSound(sampleNumber, category);
+      console.log(`🎤 Played voice sample (${category}): ${sampleNumber}`);
+    } catch (error) {
+      console.error('Error playing voice sample:', error);
+    } finally {
+      setTimeout(() => setIsPlayingVoiceSample(false), 2000);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-100 p-4 flex items-center justify-center">
@@ -299,6 +367,70 @@ const Settings: React.FC = () => {
                 placeholder="Enter percentage"
               />
               <p className="text-sm text-gray-500 mt-2">Percentage taken by the house (0-100%)</p>
+            </div>
+          </div>
+
+          {/* Voice Category Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <Volume2 className="text-blue-600" size={20} />
+              <h2 className="text-lg font-semibold text-gray-800">Voice Category</h2>
+            </div>
+            <div className="ml-6 space-y-4">
+              {voiceCategory === null && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800 font-medium">⚠️ Please select a voice category for number announcements</p>
+                </div>
+              )}
+              
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-3 rounded-lg border border-gray-200">
+                  <input
+                    type="radio"
+                    name="voiceCategory"
+                    value="girl"
+                    checked={voiceCategory === "girl"}
+                    onChange={(e) => setVoiceCategory(e.target.value as VoiceCategory)}
+                    className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">👧</span>
+                    <span className="text-gray-700 font-medium">Girl Voice</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => playVoiceSample('girl')}
+                    disabled={isPlayingVoiceSample}
+                    className="ml-auto px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isPlayingVoiceSample ? '🔊 Playing...' : '▶️ Sample'}
+                  </button>
+                </label>
+                
+                <label className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-3 rounded-lg border border-gray-200">
+                  <input
+                    type="radio"
+                    name="voiceCategory"
+                    value="boy"
+                    checked={voiceCategory === "boy"}
+                    onChange={(e) => setVoiceCategory(e.target.value as VoiceCategory)}
+                    className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">👦</span>
+                    <span className="text-gray-700 font-medium">Boy Voice</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => playVoiceSample('boy')}
+                    disabled={isPlayingVoiceSample}
+                    className="ml-auto px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isPlayingVoiceSample ? '🔊 Playing...' : '▶️ Sample'}
+                  </button>
+                </label>
+              </div>
+              <p className="text-sm text-gray-500">Choose the voice for number announcements during gameplay</p>
             </div>
           </div>
 

@@ -11,12 +11,13 @@ router.get('/', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     let settings = await db.userSettings.findByUserId(userId);
 
-    // If no settings exist, create default settings
+    // If no settings exist, create default settings (without voice category)
     if (!settings) {
       await db.userSettings.create(userId, {
         selectedPattern: 'Two Lines',
         betAmount: 5.0,
         houseCutPercentage: 10.0
+        // No voiceCategory - user must explicitly choose
       });
       settings = await db.userSettings.findByUserId(userId);
     }
@@ -25,6 +26,7 @@ router.get('/', authenticateToken, async (req, res) => {
       selectedPattern: settings.selectedPattern,
       betAmount: settings.betAmount,
       houseCutPercentage: settings.houseCutPercentage,
+      voiceCategory: settings.voiceCategory, // Will be null/undefined if not set
       availablePatterns
     });
   } catch (error) {
@@ -39,12 +41,13 @@ router.get('/pattern', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     let settings = await db.userSettings.findByUserId(userId);
 
-    // If no settings exist, create default settings
+    // If no settings exist, create default settings (without voice category)
     if (!settings) {
       await db.userSettings.create(userId, {
         selectedPattern: 'Two Lines',
         betAmount: 5.0,
         houseCutPercentage: 10.0
+        // No voiceCategory - user must explicitly choose
       });
       settings = await db.userSettings.findByUserId(userId);
     }
@@ -84,6 +87,7 @@ router.post('/pattern', authenticateToken, async (req, res) => {
         selectedPattern,
         betAmount: 5.0,
         houseCutPercentage: 10.0
+        // No voiceCategory - user must explicitly choose
       });
     }
 
@@ -103,7 +107,7 @@ router.post('/pattern', authenticateToken, async (req, res) => {
 // POST /api/settings - Save all user settings
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { selectedPattern, betAmount, houseCutPercentage } = req.body;
+    const { selectedPattern, betAmount, houseCutPercentage, voiceCategory } = req.body;
     const userId = req.user.id;
 
     // Validate inputs
@@ -121,6 +125,10 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid house cut percentage (must be 0-100)' });
     }
 
+    if (voiceCategory && !['boy', 'girl'].includes(voiceCategory)) {
+      return res.status(400).json({ error: 'Invalid voice category. Must be "boy" or "girl"' });
+    }
+
     // Check if settings exist
     let settings = await db.userSettings.findByUserId(userId);
 
@@ -128,17 +136,25 @@ router.post('/', authenticateToken, async (req, res) => {
     if (selectedPattern !== undefined) updateData.selectedPattern = selectedPattern;
     if (betAmount !== undefined) updateData.betAmount = parseFloat(betAmount);
     if (houseCutPercentage !== undefined) updateData.houseCutPercentage = parseFloat(houseCutPercentage);
+    if (voiceCategory !== undefined) updateData.voiceCategory = voiceCategory;
 
     if (settings) {
       // Update existing settings
       await db.userSettings.update(userId, updateData);
     } else {
       // Create new settings with defaults for missing values
-      await db.userSettings.create(userId, {
+      const newSettings = {
         selectedPattern: selectedPattern || 'Two Lines',
         betAmount: betAmount !== undefined ? parseFloat(betAmount) : 5.0,
         houseCutPercentage: houseCutPercentage !== undefined ? parseFloat(houseCutPercentage) : 10.0
-      });
+      };
+      
+      // Only include voiceCategory if explicitly provided
+      if (voiceCategory !== undefined) {
+        newSettings.voiceCategory = voiceCategory;
+      }
+      
+      await db.userSettings.create(userId, newSettings);
     }
 
     // Fetch updated settings

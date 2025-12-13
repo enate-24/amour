@@ -3,6 +3,8 @@ import { Minus, Plus, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCartela } from '../hooks/useCartela';
 import { useAuth } from '../hooks/useAuth';
+import { UnifiedAudioManager } from '../utils/UnifiedAudioManager';
+import { VoiceCategoryManager } from '../utils/voiceCategoryManager';
 
 
 const NewGame: React.FC = () => {
@@ -340,32 +342,31 @@ const NewGame: React.FC = () => {
     }
   };
 
-  // Function to play start game sound from LOCAL file
-  const playStartSound = () => {
+  // Function to play start game sound using UnifiedAudioManager
+  const playStartSound = async () => {
     try {
-      const soundUrl = '/sounds/start.wav';
-      console.log('🔊 Playing start sound from LOCAL file:', soundUrl);
+      console.log('🔊 Playing start sound using UnifiedAudioManager');
+      const audioManager = UnifiedAudioManager.getInstance();
       
-      const audio = new Audio(soundUrl);
-      audio.volume = 0.5;
+      // Ensure audio manager is initialized
+      if (!audioManager.isInitialized()) {
+        await audioManager.initialize();
+      }
       
-      audio.addEventListener('loadeddata', () => {
-        console.log('✅ Start sound loaded successfully');
-      });
+      // Get and set voice category if available
+      const voiceCategory = VoiceCategoryManager.getVoiceCategoryWithFallback();
+      if (voiceCategory) {
+        audioManager.setVoiceCategory(voiceCategory);
+        console.log('🎤 Voice category set to:', voiceCategory);
+      } else {
+        console.warn('⚠️ No voice category set, using default');
+      }
       
-      audio.addEventListener('error', (e) => {
-        console.error('❌ Error loading start sound:', e);
-      });
-      
-      audio.play()
-        .then(() => {
-          console.log('✅ Start sound playing');
-        })
-        .catch(error => {
-          console.error('❌ Could not play start sound:', error);
-        });
+      // Play start sound
+      await audioManager.playSound('start');
+      console.log('✅ Start sound playing');
     } catch (error) {
-      console.error('❌ Exception in playStartSound:', error);
+      console.error('❌ Could not play start sound:', error);
     }
   };
 
@@ -412,7 +413,9 @@ const NewGame: React.FC = () => {
 
     try {
       // OPTIMIZATION: Start sound playback immediately (non-blocking)
-      playStartSound();
+      playStartSound().catch(error => {
+        console.error('❌ Failed to play start sound:', error);
+      });
 
       // Save to database - no fallback to localStorage
       const gameSessionResult = await saveGameSession(gameData);
