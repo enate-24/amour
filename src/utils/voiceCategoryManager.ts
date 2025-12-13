@@ -1,4 +1,4 @@
-import { VoiceCategory } from './UnifiedAudioManager';
+import { VoiceCategory, UnifiedAudioManager } from './UnifiedAudioManager';
 
 /**
  * Voice Category Manager - Handles persistence and synchronization of voice category selection
@@ -82,7 +82,6 @@ export class VoiceCategoryManager {
     
     // Update audio manager if available
     try {
-      const { UnifiedAudioManager } = require('./UnifiedAudioManager');
       const audioManager = UnifiedAudioManager.getInstance();
       audioManager.setVoiceCategory(voiceCategory);
       console.log('🎤 Audio manager updated with voice category:', voiceCategory);
