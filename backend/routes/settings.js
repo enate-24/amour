@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
-const db = require('../db');
+const db = require('../data/database');
 
 const availablePatterns = ['One Line', 'Two Lines', 'Three Lines', 'Full House'];
 
@@ -110,6 +110,15 @@ router.post('/', authenticateToken, async (req, res) => {
     const { selectedPattern, betAmount, houseCutPercentage, voiceCategory } = req.body;
     const userId = req.user.id;
 
+    console.log(`📝 Saving settings for user ${userId}:`, { selectedPattern, betAmount, houseCutPercentage, voiceCategory });
+
+    // Verify user exists in database
+    const user = await db.users.findById(userId);
+    if (!user) {
+      console.error(`❌ User ${userId} not found in database`);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     // Validate inputs
     if (selectedPattern && !availablePatterns.includes(selectedPattern)) {
       return res.status(400).json({
@@ -140,9 +149,11 @@ router.post('/', authenticateToken, async (req, res) => {
 
     if (settings) {
       // Update existing settings
+      console.log(`🔄 Updating existing settings for user ${userId}`);
       await db.userSettings.update(userId, updateData);
     } else {
       // Create new settings with defaults for missing values
+      console.log(`➕ Creating new settings for user ${userId}`);
       const newSettings = {
         selectedPattern: selectedPattern || 'Two Lines',
         betAmount: betAmount !== undefined ? parseFloat(betAmount) : 5.0,
@@ -168,12 +179,18 @@ router.post('/', authenticateToken, async (req, res) => {
       settings: {
         selectedPattern: settings.selectedPattern,
         betAmount: settings.betAmount,
-        houseCutPercentage: settings.houseCutPercentage
+        houseCutPercentage: settings.houseCutPercentage,
+        voiceCategory: settings.voiceCategory
       }
     });
   } catch (error) {
-    console.error('Error saving settings:', error);
-    res.status(500).json({ error: 'Failed to save settings' });
+    console.error('❌ Error saving settings:', error);
+    console.error('Error details:', error.message);
+    console.error('Stack trace:', error.stack);
+    res.status(500).json({ 
+      error: 'Failed to save settings',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
