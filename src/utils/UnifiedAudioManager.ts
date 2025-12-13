@@ -291,14 +291,8 @@ export class UnifiedAudioManager {
       // Winner sound files
       actualFileId = category === 'boy' ? 'winner.wav' : 'winner.mp3';
     } else if (fileId === 'notwinner') {
-      // Notwinner sound files - only boy has this
-      if (category === 'boy') {
-        actualFileId = 'notwinner.wav';
-      } else {
-        // Girl voice doesn't have notwinner sound, use winner sound instead
-        console.warn('⚠️ Girl voice does not have notwinner sound, using winner sound');
-        actualFileId = 'winner.mp3';
-      }
+      // Notwinner sound files - both boy and girl have this
+      actualFileId = category === 'boy' ? 'notwinner.wav' : 'notwinner.wav';
     } else if (fileId === 'start') {
       // Start sound files
       actualFileId = category === 'boy' ? 'start.wav' : 'start.mp3';
@@ -608,7 +602,7 @@ export class UnifiedAudioManager {
     console.log('📥 Starting download of all voice categories...');
     
     const numbers = Array.from({ length: 75 }, (_, i) => i + 1);
-    const specialSounds = ['start.wav', 'winner.wav', 'shuffle-audio-TfqyAnvz.mp3'];
+    const specialSounds = ['start.wav', 'winner.wav', 'notwinner.wav', 'shuffle-audio-TfqyAnvz.mp3'];
     
     let completed = 0;
     const totalFiles = (numbers.length + specialSounds.length) * 2; // Both boy and girl
