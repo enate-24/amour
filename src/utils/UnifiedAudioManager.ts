@@ -100,19 +100,10 @@ export class UnifiedAudioManager {
       const status = await this.getCacheStatus();
       console.log(`📊 Cache status: ${status.cachedFiles}/${status.totalFiles} files cached`);
       
-      // Auto-preload if enabled and files are missing
-      if (this.config.preloadOnInit && !status.isComplete) {
-        console.log(`🚀 Auto-preload enabled: starting background download of ${status.missingFiles.length} missing files...`);
-        
-        // Start preloading in background (don't await to avoid blocking initialization)
-        this.downloadMissingAudio((current, total) => {
-          const progress = Math.round((current / total) * 100);
-          console.log(`📥 Background preload: ${current}/${total} (${progress}%)`);
-        }).then(() => {
-          console.log('✅ Background preload completed successfully');
-        }).catch(error => {
-          console.warn('⚠️ Background preload failed (will download on-demand):', error);
-        });
+      // Auto-preload is now handled by AutoPreloader component to avoid duplicates
+      // Just log the status for debugging
+      if (!status.isComplete) {
+        console.log(`📊 ${status.missingFiles.length} audio files missing - will be handled by AutoPreloader`);
       }
       
       this.initialized = true;
@@ -156,6 +147,12 @@ export class UnifiedAudioManager {
    */
   public async downloadMissingAudio(onProgress?: ProgressCallback): Promise<void> {
     try {
+      // Prevent concurrent downloads
+      if (this.activeDownloads > 0) {
+        console.log('⚠️ Download already in progress, skipping duplicate request');
+        return;
+      }
+      
       console.log('📥 Starting download of missing audio files...');
       
       // Get cache status to find missing files
@@ -169,6 +166,8 @@ export class UnifiedAudioManager {
       }
 
       console.log(`📥 Need to download ${missingFiles.length} missing files`);
+      console.log(`📊 Cache status: ${status.cachedFiles} cached, ${status.totalFiles} total expected`);
+      console.log(`📋 Missing files sample:`, missingFiles.slice(0, 10));
       
       let completed = status.cachedFiles;
       const total = status.totalFiles;
