@@ -66,8 +66,9 @@ class OfflineApiClient {
     }
 
     throw new Error(`No data available for ${endpoint} (offline and not cached)`);
-  }  // Enha
-nced POST with offline queueing
+  }
+
+  // Enhanced POST with offline queueing
   async post<T = any>(endpoint: string, data: any, options: RequestInit = {}): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
 

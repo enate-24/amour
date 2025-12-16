@@ -97,8 +97,9 @@ class OfflineGameManager {
     }
     
     return null;
-  }  // U
-pdate game state (call number, check winner, etc.)
+  }
+
+  // Update game state (call number, check winner, etc.)
   async updateGameState(updates: Partial<OfflineGameState>): Promise<void> {
     if (!this.currentGame) {
       throw new Error('No active game');
@@ -256,7 +257,7 @@ pdate game state (call number, check winner, etc.)
     await apiClient.post('/games/session', gameData);
   }
 
-  private detectWinningPattern(cartelas: string[], calledNumbers: number[], pattern: string): boolean {
+  private detectWinningPattern(_cartelas: string[], calledNumbers: number[], pattern: string): boolean {
     // Simplified pattern detection - can be enhanced with actual cartela data
     // This is a placeholder implementation
     
