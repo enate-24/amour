@@ -90,8 +90,9 @@ export function useOfflineAuth() {
       console.error('Auth initialization failed:', error);
       setAuthState({ user: null, loading: false, isOffline: !networkStatusManager.isOnline });
     }
-  };  con
-st signIn = async (email: string, password: string): Promise<void> => {
+  };
+
+  const signIn = async (email: string, password: string): Promise<void> => {
     if (!networkStatusManager.isOnline) {
       throw new Error('Cannot sign in while offline');
     }
