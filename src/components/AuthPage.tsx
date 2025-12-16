@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { LogIn, Gamepad as GamepadIcon } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { OfflineLoginMessage } from './OfflineLoginMessage';
+import { useNetworkStatus } from '../utils/networkStatus';
 
 const AuthPage: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -12,6 +14,7 @@ const AuthPage: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState('');
 
   const { signIn } = useAuth();
+  const { isOffline } = useNetworkStatus();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +50,15 @@ const AuthPage: React.FC = () => {
 
     } catch (err) {
       console.error('Authentication error:', err);
-      setError(err instanceof Error ? err.message : 'Authentication failed');
+      
+      // Provide better error messages for offline scenarios
+      let errorMessage = err instanceof Error ? err.message : 'Authentication failed';
+      
+      if (isOffline || errorMessage.includes('Failed to fetch') || errorMessage.includes('ERR_INTERNET_DISCONNECTED')) {
+        errorMessage = 'Cannot login while offline. Please check your internet connection and try again.';
+      }
+      
+      setError(errorMessage);
       setLoading(false);
     }
   };
@@ -116,6 +127,9 @@ const AuthPage: React.FC = () => {
               />
             </div>
 
+            {/* Offline Message */}
+            <OfflineLoginMessage onRetry={() => window.location.reload()} />
+
             {error && (
               <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-xl text-red-400 text-sm flex items-start gap-2 animate-shake">
                 <span className="text-red-500 font-bold">✕</span>
@@ -132,7 +146,7 @@ const AuthPage: React.FC = () => {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || isOffline}
               className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-slate-600 disabled:to-slate-600 rounded-xl font-semibold text-white transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-500/25 disabled:shadow-none"
             >
               {loading ? (
@@ -142,6 +156,11 @@ const AuthPage: React.FC = () => {
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                   Processing...
+                </span>
+              ) : isOffline ? (
+                <span className="flex items-center justify-center gap-2">
+                  <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                  Offline - Cannot Login
                 </span>
               ) : (
                 'Sign In'

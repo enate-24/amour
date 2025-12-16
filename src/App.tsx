@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Menu, User } from 'lucide-react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
+import { useOfflineAuth } from './hooks/useOfflineAuth';
 import { UnifiedAudioManager } from './utils/UnifiedAudioManager';
 import { cartelaCacheDB } from './utils/cartelaCache';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -123,7 +124,9 @@ const initializeOfflineSystem = async () => {
 function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [preloadComplete, setPreloadComplete] = useState(false);
+  // Use offline-aware auth for better offline experience
   const { user, loading, signOut } = useAuth();
+  const { isOffline } = useOfflineAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
