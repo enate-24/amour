@@ -5,6 +5,10 @@ import { useAuth } from './hooks/useAuth';
 import { UnifiedAudioManager } from './utils/UnifiedAudioManager';
 import { cartelaCacheDB } from './utils/cartelaCache';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { OfflineStatusBar } from './components/OfflineStatusBar';
+import { registerServiceWorker } from './utils/serviceWorker';
+import { offlineStorage } from './utils/offlineStorage';
+import { offlineSyncManager } from './utils/offlineSyncManager';
 import AutoPreloader from './components/AutoPreloader';
 import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
@@ -78,6 +82,44 @@ const initializeCartelaCache = async () => {
   }
 };
 
+// Initialize comprehensive offline system
+const initializeOfflineSystem = async () => {
+  console.log('🚀 Initializing offline-first system...');
+  
+  try {
+    // 1. Initialize offline storage
+    await offlineStorage.initialize();
+    console.log('✅ Offline storage initialized');
+    
+    // 2. Register service worker
+    await registerServiceWorker({
+      onUpdate: (registration) => {
+        console.log('🔄 New app version available');
+        // Could show update notification here
+      },
+      onSuccess: (registration) => {
+        console.log('✅ App ready for offline use');
+      },
+      onOfflineReady: () => {
+        console.log('📱 App can work offline');
+      }
+    });
+    
+    // 3. Initialize audio manager
+    await initializeAudioManager();
+    
+    // 4. Initialize cartela cache
+    await initializeCartelaCache();
+    
+    console.log('🎉 Offline-first system ready!');
+  } catch (error) {
+    console.error('❌ Failed to initialize offline system:', error);
+    // Fallback to basic initialization
+    initializeAudioManager();
+    initializeCartelaCache();
+  }
+};
+
 function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [preloadComplete, setPreloadComplete] = useState(false);
@@ -85,10 +127,9 @@ function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Initialize audio manager and cartela cache (cache-first, no auto-download)
+  // Initialize offline-first systems
   useEffect(() => {
-    initializeAudioManager();
-    initializeCartelaCache();
+    initializeOfflineSystem();
   }, []); // Run once on app mount
 
   // Reset sidebar when user changes (login/logout/role change)
@@ -205,8 +246,9 @@ function AppContent() {
         }}
       />
       
-      {/* Offline Indicator */}
+      {/* Offline Status */}
       <OfflineIndicator />
+      <OfflineStatusBar />
       
       {/* Mobile Header */}
       <div className="lg:hidden bg-slate-800 p-4 flex items-center justify-between">
