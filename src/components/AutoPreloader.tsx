@@ -204,6 +204,32 @@ const AutoPreloader: React.FC<AutoPreloaderProps> = ({
   };
 
   const preloadCartelas = async () => {
+    // Skip cartela preloading for regular users - they should only load their assigned cartelas
+    // Only admins need all cartelas preloaded
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const userRole = payload.role;
+        
+        if (userRole !== 'admin') {
+          console.log('👤 Skipping cartela preload for non-admin user - cartelas will load on demand');
+          setStatus(prev => ({
+            ...prev,
+            cartelas: { ...prev.cartelas, complete: true, downloading: false }
+          }));
+          return;
+        }
+      }
+    } catch (error) {
+      console.warn('Could not check user role, skipping cartela preload:', error);
+      setStatus(prev => ({
+        ...prev,
+        cartelas: { ...prev.cartelas, complete: true, downloading: false }
+      }));
+      return;
+    }
+
     setStatus(prev => ({
       ...prev,
       cartelas: { ...prev.cartelas, downloading: true }

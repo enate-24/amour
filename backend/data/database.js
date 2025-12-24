@@ -15,24 +15,30 @@ types.setTypeParser(types.builtins.INT8, parseInt);
 types.setTypeParser(types.builtins.FLOAT4, parseFloat);
 types.setTypeParser(types.builtins.FLOAT8, parseFloat);
 
-// PostgreSQL connection configuration
+// PostgreSQL connection configuration with improved resilience
 // Support both DATABASE_URL (Render/production) and individual params (local development)
 const dbConfig = process.env.DATABASE_URL ? {
   connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false
   },
-  max: 10, // Reduced pool size to avoid overwhelming remote database
-  min: 2, // Keep minimal connections alive
-  idleTimeoutMillis: 60000, // 60 seconds - allow connections to stay idle longer
+  max: 3, // Reduced pool size to avoid overwhelming remote database
+  min: 0, // No minimum connections to avoid connection issues
+  idleTimeoutMillis: 30000, // 30 seconds - shorter idle timeout
   connectionTimeoutMillis: 30000, // 30 seconds - increased for remote database
   acquireTimeoutMillis: 30000, // 30 seconds - increased for remote database
   createTimeoutMillis: 30000, // 30 seconds - increased for remote database
   destroyTimeoutMillis: 5000, // 5 seconds to destroy connection
   reapIntervalMillis: 10000, // Check for idle connections every 10 seconds
-  createRetryIntervalMillis: 500, // Retry connection creation every 500ms
-  statement_timeout: 60000, // 60 second query timeout - increased for remote database
-  query_timeout: 60000 // 60 second query timeout - increased for remote database
+  createRetryIntervalMillis: 5000, // Retry connection creation every 5 seconds
+  statement_timeout: 60000, // 1 minute query timeout
+  query_timeout: 60000, // 1 minute query timeout
+  keepAlive: true, // Keep connections alive
+  keepAliveInitialDelayMillis: 30000, // 30 seconds before first keepalive
+  // Add DNS resolution timeout
+  host_timeout: 10000,
+  // Add application name for debugging
+  application_name: 'amour_bingo_app'
 } : {
   user: process.env.DB_USER || 'postgres',
   host: process.env.DB_HOST || 'localhost',
@@ -257,6 +263,22 @@ const createTables = async () => {
         )
       `);
 
+      // User Cartelas table - separate table for user-assigned cartelas
+      await run(`
+        CREATE TABLE IF NOT EXISTS user_cartelas (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          card_id TEXT NOT NULL,
+          numbers TEXT NOT NULL, -- JSON string
+          pattern TEXT,
+          is_active INTEGER DEFAULT 1,
+          is_winner INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+          UNIQUE(user_id, card_id) -- Prevent duplicate card assignments per user
+        )
+      `);
+
       // Create indexes for faster cartela queries
       await run(`CREATE INDEX IF NOT EXISTS idx_cartelas_user_id ON cartelas(user_id)`);
       await run(`CREATE INDEX IF NOT EXISTS idx_cartelas_game_id ON cartelas(game_id)`);
@@ -326,11 +348,20 @@ const createTables = async () => {
           selected_pattern VARCHAR(50) DEFAULT 'Two Lines',
           bet_amount DECIMAL(10,2) DEFAULT 10.0,
           house_cut_percentage DECIMAL(5,2) DEFAULT 10.0,
+          voice_category VARCHAR(10),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
         )
       `);
+
+      // Add voice_category column if it doesn't exist (migration)
+      try {
+        await run(`ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS voice_category VARCHAR(10)`);
+      } catch (alterError) {
+        // Ignore errors if column already exists
+        console.log('Note: voice_category column may already exist in user_settings table');
+      }
 
       // Daily bonuses table
       await run(`
@@ -712,8 +743,8 @@ const cartelaOperations = {
     cartelaData.user_id,
     JSON.stringify(cartelaData.numbers),
     cartelaData.pattern,
-    cartelaData.is_active !== false,
-    !!cartelaData.is_winner,
+    cartelaData.is_active !== false ? 1 : 0,
+    cartelaData.is_winner ? 1 : 0,
     cartelaData.purchased_at || new Date().toISOString()
   ]),
 
@@ -767,6 +798,156 @@ const cartelaOperations = {
   },
 
   deleteById: (id) => run('DELETE FROM cartelas WHERE id = $1', [id])
+};
+
+// Database operations for user_cartelas
+const userCartelaOperations = {
+  findByUserId: async (userId) => {
+    const userCartelas = await all('SELECT * FROM user_cartelas WHERE user_id = $1 AND is_active = 1 ORDER BY card_id', [userId]);
+    return userCartelas.map(cartela => ({
+      id: cartela.id,
+      user_id: cartela.user_id,
+      card_id: cartela.card_id,
+      numbers: JSON.parse(cartela.numbers || '{}'),
+      pattern: cartela.pattern,
+      is_active: cartela.is_active,
+      is_winner: cartela.is_winner,
+      created_at: cartela.created_at
+    }));
+  },
+
+  create: (userCartelaData) => run(`
+    INSERT INTO user_cartelas (id, user_id, card_id, numbers, pattern, is_active, is_winner, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+  `, [
+    userCartelaData.id,
+    userCartelaData.user_id,
+    userCartelaData.card_id,
+    JSON.stringify(userCartelaData.numbers),
+    userCartelaData.pattern,
+    userCartelaData.is_active !== false ? 1 : 0,
+    userCartelaData.is_winner ? 1 : 0,
+    userCartelaData.created_at || new Date().toISOString()
+  ]),
+
+  update: (id, updateData) => {
+    const fields = [];
+    const values = [];
+    let paramCount = 1;
+
+    if (updateData.pattern !== undefined) {
+      fields.push(`pattern = $${paramCount}`);
+      values.push(updateData.pattern);
+      paramCount++;
+    }
+    if (updateData.is_active !== undefined) {
+      fields.push(`is_active = $${paramCount}`);
+      values.push(updateData.is_active);
+      paramCount++;
+    }
+    if (updateData.is_winner !== undefined) {
+      fields.push(`is_winner = $${paramCount}`);
+      values.push(updateData.is_winner);
+      paramCount++;
+    }
+
+    values.push(id);
+
+    const sql = `UPDATE user_cartelas SET ${fields.join(', ')} WHERE id = $${paramCount}`;
+    return run(sql, values);
+  },
+
+  deleteById: (id) => run('DELETE FROM user_cartelas WHERE id = $1', [id]),
+
+  deleteByUserId: (userId) => run('DELETE FROM user_cartelas WHERE user_id = $1', [userId]),
+
+  copyFromCartelas: async (userId, cartelaRange, progressCallback = null) => {
+    const { start, end } = cartelaRange;
+    
+    // Get cartelas in the specified range
+    const sourceCartelas = await all(`
+      SELECT * FROM cartelas 
+      WHERE CAST(card_id AS INTEGER) >= $1 AND CAST(card_id AS INTEGER) <= $2 
+      AND is_active = 1
+      ORDER BY CAST(card_id AS INTEGER)
+    `, [start, end]);
+
+    console.log(`📋 Found ${sourceCartelas.length} cartelas in range ${start}-${end} to copy for user ${userId}`);
+
+    if (progressCallback) {
+      progressCallback({
+        phase: 'copying',
+        current: 0,
+        total: sourceCartelas.length,
+        message: `Starting to copy ${sourceCartelas.length} cartelas...`
+      });
+    }
+
+    // Copy each cartela to user_cartelas table
+    const copiedCartelas = [];
+    const batchSize = 10; // Process in batches for better progress updates
+    
+    for (let i = 0; i < sourceCartelas.length; i++) {
+      const cartela = sourceCartelas[i];
+      const userCartela = {
+        id: require('uuid').v4(),
+        user_id: userId,
+        card_id: cartela.card_id,
+        numbers: JSON.parse(cartela.numbers || '{}'),
+        pattern: cartela.pattern,
+        is_active: true,
+        is_winner: false,
+        created_at: new Date().toISOString()
+      };
+
+      // Use the create method from the same object
+      await run(`
+        INSERT INTO user_cartelas (id, user_id, card_id, numbers, pattern, is_active, is_winner, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, [
+        userCartela.id,
+        userCartela.user_id,
+        userCartela.card_id,
+        JSON.stringify(userCartela.numbers),
+        userCartela.pattern,
+        userCartela.is_active ? 1 : 0,
+        userCartela.is_winner ? 1 : 0,
+        userCartela.created_at || new Date().toISOString()
+      ]);
+      
+      copiedCartelas.push(userCartela);
+
+      // Send progress update every batch or at the end
+      if (progressCallback && (i % batchSize === 0 || i === sourceCartelas.length - 1)) {
+        const progress = {
+          phase: 'copying',
+          current: i + 1,
+          total: sourceCartelas.length,
+          percentage: Math.round(((i + 1) / sourceCartelas.length) * 100),
+          message: `Copied ${i + 1} of ${sourceCartelas.length} cartelas...`
+        };
+        progressCallback(progress);
+        
+        // Small delay to prevent overwhelming the system
+        if (i % (batchSize * 5) === 0) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      }
+    }
+
+    if (progressCallback) {
+      progressCallback({
+        phase: 'completed',
+        current: copiedCartelas.length,
+        total: sourceCartelas.length,
+        percentage: 100,
+        message: `Successfully copied ${copiedCartelas.length} cartelas!`
+      });
+    }
+
+    console.log(`✅ Copied ${copiedCartelas.length} cartelas to user_cartelas table for user ${userId}`);
+    return copiedCartelas;
+  }
 };
 
 // Database operations for admin logs
@@ -1020,6 +1201,7 @@ module.exports = {
   users: userOperations,
   games: gameOperations,
   cartelas: cartelaOperations,
+  userCartelas: userCartelaOperations,
   adminLogs: adminLogOperations,
   sounds: soundOperations,
   userSettings: userSettingsOperations,

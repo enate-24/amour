@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LogIn, Gamepad as GamepadIcon } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { OfflineLoginMessage } from './OfflineLoginMessage';
 import { useNetworkStatus } from '../utils/networkStatus';
+import { offlineAuthManager } from '../utils/offlineAuthManager';
+import { initializeOfflineLogin, testOfflineLogin } from '../utils/offlineLoginInit';
 
 const AuthPage: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -15,6 +17,8 @@ const AuthPage: React.FC = () => {
 
   const { signIn } = useAuth();
   const { isOffline } = useNetworkStatus();
+  const [offlineLoginAvailable, setOfflineLoginAvailable] = useState(false);
+  const [cachedUsername, setCachedUsername] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +37,8 @@ const AuthPage: React.FC = () => {
       }
 
       // Show success message
-      setSuccessMessage('Login successful! Redirecting...');
+      const message = result.offline ? 'Offline login successful! Redirecting...' : 'Login successful! Redirecting...';
+      setSuccessMessage(message);
       console.log('Login successful, forcing page reload to ensure clean state');
 
       // Clear form on success
@@ -62,6 +67,36 @@ const AuthPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Initialize offline login system
+  useEffect(() => {
+    const initOfflineSystem = async () => {
+      try {
+        console.log('�  Initializing offline login system...');
+        
+        // Initialize offline login
+        await initializeOfflineLogin();
+        
+        // Check availability
+        const available = await offlineAuthManager.isOfflineLoginAvailable();
+        const username = await offlineAuthManager.getCachedUsername();
+        
+        console.log('Offline login available:', available);
+        console.log('Cached username:', username);
+        
+        setOfflineLoginAvailable(available);
+        if (username && available) {
+          setCachedUsername(username);
+          setFormData(prev => ({ ...prev, username }));
+          console.log('✅ Pre-filled username for offline login');
+        }
+      } catch (error) {
+        console.error('Error initializing offline login:', error);
+      }
+    };
+
+    initOfflineSystem();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({
@@ -128,7 +163,32 @@ const AuthPage: React.FC = () => {
             </div>
 
             {/* Offline Message */}
-            <OfflineLoginMessage onRetry={() => window.location.reload()} />
+            {isOffline && (
+              <div className="mb-4">
+                {offlineLoginAvailable ? (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start">
+                      <div className="w-5 h-5 text-blue-600 mt-0.5 mr-3">🔒</div>
+                      <div className="flex-1">
+                        <h3 className="text-sm font-medium text-blue-800 mb-1">
+                          Offline Login Available
+                        </h3>
+                        <p className="text-sm text-blue-700 mb-2">
+                          You can login offline using your previously saved credentials.
+                          {cachedUsername && ` Welcome back, ${cachedUsername}!`}
+                        </p>
+                        <div className="text-xs text-blue-600">
+                          <div className="w-2 h-2 bg-blue-400 rounded-full mr-2 inline-block"></div>
+                          Your data will sync when connection returns
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <OfflineLoginMessage onRetry={() => window.location.reload()} />
+                )}
+              </div>
+            )}
 
             {error && (
               <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-xl text-red-400 text-sm flex items-start gap-2 animate-shake">
@@ -146,7 +206,7 @@ const AuthPage: React.FC = () => {
 
             <button
               type="submit"
-              disabled={loading || isOffline}
+              disabled={loading || (isOffline && !offlineLoginAvailable)}
               className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-slate-600 disabled:to-slate-600 rounded-xl font-semibold text-white transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-500/25 disabled:shadow-none"
             >
               {loading ? (
@@ -157,16 +217,75 @@ const AuthPage: React.FC = () => {
                   </svg>
                   Processing...
                 </span>
-              ) : isOffline ? (
+              ) : isOffline && !offlineLoginAvailable ? (
                 <span className="flex items-center justify-center gap-2">
                   <div className="w-2 h-2 bg-red-400 rounded-full"></div>
                   Offline - Cannot Login
+                </span>
+              ) : isOffline && offlineLoginAvailable ? (
+                <span className="flex items-center justify-center gap-2">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                  Sign In Offline
                 </span>
               ) : (
                 'Sign In'
               )}
             </button>
           </form>
+          
+          {/* Demo Login Button for Testing */}
+          <div className="mt-4 pt-4 border-t border-slate-600">
+            <button
+              onClick={async () => {
+                try {
+                  console.log('🧪 Testing offline login with demo user...');
+                  
+                  // First test the offline login directly
+                  const testResult = await testOfflineLogin();
+                  if (testResult) {
+                    console.log('✅ Direct offline login test passed');
+                    
+                    // Now try through the signIn function
+                    setFormData({ username: 'demo', password: 'demo' });
+                    const result = await signIn('demo', 'demo');
+                    console.log('Demo login result:', result);
+                  } else {
+                    throw new Error('Direct offline login test failed');
+                  }
+                } catch (error) {
+                  console.error('Demo login failed:', error);
+                  alert('Demo login failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+                }
+              }}
+              className="w-full py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 rounded-xl font-medium text-white transition-all text-sm"
+            >
+              🧪 Test Demo Login (demo/demo)
+            </button>
+          </div>
+          
+          {/* Demo User Creation for Testing */}
+          {isOffline && !offlineLoginAvailable && (
+            <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+              <p className="text-yellow-300 text-sm mb-2">
+                No offline login available. Create demo user for testing:
+              </p>
+              <button
+                onClick={async () => {
+                  try {
+                    const { createDemoOfflineUser } = await import('../utils/demoOfflineUser');
+                    await createDemoOfflineUser();
+                    // Refresh the page to check offline login availability
+                    window.location.reload();
+                  } catch (error) {
+                    console.error('Failed to create demo user:', error);
+                  }
+                }}
+                className="w-full px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Create Demo User (Username: demo, Password: demo)
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

@@ -17,6 +17,7 @@ const STATIC_FILES = [
 const API_CACHE_PATTERNS = [
   /\/api\/cartelas/,
   /\/api\/auth\/me/,
+  /\/api\/auth\/profile/,
   /\/api\/settings/
 ];
 
@@ -118,6 +119,16 @@ async function handleApiRequest(request) {
     if (cachedResponse) {
       console.log('SW: Serving cached API response:', url.pathname);
       return cachedResponse;
+    }
+    
+    // For auth endpoints, return a specific offline response
+    if (url.pathname.includes('/auth/profile') || url.pathname.includes('/auth/me')) {
+      console.log('SW: Auth endpoint offline, returning network error for app to handle');
+      return new Response(JSON.stringify({ error: 'offline' }), {
+        status: 503,
+        statusText: 'Service Unavailable - Offline',
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
     
     // No cache available

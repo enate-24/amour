@@ -5,7 +5,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 // Re-export operations for consistency
-const { users, games, cartelas, adminLogs, get, all, run } = require('../db');
+const { users, games, cartelas, userCartelas, adminLogs, userSettings, get, all, run } = require('../db');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 // const { createCartelaListFromPDF } = require('../create-cartela-from-pdf'); // File not found
 
@@ -333,54 +333,403 @@ router.get('/pdf-files', authenticateToken, requireAdmin, (req, res) => {
   }
 });
 
-// Process PDF to create cartelas - DISABLED (missing create-cartela-from-pdf.js)
-// router.post('/process-pdf-cartelas', requireAdmin, [
-//   param('filename').notEmpty().withMessage('Filename is required')
-// ], async (req, res) => {
-//   try {
-//     const errors = validationResult(req);
-//     if (!errors.isEmpty()) {
-//       return res.status(400).json({ errors: errors.array() });
-//     }
-//
-//     const { filename } = req.body;
-//
-//     // Temporarily modify the PDF path in the script
-//     const originalPdfPath = path.join(__dirname, '../create-cartela-from-pdf.js');
-//     let scriptContent = require('fs').readFileSync(originalPdfPath, 'utf8');
-//
-//     // Replace the hardcoded PDF filename with the requested one
-//     const originalPath = "Bingo Cards (2)-1-169_compressed.pdf";
-//     scriptContent = scriptContent.replace(originalPath, filename);
-//
-//     // Write modified script to temp file
-//     const tempScriptPath = path.join(__dirname, '../create-cartela-from-pdf-temp.js');
-//     require('fs').writeFileSync(tempScriptPath, scriptContent);
-//
-//     // Import and run the modified script
-//     const { createCartelaListFromPDF: processPDF } = require(tempScriptPath);
-//
-//     const result = await processPDF();
-//
-//     // Clean up temp file
-//     require('fs').unlinkSync(tempScriptPath);
-//
-//     if (result.success) {
-//       res.json({
-//         message: 'Cartelas created successfully from PDF',
-//         ...result
-//       });
-//     } else {
-//       res.status(400).json({
-//         error: 'Failed to process PDF',
-//         details: result.message
-//       });
-//     }
-//   } catch (error) {
-//     console.error('Process PDF cartelas error:', error);
-//     res.status(500).json({ error: 'Failed to process PDF file', details: error.message });
-//   }
-// });
+// Process PDF to create cartelas with progress tracking and optional user assignment
+router.post('/process-pdf-cartelas-with-progress', authenticateToken, requireAdmin, [
+  body('filename').notEmpty().withMessage('Filename is required'),
+  body('count').optional().isInt({ min: 1, max: 1000 }).withMessage('Count must be between 1 and 1000'),
+  body('startCardId').optional().isInt({ min: 1 }).withMessage('Start card ID must be positive'),
+  body('assignToUserId').optional().isString().withMessage('User ID must be a string'),
+  body('replaceExisting').optional().isBoolean().withMessage('Replace existing must be boolean')
+], async (req, res) => {
+  // Set up Server-Sent Events
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+
+  const sendProgress = (data) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      sendProgress({ 
+        type: 'error', 
+        errors: errors.array() 
+      });
+      res.end();
+      return;
+    }
+
+    const { filename, count = 50, startCardId, assignToUserId, replaceExisting = false } = req.body;
+    const filePath = path.join(__dirname, '../uploads', filename);
+
+    sendProgress({
+      type: 'progress',
+      phase: 'starting',
+      message: 'Starting PDF processing...'
+    });
+
+    // Import PDF extractor
+    const { processPDFCartelas, saveCartelasToUserTable } = require('../utils/pdfCartelaExtractor');
+
+    sendProgress({
+      type: 'progress',
+      phase: 'reading',
+      message: 'Reading PDF file...'
+    });
+
+    // Process PDF
+    const result = await processPDFCartelas(filePath, { 
+      count: parseInt(count),
+      startCardId: startCardId ? parseInt(startCardId) : null
+    });
+
+    if (!result.success) {
+      sendProgress({
+        type: 'error',
+        message: 'Failed to process PDF',
+        details: result.message,
+        errors: result.errors
+      });
+      res.end();
+      return;
+    }
+
+    sendProgress({
+      type: 'progress',
+      phase: 'extracted',
+      message: `Successfully extracted ${result.cartelas.length} cartelas from PDF`,
+      extracted: result.cartelas.length
+    });
+
+    // Save directly to user_cartelas table (no intermediate step)
+    if (!assignToUserId) {
+      sendProgress({
+        type: 'error',
+        message: 'User ID is required for PDF processing. Cartelas will be saved directly to the specified user.'
+      });
+      res.end();
+      return;
+    }
+
+    // Find user first
+    const user = await users.findById(assignToUserId);
+    if (!user) {
+      sendProgress({
+        type: 'error',
+        message: `User with ID ${assignToUserId} not found`
+      });
+      res.end();
+      return;
+    }
+
+    sendProgress({
+      type: 'progress',
+      phase: 'saving',
+      message: `Saving cartelas directly to user ${user.username}...`,
+      current: 0,
+      total: result.cartelas.length,
+      progress: 0
+    });
+
+    // Check if user already has cartelas assigned
+    const existingCartelas = await userCartelas.findByUserId(assignToUserId);
+    if (existingCartelas.length > 0 && !replaceExisting) {
+      sendProgress({
+        type: 'error',
+        message: `User ${user.username} already has ${existingCartelas.length} cartelas assigned. Enable "Replace existing" to overwrite.`
+      });
+      res.end();
+      return;
+    }
+
+    // If replacing, clear existing cartelas
+    if (replaceExisting && existingCartelas.length > 0) {
+      await userCartelas.deleteByUserId(assignToUserId);
+      sendProgress({
+        type: 'progress',
+        phase: 'saving',
+        message: `Cleared ${existingCartelas.length} existing cartelas for user ${user.username}`,
+        progress: 10
+      });
+    }
+
+    // Save cartelas directly to user_cartelas table
+    const saveResult = await saveCartelasToUserTable(result.cartelas, { userCartelas }, assignToUserId, (progressData) => {
+      sendProgress({
+        type: 'progress',
+        ...progressData
+      });
+    });
+
+    if (!saveResult.success) {
+      sendProgress({
+        type: 'error',
+        message: 'Failed to save cartelas to user',
+        details: saveResult.errors.join(', ')
+      });
+      res.end();
+      return;
+    }
+
+    const assignmentResult = {
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email
+      },
+      assignedCount: saveResult.savedCount,
+      cardRange: `${result.cartelas[0].card_id}-${result.cartelas[saveResult.savedCount - 1].card_id}`,
+      replaceExisting
+    };
+
+    // Log admin action
+    await adminLogs.create({
+      id: require('uuid').v4(),
+      adminId: req.user.id,
+      action: 'PROCESS_PDF_AND_SAVE_TO_USER',
+      targetType: 'USER_CARTELA',
+      targetId: assignToUserId,
+      details: {
+        filename,
+        extractedCount: result.cartelas.length,
+        savedCount: saveResult.savedCount,
+        errors: [...result.errors, ...saveResult.errors],
+        assignment: assignmentResult
+      },
+      ipAddress: req.ip || req.connection.remoteAddress
+    });
+
+    sendProgress({
+      type: 'success',
+      message: `Successfully processed PDF and saved ${saveResult.savedCount} cartelas directly to user ${assignmentResult.user.username}`,
+      extracted: result.cartelas.length,
+      saved: saveResult.savedCount,
+      errors: [...result.errors, ...saveResult.errors],
+      cartelas: result.cartelas.slice(0, 5), // Show first 5 as preview
+      assignment: assignmentResult
+    });
+
+  } catch (error) {
+    console.error('Process PDF cartelas with progress error:', error);
+    sendProgress({
+      type: 'error',
+      message: 'Failed to process PDF file',
+      details: error.message
+    });
+  } finally {
+    res.end();
+  }
+});
+
+// Process PDF to create cartelas
+router.post('/process-pdf-cartelas', authenticateToken, requireAdmin, [
+  body('filename').notEmpty().withMessage('Filename is required'),
+  body('count').optional().isInt({ min: 1, max: 1000 }).withMessage('Count must be between 1 and 1000'),
+  body('startCardId').optional().isInt({ min: 1 }).withMessage('Start card ID must be positive')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { filename, count = 50, startCardId } = req.body;
+    const filePath = path.join(__dirname, '../uploads', filename);
+
+    // Import PDF extractor
+    const { processPDFCartelas, saveCartelasToDatabase } = require('../utils/pdfCartelaExtractor');
+
+    // Process PDF
+    const result = await processPDFCartelas(filePath, { 
+      count: parseInt(count),
+      startCardId: startCardId ? parseInt(startCardId) : null
+    });
+
+    if (!result.success) {
+      return res.status(400).json({
+        error: 'Failed to process PDF',
+        details: result.message,
+        errors: result.errors
+      });
+    }
+
+    // Save to database
+    const saveResult = await saveCartelasToDatabase(result.cartelas, { cartelas });
+
+    // Log admin action
+    await adminLogs.create({
+      id: require('uuid').v4(),
+      adminId: req.user.id,
+      action: 'PROCESS_PDF_CARTELAS',
+      targetType: 'CARTELA',
+      targetId: filename,
+      details: {
+        filename,
+        extractedCount: result.cartelas.length,
+        savedCount: saveResult.savedCount,
+        errors: [...result.errors, ...saveResult.errors]
+      },
+      ipAddress: req.ip || req.connection.remoteAddress
+    });
+
+    res.json({
+      message: `Successfully processed PDF and saved ${saveResult.savedCount} cartelas`,
+      extracted: result.cartelas.length,
+      saved: saveResult.savedCount,
+      errors: [...result.errors, ...saveResult.errors],
+      cartelas: result.cartelas.slice(0, 5) // Show first 5 as preview
+    });
+
+  } catch (error) {
+    console.error('Process PDF cartelas error:', error);
+    res.status(500).json({ 
+      error: 'Failed to process PDF file', 
+      details: error.message 
+    });
+  }
+});
+
+// Assign cartelas from range to user
+router.post('/assign-cartelas-to-user', authenticateToken, requireAdmin, [
+  body('userId').notEmpty().withMessage('User ID is required'),
+  body('startCardId').isInt({ min: 1 }).withMessage('Start card ID must be positive'),
+  body('endCardId').isInt({ min: 1 }).withMessage('End card ID must be positive'),
+  body('replaceExisting').optional().isBoolean().withMessage('Replace existing must be boolean')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { userId, startCardId, endCardId, replaceExisting = false } = req.body;
+
+    // Validate range
+    if (startCardId >= endCardId) {
+      return res.status(400).json({ error: 'End card ID must be greater than start card ID' });
+    }
+
+    // Find user
+    const user = await users.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check if user already has cartelas assigned
+    const existingCartelas = await userCartelas.findByUserId(userId);
+    if (existingCartelas.length > 0 && !replaceExisting) {
+      return res.status(400).json({ 
+        error: 'User already has cartelas assigned. Set replaceExisting=true to replace them.',
+        existingCount: existingCartelas.length,
+        existingRange: {
+          start: Math.min(...existingCartelas.map(c => parseInt(c.card_id))),
+          end: Math.max(...existingCartelas.map(c => parseInt(c.card_id)))
+        }
+      });
+    }
+
+    // If replacing, clear existing cartelas
+    if (replaceExisting && existingCartelas.length > 0) {
+      await userCartelas.deleteByUserId(userId);
+      console.log(`🗑️ Cleared ${existingCartelas.length} existing cartelas for user ${userId}`);
+    }
+
+    // Copy cartelas with progress tracking
+    console.log(`🔄 Assigning cartelas ${startCardId}-${endCardId} to user ${user.username}`);
+    
+    const copiedCartelas = await userCartelas.copyFromCartelas(userId, {
+      start: startCardId,
+      end: endCardId
+    });
+
+    // Log admin action
+    await adminLogs.create({
+      id: require('uuid').v4(),
+      adminId: req.user.id,
+      action: 'ASSIGN_CARTELAS_TO_USER',
+      targetType: 'USER',
+      targetId: userId,
+      details: {
+        username: user.username,
+        cartelaRange: `${startCardId}-${endCardId}`,
+        assignedCount: copiedCartelas.length,
+        replaceExisting
+      },
+      ipAddress: req.ip || req.connection.remoteAddress
+    });
+
+    res.json({
+      message: `Successfully assigned ${copiedCartelas.length} cartelas to user ${user.username}`,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email
+      },
+      assignedCartelas: {
+        range: `${startCardId}-${endCardId}`,
+        count: copiedCartelas.length,
+        cardIds: copiedCartelas.slice(0, 10).map(c => c.card_id) // Show first 10
+      },
+      replaceExisting
+    });
+
+  } catch (error) {
+    console.error('Assign cartelas to user error:', error);
+    res.status(500).json({ error: 'Failed to assign cartelas to user' });
+  }
+});
+
+// Get cartela assignment preview
+router.post('/preview-cartela-assignment', authenticateToken, requireAdmin, [
+  body('startCardId').isInt({ min: 1 }).withMessage('Start card ID must be positive'),
+  body('endCardId').isInt({ min: 1 }).withMessage('End card ID must be positive')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { startCardId, endCardId } = req.body;
+
+    // Validate range
+    if (startCardId >= endCardId) {
+      return res.status(400).json({ error: 'End card ID must be greater than start card ID' });
+    }
+
+    // Get cartelas in the specified range
+    const allCartelas = await cartelas.findAll();
+    const availableCartelas = allCartelas.filter(c => {
+      const cardNum = parseInt(c.card_id);
+      return cardNum >= startCardId && cardNum <= endCardId && c.is_active;
+    });
+
+    // Get sample cartelas for preview
+    const sampleCartelas = availableCartelas.slice(0, 5).map(cartela => ({
+      card_id: cartela.card_id,
+      numbers: typeof cartela.numbers === 'string' ? JSON.parse(cartela.numbers) : cartela.numbers
+    }));
+
+    res.json({
+      range: `${startCardId}-${endCardId}`,
+      totalAvailable: availableCartelas.length,
+      expectedCount: endCardId - startCardId + 1,
+      missingCount: (endCardId - startCardId + 1) - availableCartelas.length,
+      sampleCartelas,
+      isValid: availableCartelas.length > 0
+    });
+
+  } catch (error) {
+    console.error('Preview cartela assignment error:', error);
+    res.status(500).json({ error: 'Failed to preview cartela assignment' });
+  }
+});
 
 // Delete PDF file
 router.delete('/pdf-files/:filename', authenticateToken, requireAdmin, (req, res) => {
@@ -444,7 +793,183 @@ router.get('/export/:type', authenticateToken, requireAdmin, [
   }
 });
 
-// Create new user (Admin only)
+// Create new user with progress tracking (Admin only) - NO CARTELA ASSIGNMENT
+router.post('/users/with-progress', authenticateToken, requireAdmin, [
+  body('username').isLength({ min: 3 }).withMessage('Username must be at least 3 characters'),
+  body('email').isEmail().withMessage('Valid email required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('shopname').optional().isLength({ min: 2 }).withMessage('Shop name must be at least 2 characters'),
+  body('userType').optional().isIn(['prepaid', 'postpaid']).withMessage('User type must be prepaid or postpaid'),
+  body('balance').optional().isNumeric().withMessage('Balance must be a number'),
+  body('balanceLimit').optional().isNumeric().withMessage('Balance limit must be a number'),
+  body('voiceCategory').isIn(['boy', 'girl']).withMessage('Voice category must be boy or girl')
+], async (req, res) => {
+  // Set up Server-Sent Events
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+
+  const sendProgress = (data) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      sendProgress({ 
+        type: 'error', 
+        errors: errors.array() 
+      });
+      res.end();
+      return;
+    }
+
+    const { 
+      username, 
+      email, 
+      password, 
+      shopname, 
+      role = 'user', 
+      userType = 'prepaid', 
+      balance,
+      voiceCategory
+    } = req.body;
+
+    sendProgress({
+      type: 'progress',
+      phase: 'validation',
+      message: 'Validating user data...'
+    });
+
+    // Validate prepaid user has balance
+    if (userType === 'prepaid' && (balance === undefined || balance === null)) {
+      sendProgress({ 
+        type: 'error', 
+        message: 'Balance is required for prepaid users' 
+      });
+      res.end();
+      return;
+    }
+
+    // Postpaid users start with 0 balance (will go negative)
+    const initialBalance = userType === 'postpaid' ? 0 : (balance !== undefined ? parseFloat(balance) : 0);
+
+    sendProgress({
+      type: 'progress',
+      phase: 'checking',
+      message: 'Checking for existing users...'
+    });
+
+    // Check if user already exists
+    const existingUserByEmail = await users.findByEmail(email);
+    const existingUserByUsername = await users.findByUsername(username);
+
+    if (existingUserByEmail || existingUserByUsername) {
+      sendProgress({ 
+        type: 'error', 
+        message: 'User already exists with this email or username' 
+      });
+      res.end();
+      return;
+    }
+
+    sendProgress({
+      type: 'progress',
+      phase: 'creating_user',
+      message: 'Creating user account...'
+    });
+
+    // Hash password
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create new user
+    const newUser = {
+      id: require('uuid').v4(),
+      username,
+      email,
+      shopname,
+      password: hashedPassword,
+      role: role,
+      userType: userType,
+      balance: initialBalance,
+      balanceLimit: null,
+      totalGamesPlayed: 0,
+      totalWinnings: 0,
+      is_active: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await users.create(newUser);
+
+    sendProgress({
+      type: 'progress',
+      phase: 'setting_voice',
+      message: 'Setting voice category...'
+    });
+
+    // Set user voice category (no cartela assignment)
+    await userSettings.create(newUser.id, { 
+      voiceCategory: voiceCategory,
+      selectedPattern: 'Two Lines',
+      betAmount: 10.0,
+      houseCutPercentage: 10.0
+    });
+
+    sendProgress({
+      type: 'progress',
+      phase: 'logging',
+      message: 'Creating admin log...'
+    });
+
+    // Log admin action
+    await adminLogs.create({
+      id: require('uuid').v4(),
+      adminId: req.user.id,
+      action: 'CREATE_USER',
+      targetType: 'USER',
+      targetId: newUser.id,
+      details: { 
+        username, 
+        email, 
+        role, 
+        shopname, 
+        userType, 
+        balance: newUser.balance,
+        voiceCategory: voiceCategory,
+        note: 'User created without cartelas - cartelas to be assigned separately'
+      },
+      ipAddress: req.ip || req.connection.remoteAddress
+    });
+
+    // Remove password from response
+    const { password: _, ...userResponse } = newUser;
+
+    sendProgress({
+      type: 'success',
+      message: 'User created successfully! Cartelas can be assigned separately.',
+      user: userResponse,
+      voiceCategory: voiceCategory,
+      note: 'No cartelas assigned - use Assign Cartelas feature to add cartelas'
+    });
+
+  } catch (error) {
+    console.error('Create user with progress error:', error);
+    sendProgress({
+      type: 'error',
+      message: 'Failed to create user: ' + error.message
+    });
+  } finally {
+    res.end();
+  }
+});
+
+// Create new user (Admin only) - Original endpoint for backward compatibility
 router.post('/users', authenticateToken, requireAdmin, [
   body('username').isLength({ min: 3 }).withMessage('Username must be at least 3 characters'),
   body('email').isEmail().withMessage('Valid email required'),
@@ -452,15 +977,48 @@ router.post('/users', authenticateToken, requireAdmin, [
   body('shopname').optional().isLength({ min: 2 }).withMessage('Shop name must be at least 2 characters'),
   body('userType').optional().isIn(['prepaid', 'postpaid']).withMessage('User type must be prepaid or postpaid'),
   body('balance').optional().isNumeric().withMessage('Balance must be a number'),
-  body('balanceLimit').optional().isNumeric().withMessage('Balance limit must be a number')
+  body('balanceLimit').optional().isNumeric().withMessage('Balance limit must be a number'),
+  body('voiceCategory').isIn(['boy', 'girl']).withMessage('Voice category must be boy or girl')
 ], async (req, res) => {
   try {
+    console.log('🔥 POST /users endpoint called');
+    console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { username, email, password, shopname, role = 'user', userType = 'prepaid', balance } = req.body;
+    const { 
+      username, 
+      email, 
+      password, 
+      shopname, 
+      role = 'user', 
+      userType = 'prepaid', 
+      balance,
+      cartelaRangeStart,
+      cartelaRangeEnd,
+      voiceCategory
+    } = req.body;
+
+    // If cartela range is provided, validate it
+    if (cartelaRangeStart !== undefined && cartelaRangeEnd !== undefined) {
+      // Manual validation for cartela range
+      if (!Number.isInteger(cartelaRangeStart) || cartelaRangeStart < 1) {
+        return res.status(400).json({ error: 'Cartela range start must be a positive integer' });
+      }
+      if (!Number.isInteger(cartelaRangeEnd) || cartelaRangeEnd < 1) {
+        return res.status(400).json({ error: 'Cartela range end must be a positive integer' });
+      }
+      if (cartelaRangeStart >= cartelaRangeEnd) {
+        return res.status(400).json({ error: 'Cartela range end must be greater than start' });
+      }
+    } else if (cartelaRangeStart !== undefined || cartelaRangeEnd !== undefined) {
+      // If only one is provided, that's an error
+      return res.status(400).json({ error: 'Both cartelaRangeStart and cartelaRangeEnd must be provided together, or both omitted' });
+    }
 
     // Validate prepaid user has balance
     if (userType === 'prepaid' && (balance === undefined || balance === null)) {
@@ -476,6 +1034,32 @@ router.post('/users', authenticateToken, requireAdmin, [
 
     if (existingUserByEmail || existingUserByUsername) {
       return res.status(400).json({ error: 'User already exists with this email or username' });
+    }
+
+    let availableCartelas = [];
+    let willAssignCartelas = false;
+
+    // Only validate and prepare cartelas if range is provided
+    if (cartelaRangeStart !== undefined && cartelaRangeEnd !== undefined) {
+      console.log(`📋 Cartela range provided: ${cartelaRangeStart}-${cartelaRangeEnd}`);
+      willAssignCartelas = true;
+      
+      // Validate that cartelas exist in the specified range
+      const allCartelas = await cartelas.findAll();
+      availableCartelas = allCartelas.filter(c => {
+        const cardNum = parseInt(c.card_id);
+        return cardNum >= cartelaRangeStart && cardNum <= cartelaRangeEnd && c.is_active;
+      });
+
+      if (availableCartelas.length === 0) {
+        return res.status(400).json({ 
+          error: `No cartelas found in range ${cartelaRangeStart}-${cartelaRangeEnd}` 
+        });
+      }
+
+      console.log(`📋 Found ${availableCartelas.length} cartelas in range ${cartelaRangeStart}-${cartelaRangeEnd} to copy`);
+    } else {
+      console.log('📋 No cartela range provided - user will be created without cartelas');
     }
 
     // Hash password
@@ -502,24 +1086,68 @@ router.post('/users', authenticateToken, requireAdmin, [
 
     await users.create(newUser);
 
+    let copiedCartelas = [];
+    
+    // Only assign cartelas if range was provided
+    if (willAssignCartelas) {
+      console.log(`🔗 Copying cartelas from range ${cartelaRangeStart}-${cartelaRangeEnd} to user_cartelas table`);
+      copiedCartelas = await userCartelas.copyFromCartelas(newUser.id, {
+        start: cartelaRangeStart,
+        end: cartelaRangeEnd
+      });
+    } else {
+      console.log('🔗 Skipping cartela assignment - no range provided');
+    }
+
+    // Set user voice category
+    await userSettings.create(newUser.id, { 
+      voiceCategory: voiceCategory,
+      selectedPattern: 'Two Lines',
+      betAmount: 10.0,
+      houseCutPercentage: 10.0
+    });
+
     // Log admin action
     await adminLogs.create({
       id: require('uuid').v4(),
       adminId: req.user.id,
-      action: 'CREATE_USER',
+      action: willAssignCartelas ? 'CREATE_USER_WITH_CARTELAS' : 'CREATE_USER',
       targetType: 'USER',
       targetId: newUser.id,
-      details: { username, email, role, shopname, userType, balance: newUser.balance },
+      details: { 
+        username, 
+        email, 
+        role, 
+        shopname, 
+        userType, 
+        balance: newUser.balance,
+        cartelaRange: willAssignCartelas ? `${cartelaRangeStart}-${cartelaRangeEnd}` : 'none',
+        copiedCartelas: copiedCartelas.length,
+        voiceCategory: voiceCategory
+      },
       ipAddress: req.ip || req.connection.remoteAddress
     });
 
     // Remove password from response
     const { password: _, ...userResponse } = newUser;
 
-    res.status(201).json({
-      message: 'User created successfully',
-      user: userResponse
-    });
+    const response = {
+      message: willAssignCartelas 
+        ? `User created successfully with ${copiedCartelas.length} cartelas and voice category`
+        : 'User created successfully with voice category (no cartelas assigned)',
+      user: userResponse,
+      voiceCategory: voiceCategory
+    };
+
+    if (willAssignCartelas) {
+      response.assignedCartelas = {
+        range: `${cartelaRangeStart}-${cartelaRangeEnd}`,
+        count: copiedCartelas.length,
+        cardIds: copiedCartelas.slice(0, 10).map(c => c.card_id) // Show first 10 only
+      };
+    }
+
+    res.status(201).json(response);
   } catch (error) {
     console.error('Create user error:', error);
     res.status(500).json({ error: 'Failed to create user' });
@@ -543,18 +1171,44 @@ router.get('/users', authenticateToken, requireAdmin, async (req, res) => {
 
     const allUsers = await users.findAll();
 
-    // Remove passwords from response
-    const safeUsers = allUsers.map(user => {
+    // Get cartela counts for all users in a single query (much faster)
+    let cartelaCounts = {};
+    try {
+      const cartelaCountQuery = `
+        SELECT user_id, COUNT(*) as cartela_count 
+        FROM user_cartelas 
+        WHERE is_active = 1 
+        GROUP BY user_id
+      `;
+      const cartelaCountResults = await all(cartelaCountQuery);
+      
+      // Convert to a lookup object for fast access
+      cartelaCounts = cartelaCountResults.reduce((acc, row) => {
+        acc[row.user_id] = parseInt(row.cartela_count) || 0;
+        return acc;
+      }, {});
+      
+      console.log(`✅ Retrieved cartela counts for ${cartelaCountResults.length} users with cartelas`);
+    } catch (error) {
+      console.error('Error getting cartela counts:', error);
+      // Continue with empty counts if query fails
+    }
+
+    // Add cartela counts to users (no additional queries needed)
+    const usersWithCartelas = allUsers.map(user => {
       const { password, ...safeUser } = user;
-      return safeUser;
+      return {
+        ...safeUser,
+        cartelaCount: cartelaCounts[user.id] || 0
+      };
     });
 
-    console.log(`✅ Returning ${safeUsers.length} users to admin`);
+    console.log(`✅ Returning ${usersWithCartelas.length} users with cartela counts to admin`);
 
     res.json({
       success: true,
-      total: safeUsers.length,
-      users: safeUsers
+      total: usersWithCartelas.length,
+      users: usersWithCartelas
     });
   } catch (error) {
     console.error('Error fetching users for admin:', error);
@@ -1207,6 +1861,358 @@ router.get('/user-daily-stats/:userId', authenticateToken, requireAdmin, async (
   } catch (error) {
     console.error('Error fetching user daily stats:', error);
     res.status(500).json({ error: 'Failed to fetch user daily statistics' });
+  }
+});
+
+// Assign cartelas to user (Admin only)
+router.post('/users/:userId/assign-cartelas', authenticateToken, requireAdmin, [
+  body('cartelaIds').isArray().withMessage('Cartela IDs must be an array'),
+  body('cartelaIds.*').isString().withMessage('Each cartela ID must be a string')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { userId } = req.params;
+    const { cartelaIds } = req.body;
+
+    // Find user
+    const user = await users.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Validate cartelas exist and are available
+    const allCartelas = await cartelas.findAll();
+    const targetCartelas = allCartelas.filter(c => cartelaIds.includes(c.id));
+    
+    if (targetCartelas.length !== cartelaIds.length) {
+      return res.status(400).json({ error: 'Some cartelas not found' });
+    }
+
+    // Check if any cartelas are already assigned
+    const alreadyAssigned = targetCartelas.filter(c => c.user_id || c.game_id);
+    if (alreadyAssigned.length > 0) {
+      return res.status(400).json({ 
+        error: 'Some cartelas are already assigned',
+        assignedCartelas: alreadyAssigned.map(c => c.card_id)
+      });
+    }
+
+    // Assign cartelas to user
+    const assignedCount = await Promise.all(
+      cartelaIds.map(cartelaId => 
+        cartelas.update(cartelaId, { user_id: userId })
+      )
+    );
+
+    // Log admin action
+    await adminLogs.create({
+      id: require('uuid').v4(),
+      adminId: req.user.id,
+      action: 'ASSIGN_CARTELAS',
+      targetType: 'USER',
+      targetId: userId,
+      details: {
+        username: user.username,
+        cartelaIds: cartelaIds,
+        cartelaCount: cartelaIds.length
+      },
+      ipAddress: req.ip || req.connection.remoteAddress
+    });
+
+    res.json({
+      message: `Successfully assigned ${cartelaIds.length} cartelas to user ${user.username}`,
+      assignedCartelas: cartelaIds,
+      user: {
+        id: user.id,
+        username: user.username
+      }
+    });
+  } catch (error) {
+    console.error('Assign cartelas error:', error);
+    res.status(500).json({ error: 'Failed to assign cartelas' });
+  }
+});
+
+// Remove cartelas from user (Admin only)
+router.post('/users/:userId/remove-cartelas', authenticateToken, requireAdmin, [
+  body('cartelaIds').isArray().withMessage('Cartela IDs must be an array'),
+  body('cartelaIds.*').isString().withMessage('Each cartela ID must be a string')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { userId } = req.params;
+    const { cartelaIds } = req.body;
+
+    // Find user
+    const user = await users.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Validate cartelas exist and are assigned to this user
+    const allCartelas = await cartelas.findAll();
+    const targetCartelas = allCartelas.filter(c => 
+      cartelaIds.includes(c.id) && c.user_id === userId
+    );
+    
+    if (targetCartelas.length !== cartelaIds.length) {
+      return res.status(400).json({ 
+        error: 'Some cartelas not found or not assigned to this user' 
+      });
+    }
+
+    // Remove cartelas from user (set user_id to null)
+    await Promise.all(
+      cartelaIds.map(cartelaId => 
+        cartelas.update(cartelaId, { user_id: null })
+      )
+    );
+
+    // Log admin action
+    await adminLogs.create({
+      id: require('uuid').v4(),
+      adminId: req.user.id,
+      action: 'REMOVE_CARTELAS',
+      targetType: 'USER',
+      targetId: userId,
+      details: {
+        username: user.username,
+        cartelaIds: cartelaIds,
+        cartelaCount: cartelaIds.length
+      },
+      ipAddress: req.ip || req.connection.remoteAddress
+    });
+
+    res.json({
+      message: `Successfully removed ${cartelaIds.length} cartelas from user ${user.username}`,
+      removedCartelas: cartelaIds,
+      user: {
+        id: user.id,
+        username: user.username
+      }
+    });
+  } catch (error) {
+    console.error('Remove cartelas error:', error);
+    res.status(500).json({ error: 'Failed to remove cartelas' });
+  }
+});
+
+// Delete ALL assigned cartelas from user (Admin only)
+router.delete('/users/:userId/cartelas', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Find user
+    const user = await users.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get all user's assigned cartelas from user_cartelas table
+    const assignedCartelas = await userCartelas.findByUserId(userId);
+    
+    if (assignedCartelas.length === 0) {
+      return res.status(400).json({ 
+        error: 'User has no assigned cartelas to delete' 
+      });
+    }
+
+    // Delete all cartelas from user_cartelas table
+    await userCartelas.deleteByUserId(userId);
+
+    // Log admin action
+    await adminLogs.create({
+      id: require('uuid').v4(),
+      adminId: req.user.id,
+      action: 'DELETE_ALL_USER_CARTELAS',
+      targetType: 'USER',
+      targetId: userId,
+      details: {
+        username: user.username,
+        deletedCartelaCount: assignedCartelas.length,
+        cartelaRange: assignedCartelas.length > 0 ? {
+          start: Math.min(...assignedCartelas.map(c => parseInt(c.card_id))),
+          end: Math.max(...assignedCartelas.map(c => parseInt(c.card_id)))
+        } : null
+      },
+      ipAddress: req.ip || req.connection.remoteAddress
+    });
+
+    res.json({
+      message: `Successfully deleted all ${assignedCartelas.length} assigned cartelas from user ${user.username}`,
+      deletedCount: assignedCartelas.length,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    console.error('Delete all user cartelas error:', error);
+    res.status(500).json({ error: 'Failed to delete user cartelas' });
+  }
+});
+
+// Get user's assigned cartelas (Admin only)
+router.get('/users/:userId/cartelas', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Find user
+    const user = await users.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get user's assigned cartelas from user_cartelas table
+    const assignedCartelas = await userCartelas.findByUserId(userId);
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        shopname: user.shopname
+      },
+      cartelas: assignedCartelas.map(cartela => ({
+        id: cartela.id,
+        card_id: cartela.card_id,
+        numbers: cartela.numbers,
+        is_active: cartela.is_active,
+        is_winner: cartela.is_winner,
+        created_at: cartela.created_at
+      })),
+      total: assignedCartelas.length,
+      range: assignedCartelas.length > 0 ? {
+        start: Math.min(...assignedCartelas.map(c => parseInt(c.card_id))),
+        end: Math.max(...assignedCartelas.map(c => parseInt(c.card_id)))
+      } : null
+    });
+  } catch (error) {
+    console.error('Get user cartelas error:', error);
+    res.status(500).json({ error: 'Failed to fetch user cartelas' });
+  }
+});
+
+// Set user voice category (Admin only)
+router.put('/users/:userId/voice-category', authenticateToken, requireAdmin, [
+  body('voiceCategory').isIn(['boy', 'girl']).withMessage('Voice category must be "boy" or "girl"')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { userId } = req.params;
+    const { voiceCategory } = req.body;
+
+    // Find user
+    const user = await users.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Update user settings with voice category
+    await userSettings.create(userId, { voiceCategory });
+
+    // Log admin action
+    await adminLogs.create({
+      id: require('uuid').v4(),
+      adminId: req.user.id,
+      action: 'SET_VOICE_CATEGORY',
+      targetType: 'USER',
+      targetId: userId,
+      details: {
+        username: user.username,
+        voiceCategory: voiceCategory
+      },
+      ipAddress: req.ip || req.connection.remoteAddress
+    });
+
+    res.json({
+      message: `Voice category set to "${voiceCategory}" for user ${user.username}`,
+      user: {
+        id: user.id,
+        username: user.username
+      },
+      voiceCategory: voiceCategory
+    });
+  } catch (error) {
+    console.error('Set voice category error:', error);
+    res.status(500).json({ error: 'Failed to set voice category' });
+  }
+});
+
+// Get user settings including voice category (Admin only)
+router.get('/users/:userId/settings', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Find user
+    const user = await users.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get user settings
+    const settings = await userSettings.findByUserId(userId);
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username
+      },
+      settings: settings || {
+        selectedPattern: 'Two Lines',
+        betAmount: 10.0,
+        houseCutPercentage: 10.0,
+        voiceCategory: null
+      }
+    });
+  } catch (error) {
+    console.error('Get user settings error:', error);
+    res.status(500).json({ error: 'Failed to fetch user settings' });
+  }
+});
+
+// Get available cartelas for assignment (Admin only)
+router.get('/cartelas/available', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { limit = 100 } = req.query;
+
+    // Get available cartelas (not assigned to any user or game)
+    const allCartelas = await cartelas.findAll();
+    const availableCartelas = allCartelas
+      .filter(cartela => !cartela.user_id && !cartela.game_id && cartela.is_active)
+      .slice(0, parseInt(limit))
+      .map(cartela => ({
+        id: cartela.id,
+        card_id: cartela.card_id,
+        numbers: typeof cartela.numbers === 'string' ? JSON.parse(cartela.numbers) : cartela.numbers,
+        is_active: cartela.is_active,
+        purchased_at: cartela.purchased_at
+      }));
+
+    res.json({
+      success: true,
+      cartelas: availableCartelas,
+      total: availableCartelas.length,
+      totalAvailable: allCartelas.filter(c => !c.user_id && !c.game_id && c.is_active).length
+    });
+  } catch (error) {
+    console.error('Get available cartelas error:', error);
+    res.status(500).json({ error: 'Failed to fetch available cartelas' });
   }
 });
 

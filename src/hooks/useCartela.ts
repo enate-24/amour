@@ -147,6 +147,20 @@ export function useCartela(): UseCartelaReturn {
     // Performance timing
     const startTime = performance.now();
 
+    // Set current user for cache before loading
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const userId = payload.id || payload.userId || payload.sub;
+        if (userId) {
+          cartelaCacheDB.setCurrentUser(userId);
+        }
+      }
+    } catch (error) {
+      console.warn('Could not set cache user:', error);
+    }
+
     // Try to load from IndexedDB cache first (synchronously set loading)
     try {
       const cachedCartelas = await cartelaCacheDB.getAllCartelas();
@@ -202,9 +216,32 @@ export function useCartela(): UseCartelaReturn {
     try {
       const fetchStartTime = performance.now();
 
-      // Use the /all-cartelas endpoint to get cartelas with proper bingo card data
+      // Use the /user-cartelas endpoint to get only user's assigned cartelas
       const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-      const response = await fetch(`${API_BASE_URL}/cartelas/all-cartelas`);
+      const token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      // Get user ID from token to set cache user
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const userId = payload.id || payload.userId || payload.sub;
+        if (userId) {
+          cartelaCacheDB.setCurrentUser(userId);
+          console.log(`👤 Set cartela cache user: ${userId}`);
+        }
+      } catch (tokenError) {
+        console.warn('Could not extract user ID from token:', tokenError);
+      }
+
+      const response = await fetch(`${API_BASE_URL}/cartelas/user-cartelas`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);

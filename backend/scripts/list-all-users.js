@@ -1,46 +1,39 @@
-const { pool } = require('../db');
+const { users, closePool } = require('../db');
 
-async function listUsers() {
-  console.log('👥 Listing All Users\n');
-
+async function listAllUsers() {
   try {
-    const result = await pool.query(`
-      SELECT id, username, user_type, balance, total_games_played, created_at
-      FROM users
-      ORDER BY created_at DESC
-    `);
+    console.log('🔍 Fetching all users...');
     
-    if (result.rows.length === 0) {
-      console.log('❌ No users found in database');
+    const allUsers = await users.findAll();
+    
+    console.log(`\n📋 ALL USERS (${allUsers.length} total):`);
+    console.log('='.repeat(50));
+    
+    if (allUsers.length === 0) {
+      console.log('No users found in database');
       return;
     }
     
-    console.log(`Found ${result.rows.length} users:\n`);
-    
-    result.rows.forEach((user, idx) => {
-      console.log(`${idx + 1}. Username: ${user.username}`);
-      console.log(`   ID: ${user.id}`);
-      console.log(`   Type: ${user.user_type || 'NOT SET'}`);
-      console.log(`   Balance: ${user.balance} Birr`);
-      console.log(`   Games Played: ${user.total_games_played}`);
-      console.log(`   Created: ${new Date(user.created_at).toLocaleString()}`);
-      console.log('');
+    allUsers.forEach((user, index) => {
+      console.log(`\n${index + 1}. ${user.username}`);
+      console.log(`   Email: ${user.email}`);
+      console.log(`   Role: ${user.role}`);
+      console.log(`   Status: ${user.is_active ? 'Active' : 'Inactive'}`);
+      console.log(`   Balance: $${user.balance}`);
+      console.log(`   Created: ${new Date(user.createdAt).toLocaleDateString()}`);
+      if (user.shopname) {
+        console.log(`   Shop: ${user.shopname}`);
+      }
     });
-
+    
+    console.log('\n✅ User list completed!');
+    
   } catch (error) {
-    console.error('❌ Error:', error);
-    throw error;
+    console.error('❌ Error listing users:', error.message);
   } finally {
-    await pool.end();
+    await closePool();
   }
 }
 
-listUsers()
-  .then(() => {
-    console.log('✅ Done!');
-    process.exit(0);
-  })
-  .catch(error => {
-    console.error('❌ Failed:', error);
-    process.exit(1);
-  });
+// Run the script
+listAllUsers();

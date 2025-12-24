@@ -305,7 +305,7 @@ class AudioCacheDB {
       const allIds = await this.getAllAudioIds();
       const cacheSize = await this.getCacheSize();
       
-      // Expected audio files: Both boy and girl voice categories
+      // Expected audio files based on actual file structure
       const expectedFiles = [
         // Boy voice files (75 numbers + 4 special sounds)
         ...Array.from({ length: 75 }, (_, i) => `boy_${i + 1}.wav`),
@@ -314,10 +314,11 @@ class AudioCacheDB {
         'boy_notwinner.wav',
         'boy_shuffle-audio-TfqyAnvz.mp3',
         
-        // Girl voice files (75 numbers + 2 special sounds - no start or notwinner)
+        // Girl voice files (75 numbers + 2 special sounds)
         ...Array.from({ length: 75 }, (_, i) => `girl_${i + 1}.mp3`),
         'girl_winner.mp3',
         'girl_shuffle-audio-TfqyAnvz.mp3'
+        // Note: girl voice doesn't have start.wav or notwinner.wav
       ];
 
       const missingFiles = expectedFiles.filter(file => !allIds.includes(file));
@@ -335,7 +336,7 @@ class AudioCacheDB {
             : 0;
 
           resolve({
-            totalFiles: expectedFiles.length,
+            totalFiles: expectedFiles.length, // Should be 156 total
             cachedFiles: allIds.length,
             missingFiles,
             cacheSize,

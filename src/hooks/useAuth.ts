@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User } from '../types/auth';
+import { offlineAuthManager } from '../utils/offlineAuthManager';
+import { networkStatusManager } from '../utils/networkStatus';
 
 // Use Vite proxy for API calls - always use relative URLs
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -111,11 +113,20 @@ export const useAuth = () => {
   // }, [user]);
 
   useEffect(() => {
-    // Check for stored token and get current user
-    const token = localStorage.getItem('auth_token');
+    const initializeAndCheckAuth = async () => {
+      try {
+        // Initialize offline storage first
+        await offlineStorage.initialize();
+        console.log('✅ Offline storage initialized in useAuth');
+      } catch (error) {
+        console.warn('Failed to initialize offline storage:', error);
+      }
+      
+      // Check for stored token and get current user
+      const token = localStorage.getItem('auth_token');
 
-    // Validate token format before using it
-    if (token && isValidJWT(token)) {
+      // Validate token format before using it
+      if (token && isValidJWT(token)) {
       console.log('Found valid token in localStorage, verifying with server...');
 
       // Verify token and get user profile
@@ -162,31 +173,112 @@ export const useAuth = () => {
           throw new Error('No user data received');
         }
       })
-      .catch((error) => {
+      .catch(async (error) => {
         console.error('Auth profile fetch failed:', error);
+        
         // Only remove token and logout on 401 errors
         if (error.message.includes('401')) {
           localStorage.removeItem('auth_token');
           setUser(null);
+        } else {
+          // Server error (500, 503, network error) - try to load cached user data
+          console.log('🔒 Server error or unavailable, checking for cached user data...');
+          
+          try {
+            // Try to get cached username and load user data
+            const cachedUsername = await offlineAuthManager.getCachedUsername();
+            if (cachedUsername) {
+              // Get cached user data from offline storage
+              const cachedUser = await offlineStorage.retrieve('auth', 'cached_credentials');
+              if (cachedUser && cachedUser.user) {
+                console.log('✅ Loading cached user data for offline session');
+                
+                const mappedUser: User = {
+                  id: cachedUser.user.id,
+                  username: cachedUser.user.username,
+                  email: cachedUser.user.email,
+                  role: cachedUser.user.role,
+                  userType: cachedUser.user.userType || 'prepaid',
+                  balance: Number(cachedUser.user.balance) || 0,
+                  balanceLimit: cachedUser.user.balanceLimit,
+                  totalGamesPlayed: Number(cachedUser.user.totalGamesPlayed) || 0,
+                  totalWinnings: Number(cachedUser.user.totalWinnings) || 0,
+                  isActive: cachedUser.user.isActive !== undefined ? Boolean(cachedUser.user.isActive) : true,
+                  createdAt: cachedUser.user.createdAt || new Date().toISOString(),
+                  updatedAt: cachedUser.user.updatedAt || new Date().toISOString()
+                };
+                
+                setUser(mappedUser);
+                console.log('User loaded from cache:', mappedUser.username, 'Type:', mappedUser.userType);
+              }
+            }
+          } catch (cacheError) {
+            console.warn('Failed to load cached user data:', cacheError);
+          }
         }
-        // For other errors, keep user logged in (they might be offline temporarily)
       })
       .finally(() => {
         setLoading(false);
       });
     } else {
       // Token is missing or malformed
-      if (token) {
-        console.warn('Found malformed token in localStorage, removing it');
-        localStorage.removeItem('auth_token');
+        if (token) {
+          console.warn('Found malformed token in localStorage, removing it');
+          localStorage.removeItem('auth_token');
+        }
+        setLoading(false);
       }
-      setLoading(false);
-    }
+    };
+    
+    initializeAndCheckAuth();
   }, []);
 
   const signIn = async (usernameOrEmail: string, password: string) => {
     try {
       console.log('Attempting login for:', usernameOrEmail);
+      
+      // If offline, try offline login first
+      if (networkStatusManager.isOffline) {
+        console.log('🔒 Attempting offline login...');
+        const offlineResult = await offlineAuthManager.attemptOfflineLogin(usernameOrEmail, password);
+        
+        if (offlineResult.success && offlineResult.user) {
+          console.log('✅ Offline login successful');
+          
+          // Clear any existing game data
+          clearGameData();
+          
+          // Set user state
+          const mappedUser: User = {
+            id: offlineResult.user.id,
+            username: offlineResult.user.username,
+            email: offlineResult.user.email,
+            role: offlineResult.user.role,
+            userType: offlineResult.user.userType || 'prepaid',
+            balance: Number(offlineResult.user.balance) || 0,
+            balanceLimit: offlineResult.user.balanceLimit,
+            totalGamesPlayed: Number(offlineResult.user.totalGamesPlayed) || 0,
+            totalWinnings: Number(offlineResult.user.totalWinnings) || 0,
+            isActive: offlineResult.user.isActive !== undefined ? Boolean(offlineResult.user.isActive) : true,
+            createdAt: offlineResult.user.createdAt || new Date().toISOString(),
+            updatedAt: offlineResult.user.updatedAt || new Date().toISOString()
+          };
+
+          setUser(mappedUser);
+          setLoading(false);
+
+          return { 
+            data: { user: mappedUser, token: 'offline_token' }, 
+            error: null,
+            offline: true
+          };
+        } else {
+          throw new Error(offlineResult.error || 'Offline login failed');
+        }
+      }
+      
+      // Online login
+      console.log('🌐 Attempting online login...');
       
       // Check if input is an email (contains @)
       const isEmail = usernameOrEmail.includes('@');
@@ -241,6 +333,9 @@ export const useAuth = () => {
 
         console.log('Setting user state:', mappedUser, 'Type:', mappedUser.userType);
         setUser(mappedUser);
+        
+        // Cache credentials for offline login
+        await offlineAuthManager.cacheCredentials(usernameOrEmail, password, mappedUser);
         
         // Ensure loading is false so App.tsx can redirect
         setLoading(false);

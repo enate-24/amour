@@ -4,12 +4,14 @@ import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from
 import { useAuth } from './hooks/useAuth';
 import { useOfflineAuth } from './hooks/useOfflineAuth';
 import { UnifiedAudioManager } from './utils/UnifiedAudioManager';
+import { voiceCategoryManager } from './utils/voiceCategoryManager';
 import { cartelaCacheDB } from './utils/cartelaCache';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { OfflineStatusBar } from './components/OfflineStatusBar';
 import { registerServiceWorker } from './utils/serviceWorker';
 import { offlineStorage } from './utils/offlineStorage';
 import { offlineSyncManager } from './utils/offlineSyncManager';
+import { initializeDemoUser } from './utils/demoOfflineUser';
 import AutoPreloader from './components/AutoPreloader';
 import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
@@ -23,6 +25,7 @@ import BackofficeLayout from './components/BackofficeLayout';
 import BackofficeDashboard from './components/BackofficeDashboard';
 
 import AdminUserManagement from './components/AdminUserManagement';
+import AdminCartelaAssignment from './components/AdminCartelaAssignment';
 import CartelaManagement from './components/CartelaManagement';
 import PackageManagement from './components/PackageManagement';
 import NewAccountPage from './components/NewAccountPage';
@@ -40,6 +43,9 @@ const initializeAudioManager = async () => {
     });
     
     await audioManager.initialize();
+    
+    // Initialize voice category from admin settings
+    await voiceCategoryManager.initializeAudioManagerVoice();
     
     // Check cache status
     const status = await audioManager.getCacheStatus();
@@ -61,6 +67,21 @@ const initializeCartelaCache = async () => {
   try {
     await cartelaCacheDB.init();
     
+    // Set current user if available
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const userId = payload.id || payload.userId || payload.sub;
+        if (userId) {
+          cartelaCacheDB.setCurrentUser(userId);
+          console.log(`👤 Set cartela cache user: ${userId}`);
+        }
+      }
+    } catch (error) {
+      console.warn('Could not set cache user during initialization:', error);
+    }
+    
     // Check cache status
     const stats = await cartelaCacheDB.getCacheStats();
     
@@ -76,7 +97,7 @@ const initializeCartelaCache = async () => {
         console.log('✅ Cartela cache is recent - no download needed');
       }
     } else {
-      console.log('📊 Cartela cache empty - will populate automatically when needed');
+      console.log('📊 Cartela cache empty - will populate automatically when user loads cartelas');
     }
   } catch (error) {
     console.error('❌ Failed to initialize cartela cache:', error);
@@ -111,6 +132,9 @@ const initializeOfflineSystem = async () => {
     
     // 4. Initialize cartela cache
     await initializeCartelaCache();
+    
+    // 5. Initialize demo user for offline testing
+    await initializeDemoUser();
     
     console.log('🎉 Offline-first system ready!');
   } catch (error) {
@@ -224,6 +248,7 @@ function AppContent() {
           <Route path="dashboard" element={<BackofficeDashboard />} />
           <Route path="cartela-management" element={<CartelaManagement />} />
           <Route path="user-management" element={<AdminUserManagement />} />
+          <Route path="cartela-assignment" element={<AdminCartelaAssignment />} />
           <Route path="package-management" element={<PackageManagement />} />
           <Route path="" element={<BackofficeDashboard />} />
         </Route>

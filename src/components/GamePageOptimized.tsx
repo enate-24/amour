@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { logGameState } from "../utils/gameDebug";
 import { UnifiedAudioManager } from "../utils/UnifiedAudioManager";
-import VoiceCategoryManager from "../utils/voiceCategoryManager";
+import { voiceCategoryManager } from "../utils/voiceCategoryManager";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { createPoller, type OptimizedPoller } from "../utils/optimizedPolling";
 import { offlineGameState } from "../utils/offlineGameState";
@@ -467,7 +467,7 @@ const GamePageOptimized = (): JSX.Element => {
       // Load voice category using the manager
       console.log('🔑 Loading voice settings...');
       const token = localStorage.getItem('auth_token');
-      const voiceCategory = await VoiceCategoryManager.initializeVoiceCategory(API_BASE_URL, token || undefined);
+      const voiceCategory = await voiceCategoryManager.loadUserVoiceCategory();
       
       // Initialize audio manager
       console.log('🎵 Creating UnifiedAudioManager...');

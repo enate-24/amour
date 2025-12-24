@@ -1,10 +1,16 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
-const { users, games, cartelas } = require('../data/database.js');
+const { users, games, cartelas, userCartelas } = require('../data/database.js');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Test route to verify cartelas routes are working
+router.get('/test', (req, res) => {
+  console.log('🧪 Cartelas test route hit!');
+  res.json({ message: 'Cartelas routes are working!', timestamp: new Date().toISOString() });
+});
 
 // Bulk copy cartelas to multiple users (admin only)
 router.post('/:id/bulk-copy', requireAdmin, [
@@ -352,6 +358,49 @@ router.get('/all-cartelas', async (req, res) => {
       error: 'Failed to get all cartelas',
       message: error.message
     });
+  }
+});
+
+// Get cartelas for current authenticated user
+router.get('/user-cartelas', authenticateToken, async (req, res) => {
+  try {
+    console.log('🎯 /user-cartelas endpoint hit!');
+    const userId = req.user.id;
+    console.log(`📦 Fetching cartelas for user: ${userId}`);
+
+    // Get user's cartelas from user_cartelas table
+    const userCartelaList = await userCartelas.findByUserId(userId);
+    console.log(`✅ Found ${userCartelaList.length} cartelas for user ${userId}`);
+    
+    if (userCartelaList.length > 0) {
+      console.log(`📋 User cartela card_ids:`, userCartelaList.map(c => c.card_id).sort((a, b) => parseInt(a) - parseInt(b)));
+    }
+
+    // Transform the data to match the expected format
+    const transformedCartelas = userCartelaList.map((cartela) => ({
+      id: cartela.id,
+      card_id: cartela.card_id,
+      user_id: cartela.user_id,
+      game_id: null, // User cartelas don't have game_id
+      numbers: cartela.numbers,
+      pattern: cartela.pattern,
+      is_active: cartela.is_active,
+      purchased_at: cartela.created_at,
+      isWinner: cartela.is_winner || false,
+      win: false,
+      cardType: 'stillnotwin',
+      soundType: 'notwinner',
+      createdAt: cartela.created_at
+    }));
+
+    res.json({
+      cartelas: transformedCartelas,
+      total: transformedCartelas.length,
+      userId: userId
+    });
+  } catch (error) {
+    console.error('Get user cartelas error:', error);
+    res.status(500).json({ error: 'Failed to get user cartelas' });
   }
 });
 

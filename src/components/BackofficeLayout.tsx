@@ -96,6 +96,7 @@ const BackofficeLayout: React.FC = () => {
     { id: 'cartela-management', label: 'Cartela Management', icon: Grid3x3, color: 'text-green-400' },
     ...(userRole === 'admin' ? [
       { id: 'user-management', label: 'User Management', icon: User, color: 'text-purple-400' },
+      { id: 'cartela-assignment', label: 'Cartela & Voice Assignment', icon: Grid3x3, color: 'text-yellow-400' },
       { id: 'package-management', label: 'Package Management', icon: FileText, color: 'text-orange-400' }
     ] : []),
   ].filter(Boolean);

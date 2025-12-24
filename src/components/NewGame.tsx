@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCartela } from '../hooks/useCartela';
 import { useAuth } from '../hooks/useAuth';
 import { UnifiedAudioManager } from '../utils/UnifiedAudioManager';
-import { VoiceCategoryManager } from '../utils/voiceCategoryManager';
+import { voiceCategoryManager } from '../utils/voiceCategoryManager';
 
 
 const NewGame: React.FC = () => {
@@ -354,7 +354,7 @@ const NewGame: React.FC = () => {
       }
       
       // Get and set voice category if available
-      const voiceCategory = VoiceCategoryManager.getVoiceCategoryWithFallback();
+      const voiceCategory = voiceCategoryManager.getEffectiveVoiceCategory();
       if (voiceCategory) {
         audioManager.setVoiceCategory(voiceCategory);
         console.log('🎤 Voice category set to:', voiceCategory);

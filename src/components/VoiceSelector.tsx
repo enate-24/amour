@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { UnifiedAudioManager, type VoiceCategory } from '../utils/UnifiedAudioManager';
+import { voiceCategoryManager } from '../utils/voiceCategoryManager';
 
 interface VoiceSelectorProps {
   className?: string;
@@ -8,45 +9,59 @@ interface VoiceSelectorProps {
 export const VoiceSelector: React.FC<VoiceSelectorProps> = ({ className = '' }) => {
   const [currentVoice, setCurrentVoice] = useState<VoiceCategory>('girl');
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isAdminAssigned, setIsAdminAssigned] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Get initial voice category from audio manager
+  // Load voice category on mount
   useEffect(() => {
-    const audioManager = UnifiedAudioManager.getInstance();
-    setCurrentVoice(audioManager.getVoiceCategory());
-  }, []);
+    const loadVoiceCategory = async () => {
+      try {
+        setLoading(true);
+        const voice = await voiceCategoryManager.loadUserVoiceCategory();
+        const isAdmin = voiceCategoryManager.isAdminAssigned();
+        
+        setCurrentVoice(voice);
+        setIsAdminAssigned(isAdmin);
+        
+        // Set voice in audio manager
+        const audioManager = UnifiedAudioManager.getInstance();
+        audioManager.setVoiceCategory(voice);
+        
+        console.log(`🎤 Voice selector initialized: ${voice} (admin-assigned: ${isAdmin})`);
+      } catch (error) {
+        console.error('Failed to load voice category:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Save voice preference to localStorage
-  useEffect(() => {
-    localStorage.setItem('voiceCategory', currentVoice);
-  }, [currentVoice]);
-
-  // Load voice preference from localStorage on mount
-  useEffect(() => {
-    const savedVoice = localStorage.getItem('voiceCategory') as VoiceCategory;
-    if (savedVoice && (savedVoice === 'boy' || savedVoice === 'girl')) {
-      setCurrentVoice(savedVoice);
-      const audioManager = UnifiedAudioManager.getInstance();
-      audioManager.setVoiceCategory(savedVoice);
-    }
+    loadVoiceCategory();
   }, []);
 
   const handleVoiceChange = async (voice: VoiceCategory) => {
-    if (voice === currentVoice || isPlaying) return;
+    if (voice === currentVoice || isPlaying || isAdminAssigned) return;
 
     setIsPlaying(true);
     
     try {
-      const audioManager = UnifiedAudioManager.getInstance();
+      // Try to set user preference
+      const success = voiceCategoryManager.setUserPreference(voice);
       
-      // Switch voice category
-      audioManager.setVoiceCategory(voice);
-      setCurrentVoice(voice);
-      
-      // Play a sample number to demonstrate the voice
-      const sampleNumber = Math.floor(Math.random() * 75) + 1;
-      await audioManager.playSound(sampleNumber);
-      
-      console.log(`🎤 Voice changed to ${voice}, played sample: ${sampleNumber}`);
+      if (success) {
+        const audioManager = UnifiedAudioManager.getInstance();
+        
+        // Switch voice category
+        audioManager.setVoiceCategory(voice);
+        setCurrentVoice(voice);
+        
+        // Play a sample number to demonstrate the voice
+        const sampleNumber = Math.floor(Math.random() * 75) + 1;
+        await audioManager.playSound(sampleNumber);
+        
+        console.log(`🎤 Voice changed to ${voice}, played sample: ${sampleNumber}`);
+      } else {
+        alert('Voice category is set by admin and cannot be changed.');
+      }
     } catch (error) {
       console.error('Error changing voice:', error);
     } finally {
@@ -55,35 +70,47 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({ className = '' }) 
     }
   };
 
+  if (loading) {
+    return (
+      <div className={`voice-selector ${className}`}>
+        <div className="voice-selector-label">
+          <span className="text-sm font-medium text-gray-700">Loading voice...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`voice-selector ${className}`}>
       <div className="voice-selector-label">
-        <span className="text-sm font-medium text-gray-700">Voice:</span>
+        <span className="text-sm font-medium text-gray-700">
+          Voice: {isAdminAssigned && <span className="text-xs text-orange-600">(Admin Set)</span>}
+        </span>
       </div>
       
       <div className="voice-buttons">
         <button
           onClick={() => handleVoiceChange('boy')}
-          disabled={isPlaying}
+          disabled={isPlaying || isAdminAssigned}
           className={`voice-button ${
             currentVoice === 'boy' 
               ? 'voice-button-active' 
               : 'voice-button-inactive'
-          } ${isPlaying ? 'voice-button-disabled' : ''}`}
-          title="Switch to boy voice"
+          } ${(isPlaying || isAdminAssigned) ? 'voice-button-disabled' : ''}`}
+          title={isAdminAssigned ? "Voice category is set by admin" : "Switch to boy voice"}
         >
           👦 Boy
         </button>
         
         <button
           onClick={() => handleVoiceChange('girl')}
-          disabled={isPlaying}
+          disabled={isPlaying || isAdminAssigned}
           className={`voice-button ${
             currentVoice === 'girl' 
               ? 'voice-button-active' 
               : 'voice-button-inactive'
-          } ${isPlaying ? 'voice-button-disabled' : ''}`}
-          title="Switch to girl voice"
+          } ${(isPlaying || isAdminAssigned) ? 'voice-button-disabled' : ''}`}
+          title={isAdminAssigned ? "Voice category is set by admin" : "Switch to girl voice"}
         >
           👧 Girl
         </button>
@@ -95,7 +122,13 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({ className = '' }) 
         </div>
       )}
       
-      <style jsx>{`
+      {isAdminAssigned && (
+        <div className="admin-notice">
+          <span className="text-xs text-orange-600">Voice set by administrator</span>
+        </div>
+      )}
+      
+      <style>{`
         .voice-selector {
           display: flex;
           flex-direction: column;
@@ -112,6 +145,7 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({ className = '' }) 
           font-size: 14px;
           font-weight: 500;
           color: #374151;
+          text-align: center;
         }
         
         .voice-buttons {
@@ -147,7 +181,7 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({ className = '' }) 
           border-color: #d1d5db;
         }
         
-        .voice-button-inactive:hover {
+        .voice-button-inactive:hover:not(.voice-button-disabled) {
           background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
           border-color: #9ca3af;
         }
@@ -157,10 +191,15 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({ className = '' }) 
           cursor: not-allowed;
         }
         
-        .voice-playing-indicator {
+        .voice-playing-indicator, .admin-notice {
           font-size: 12px;
-          color: #3b82f6;
           animation: pulse 1s ease-in-out infinite;
+          text-align: center;
+        }
+        
+        .admin-notice {
+          color: #ea580c;
+          font-weight: 500;
         }
         
         @keyframes pulse {

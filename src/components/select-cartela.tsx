@@ -28,14 +28,21 @@ const Selectcartela: React.FC<selectcartelaProps> = ({ onNavigateToGame }) => {
   const [loading, setLoading] = useState(true);
   const [selectedCartela, setSelectedCartela] = useState<string | null>(null);
 
-  // Fetch cartelas from database
+  // Fetch cartelas from database - only user's assigned cartelas
   useEffect(() => {
     const fetchCartelas = async () => {
       try {
         setLoading(true);
         const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-        const response = await fetch(`${API_BASE_URL}/cartelas`, {
+        const token = localStorage.getItem('auth_token');
+        
+        if (!token) {
+          throw new Error('No authentication token found');
+        }
+
+        const response = await fetch(`${API_BASE_URL}/cartelas/user-cartelas`, {
           headers: {
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         });
@@ -57,10 +64,14 @@ const Selectcartela: React.FC<selectcartelaProps> = ({ onNavigateToGame }) => {
             created_at: item.created_at
           }));
           setCartelas(transformedCartelas);
+          
+          if (transformedCartelas.length === 0) {
+            alert('No cartelas assigned to you. Please contact admin to assign cartelas to your account.');
+          }
         }
       } catch (error) {
         console.error('Error fetching cartelas:', error);
-        alert('Error connecting to database. Please check your backend configuration.');
+        alert('Error loading your assigned cartelas. Please contact admin if you have no cartelas assigned.');
       } finally {
         setLoading(false);
       }

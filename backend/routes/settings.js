@@ -5,6 +5,38 @@ const db = require('../data/database');
 
 const availablePatterns = ['One Line', 'Two Lines', 'Three Lines', 'Full House'];
 
+// GET /api/settings/user-settings - Get user settings (for voice category manager)
+router.get('/user-settings', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    let settings = await db.userSettings.findByUserId(userId);
+
+    // If no settings exist, create default settings (without voice category)
+    if (!settings) {
+      await db.userSettings.create(userId, {
+        selectedPattern: 'Two Lines',
+        betAmount: 5.0,
+        houseCutPercentage: 10.0
+        // No voiceCategory - user must explicitly choose
+      });
+      settings = await db.userSettings.findByUserId(userId);
+    }
+
+    res.json({
+      success: true,
+      settings: {
+        selectedPattern: settings.selectedPattern,
+        betAmount: settings.betAmount,
+        houseCutPercentage: settings.houseCutPercentage,
+        voiceCategory: settings.voiceCategory // Will be null/undefined if not set by admin
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching user settings:', error);
+    res.status(500).json({ error: 'Failed to fetch user settings' });
+  }
+});
+
 // GET /api/settings - Get all user settings
 router.get('/', authenticateToken, async (req, res) => {
   try {

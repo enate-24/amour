@@ -7,7 +7,7 @@ import { useOfflineAuth } from '../hooks/useOfflineAuth';
 import { offlineGameManager } from '../utils/offlineGameManager';
 import { networkStatusManager } from '../utils/networkStatus';
 import { UnifiedAudioManager } from '../utils/UnifiedAudioManager';
-import { VoiceCategoryManager } from '../utils/voiceCategoryManager';
+import { voiceCategoryManager } from '../utils/voiceCategoryManager';
 
 const NewGameOffline: React.FC = () => {
   const { cartelas, loading, error, fromCache } = useOfflineCartela();
@@ -100,7 +100,7 @@ st handleCartelaSelect = (cardId: string) => {
         await audioManager.initialize();
       }
       
-      const voiceCategory = VoiceCategoryManager.getVoiceCategoryWithFallback();
+      const voiceCategory = voiceCategoryManager.getEffectiveVoiceCategory();
       if (voiceCategory) {
         audioManager.setVoiceCategory(voiceCategory);
       }

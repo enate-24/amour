@@ -60,10 +60,11 @@ export class UnifiedAudioManager {
    */
   private constructor(config?: Partial<AudioManagerConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    // No default voice category - must be set explicitly via setVoiceCategory()
-    this.currentVoiceCategory = 'girl'; // Temporary until setVoiceCategory is called
+    // Default voice category - will be set by voiceCategoryManager after initialization
+    this.currentVoiceCategory = 'girl';
+    this.voiceCategoryExplicitlySet = false;
     console.log('🔊 UnifiedAudioManager instance created with config:', this.config);
-    console.log('⚠️ Voice category not set - must call setVoiceCategory() before playing audio');
+    console.log(`🎤 Voice category set from admin assignment: ${this.currentVoiceCategory}`);
   }
 
   /**
@@ -92,6 +93,8 @@ export class UnifiedAudioManager {
 
     try {
       console.log('🔄 Initializing UnifiedAudioManager...');
+      
+      // Voice category will be set by voiceCategoryManager after initialization
       
       // Initialize IndexedDB
       await audioCacheDB.init();

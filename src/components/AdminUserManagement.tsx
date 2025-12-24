@@ -1,5 +1,5 @@
  import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Users, Search, Lock, Ban, CheckCircle, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Users, Search, Lock, Ban, CheckCircle, RefreshCw, Eye } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 // Temporarily inline network utilities to fix import issue
 const fetchWithRetry = async (url: string, options: RequestInit & { timeout?: number; retries?: number } = {}) => {
@@ -82,6 +82,38 @@ interface User {
   is_active: boolean;
   createdAt: string;
   updatedAt: string;
+  cartelaCount?: number; // Number of assigned cartelas
+}
+
+interface UserCartela {
+  id: string;
+  card_id: string;
+  numbers: {
+    B: number[];
+    I: number[];
+    N: (number | string)[];
+    G: number[];
+    O: number[];
+  };
+  is_active: boolean;
+  is_winner: boolean;
+  created_at: string;
+}
+
+interface UserCartelaResponse {
+  success: boolean;
+  user: {
+    id: string;
+    username: string;
+    email: string;
+    shopname?: string;
+  };
+  cartelas: UserCartela[];
+  total: number;
+  range: {
+    start: number;
+    end: number;
+  } | null;
 }
 
 interface CreateUserData {
@@ -93,6 +125,7 @@ interface CreateUserData {
   userType: string;
   balance?: number;
   balanceLimit?: number;
+  voiceCategory: 'boy' | 'girl'; // Required field
 }
 
 const AdminUserManagement: React.FC = () => {
@@ -107,7 +140,8 @@ const AdminUserManagement: React.FC = () => {
     password: '',
     shopname: '',
     role: 'user',
-    userType: 'prepaid'
+    userType: 'prepaid',
+    voiceCategory: 'girl'
   });
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -117,6 +151,33 @@ const AdminUserManagement: React.FC = () => {
   const [passwordError, setPasswordError] = useState('');
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [showTroubleshootModal, setShowTroubleshootModal] = useState(false);
+  
+  // Cartela viewing states
+  const [showCartelaModal, setShowCartelaModal] = useState(false);
+  const [selectedUserCartelas, setSelectedUserCartelas] = useState<UserCartelaResponse | null>(null);
+  const [loadingCartelas, setLoadingCartelas] = useState(false);
+  
+  // Progress tracking states
+  const [showProgressModal, setShowProgressModal] = useState(false);
+  const [creationProgress, setCreationProgress] = useState({
+    phase: '',
+    current: 0,
+    total: 0,
+    percentage: 0,
+    message: ''
+  });
+  const [progressComplete, setProgressComplete] = useState(false);
+  const [progressError, setProgressError] = useState('');
+
+  // Cartela assignment states
+  const [showCartelaAssignModal, setShowCartelaAssignModal] = useState(false);
+  const [selectedUserForCartelas, setSelectedUserForCartelas] = useState<User | null>(null);
+  const [assignmentType, setAssignmentType] = useState<'copy' | 'upload'>('copy');
+  const [copyRangeStart, setCopyRangeStart] = useState(1);
+  const [copyRangeEnd, setCopyRangeEnd] = useState(50);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadCount, setUploadCount] = useState(50);
+  const [assigningCartelas, setAssigningCartelas] = useState(false);
 
   const { user: currentUser } = useAuth();
 
@@ -214,10 +275,15 @@ const AdminUserManagement: React.FC = () => {
       errors.push('Balance is required for prepaid users and must be non-negative');
     }
 
+    // Validate voice category
+    if (!formData.voiceCategory || !['boy', 'girl'].includes(formData.voiceCategory)) {
+      errors.push('Voice category must be selected (boy or girl)');
+    }
+
     return errors;
   };
 
-  // Create user
+  // Create user with progress tracking
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -230,13 +296,25 @@ const AdminUserManagement: React.FC = () => {
     try {
       setSubmitting(true);
       setFormErrors([]);
+      setShowCreateModal(false);
+      setShowProgressModal(true);
+      setProgressComplete(false);
+      setProgressError('');
+      setCreationProgress({
+        phase: 'starting',
+        current: 0,
+        total: 0,
+        percentage: 0,
+        message: 'Initializing user creation...'
+      });
 
       const token = localStorage.getItem('auth_token');
       if (!token) {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`${API_BASE_URL}/admin/users`, {
+      // Use fetch with streaming response
+      const response = await fetch(`${API_BASE_URL}/admin/users/with-progress`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -246,28 +324,83 @@ const AdminUserManagement: React.FC = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to create user' }));
-        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      await response.json();
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
 
-      // Refresh users list
-      await fetchUsers();
+      if (!reader) {
+        throw new Error('Response body is not readable');
+      }
 
-      // Reset form and close modal
-      setFormData({
-        username: '',
-        email: '',
-        password: '',
-        shopname: '',
-        role: 'user',
-        userType: 'prepaid'
-      });
-      setShowCreateModal(false);
+      let buffer = '';
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Process complete lines
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
+              
+              if (data.type === 'progress') {
+                setCreationProgress({
+                  phase: data.phase || '',
+                  current: data.current || 0,
+                  total: data.total || 0,
+                  percentage: data.percentage || 0,
+                  message: data.message || ''
+                });
+              } else if (data.type === 'success') {
+                setCreationProgress({
+                  phase: 'completed',
+                  current: data.assignedCartelas?.count || 0,
+                  total: data.assignedCartelas?.count || 0,
+                  percentage: 100,
+                  message: data.message || 'User created successfully!'
+                });
+                setProgressComplete(true);
+                
+                // Refresh users list after a short delay
+                setTimeout(async () => {
+                  await fetchUsers();
+                  
+                  // Reset form
+                  setFormData({
+                    username: '',
+                    email: '',
+                    password: '',
+                    shopname: '',
+                    role: 'user',
+                    userType: 'prepaid',
+                    voiceCategory: 'girl'
+                  });
+                }, 1000);
+                
+              } else if (data.type === 'error') {
+                setProgressError(data.message || 'An error occurred during user creation');
+                setProgressComplete(true);
+              }
+            } catch (parseError) {
+              console.error('Error parsing progress data:', parseError);
+            }
+          }
+        }
+      }
 
     } catch (err) {
-      setFormErrors([err instanceof Error ? err.message : 'Failed to create user']);
+      console.error('Create user error:', err);
+      setProgressError(err instanceof Error ? err.message : 'Failed to create user');
+      setProgressComplete(true);
     } finally {
       setSubmitting(false);
     }
@@ -419,6 +552,223 @@ const AdminUserManagement: React.FC = () => {
     } catch (err) {
       console.error('❌ Ban/unban exception:', err);
       setError(getNetworkErrorMessage(err));
+    }
+  };
+
+  // Delete all assigned cartelas from user
+  const handleDeleteAllCartelas = async (userId: string, username: string) => {
+    const confirmMessage = `⚠️ WARNING: This will permanently delete ALL assigned cartelas from user "${username}".\n\nThis action will:\n• Remove all cartelas from the user's account\n• User will have no cartelas to play with\n• This action CANNOT be undone!\n\nType "DELETE CARTELAS" to confirm:`;
+    
+    const confirmation = prompt(confirmMessage);
+    
+    if (confirmation !== 'DELETE CARTELAS') {
+      if (confirmation !== null) {
+        alert('Deletion cancelled. You must type "DELETE CARTELAS" exactly to confirm.');
+      }
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      console.log('🔄 Attempting to delete all cartelas for user:', { userId, username });
+
+      const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/cartelas`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('📥 Response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to delete cartelas' }));
+        console.error('❌ Delete cartelas error:', errorData);
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Delete cartelas success:', result);
+      alert(`✅ ${result.message}`);
+
+      // Refresh users list
+      await fetchUsers();
+
+    } catch (err) {
+      console.error('Delete cartelas error:', err);
+      alert(`❌ Failed to delete cartelas: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
+
+  // Fetch user cartelas
+  const fetchUserCartelas = async (userId: string) => {
+    try {
+      setLoadingCartelas(true);
+      
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const response = await fetchWithRetry(`${API_BASE_URL}/admin/users/${userId}/cartelas`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000,
+        retries: 2
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data: UserCartelaResponse = await response.json();
+      setSelectedUserCartelas(data);
+      setShowCartelaModal(true);
+      
+    } catch (err) {
+      console.error('Fetch user cartelas error:', err);
+      setError(getNetworkErrorMessage(err));
+    } finally {
+      setLoadingCartelas(false);
+    }
+  };
+
+  // Handle username click to show cartelas
+  const handleUsernameClick = (userId: string) => {
+    fetchUserCartelas(userId);
+  };
+
+  // Open cartela assignment modal
+  const openCartelaAssignModal = (user: User) => {
+    setSelectedUserForCartelas(user);
+    setShowCartelaAssignModal(true);
+    setAssignmentType('copy');
+    setCopyRangeStart(1);
+    setCopyRangeEnd(50);
+    setUploadFile(null);
+    setUploadCount(50);
+  };
+
+  // Handle cartela assignment
+  const handleAssignCartelas = async () => {
+    if (!selectedUserForCartelas) return;
+
+    try {
+      setAssigningCartelas(true);
+      const token = localStorage.getItem('auth_token');
+
+      if (assignmentType === 'copy') {
+        // Copy cartelas from existing range
+        const response = await fetch(`${API_BASE_URL}/admin/assign-cartelas-to-user`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            userId: selectedUserForCartelas.id,
+            startCardId: copyRangeStart,
+            endCardId: copyRangeEnd,
+            replaceExisting: true
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          alert(`✅ Successfully assigned ${data.assignedCartelas.count} cartelas to ${selectedUserForCartelas.username}!`);
+          setShowCartelaAssignModal(false);
+          await fetchUsers(); // Refresh user list
+        } else {
+          const errorData = await response.json();
+          setError(errorData.error || 'Failed to assign cartelas');
+        }
+      } else {
+        // Upload and process PDF
+        if (!uploadFile) {
+          setError('Please select a PDF file to upload');
+          return;
+        }
+
+        // First upload the PDF
+        const formData = new FormData();
+        formData.append('pdf', uploadFile);
+
+        const uploadResponse = await fetch(`${API_BASE_URL}/admin/upload-pdf`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json();
+          setError(errorData.error || 'Failed to upload PDF');
+          return;
+        }
+
+        const uploadData = await uploadResponse.json();
+        const filename = uploadData.file.filename;
+
+        // Process the PDF
+        const processResponse = await fetch(`${API_BASE_URL}/admin/process-pdf-cartelas`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            filename: filename,
+            count: uploadCount,
+            startCardId: 2001 // Start from 2001 for PDF cartelas
+          })
+        });
+
+        if (!processResponse.ok) {
+          const errorData = await processResponse.json();
+          setError(errorData.error || 'Failed to process PDF');
+          return;
+        }
+
+        await processResponse.json();
+
+        // Assign the processed cartelas to user
+        const assignResponse = await fetch(`${API_BASE_URL}/admin/assign-cartelas-to-user`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            userId: selectedUserForCartelas.id,
+            startCardId: 2001,
+            endCardId: 2001 + uploadCount - 1,
+            replaceExisting: true
+          })
+        });
+
+        if (assignResponse.ok) {
+          const assignData = await assignResponse.json();
+          alert(`✅ Successfully processed PDF and assigned ${assignData.assignedCartelas.count} cartelas to ${selectedUserForCartelas.username}!`);
+          setShowCartelaAssignModal(false);
+          await fetchUsers(); // Refresh user list
+        } else {
+          const errorData = await assignResponse.json();
+          setError(errorData.error || 'Failed to assign processed cartelas');
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to assign cartelas');
+    } finally {
+      setAssigningCartelas(false);
     }
   };
 
@@ -594,6 +944,9 @@ const AdminUserManagement: React.FC = () => {
                         Status
                       </th>
                       <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                        Cartelas
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                         Created
                       </th>
                       <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">
@@ -605,7 +958,13 @@ const AdminUserManagement: React.FC = () => {
                     {filteredUsers.map((user) => (
                       <tr key={user.id} className="hover:bg-slate-700/50">
                         <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-white">{user.username}</div>
+                          <button
+                            onClick={() => handleUsernameClick(user.id)}
+                            className="text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
+                            title="Click to view assigned cartelas"
+                          >
+                            {user.username}
+                          </button>
                         </td>
                         <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-slate-300">{user.email}</div>
@@ -634,11 +993,51 @@ const AdminUserManagement: React.FC = () => {
                             {user.is_active ? 'Active' : 'Inactive'}
                           </span>
                         </td>
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                          {user.cartelaCount !== undefined ? (
+                            user.cartelaCount > 0 ? (
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-600 text-green-100">
+                                {user.cartelaCount} Cartelas
+                              </span>
+                            ) : (
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-600 text-orange-100">
+                                No Cartelas
+                              </span>
+                            )
+                          ) : (
+                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-600 text-gray-100">
+                              Loading...
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                           {formatDate(user.createdAt)}
                         </td>
                         <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => handleUsernameClick(user.id)}
+                              className="text-blue-400 hover:text-blue-300 transition-colors"
+                              title="View assigned cartelas"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => openCartelaAssignModal(user)}
+                              className="text-green-400 hover:text-green-300 transition-colors"
+                              title="Assign cartelas"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </button>
+                            {user.cartelaCount && user.cartelaCount > 0 && (
+                              <button
+                                onClick={() => handleDeleteAllCartelas(user.id, user.username)}
+                                className="text-orange-400 hover:text-orange-300 transition-colors"
+                                title="Delete all assigned cartelas"
+                              >
+                                <RefreshCw className="h-4 w-4" />
+                              </button>
+                            )}
                             <button
                               onClick={() => openPasswordModal(user.id)}
                               className="text-purple-400 hover:text-purple-300 transition-colors"
@@ -681,7 +1080,13 @@ const AdminUserManagement: React.FC = () => {
                     {/* Header Row */}
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-base font-semibold text-white truncate">{user.username}</h3>
+                        <button
+                          onClick={() => handleUsernameClick(user.id)}
+                          className="text-base font-semibold text-blue-400 hover:text-blue-300 transition-colors cursor-pointer truncate block text-left"
+                          title="Click to view assigned cartelas"
+                        >
+                          {user.username}
+                        </button>
                         <p className="text-xs text-slate-400 truncate">{user.email}</p>
                         {user.shopname && (
                           <p className="text-xs text-slate-500 truncate mt-0.5">{user.shopname}</p>
@@ -706,10 +1111,16 @@ const AdminUserManagement: React.FC = () => {
                     </div>
 
                     {/* Info Grid */}
-                    <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
+                    <div className="grid grid-cols-3 gap-3 mb-3 text-sm">
                       <div>
                         <p className="text-xs text-slate-400">Balance</p>
                         <p className="text-slate-200 font-medium">{user.balance.toFixed(2)} Birr</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-400">Cartelas</p>
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-600 text-orange-100">
+                          None
+                        </span>
                       </div>
                       <div>
                         <p className="text-xs text-slate-400">Created</p>
@@ -719,6 +1130,22 @@ const AdminUserManagement: React.FC = () => {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 pt-3 border-t border-slate-700">
+                      <button
+                        onClick={() => handleUsernameClick(user.id)}
+                        className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+                        title="View cartelas"
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span>View</span>
+                      </button>
+                      <button
+                        onClick={() => openCartelaAssignModal(user)}
+                        className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+                        title="Assign cartelas"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>Assign</span>
+                      </button>
                       <button
                         onClick={() => openPasswordModal(user.id)}
                         className="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
@@ -943,6 +1370,48 @@ const AdminUserManagement: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Voice Category Assignment */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Voice Category *
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          console.log('🔵 Boy voice selected');
+                          setFormData(prev => ({ ...prev, voiceCategory: 'boy' }));
+                        }}
+                        className={`px-4 py-3 rounded-lg border-2 transition-colors flex items-center justify-center gap-2 ${
+                          formData.voiceCategory === 'boy'
+                            ? 'bg-blue-600 border-blue-500 text-white'
+                            : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        👦 Boy Voice
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          console.log('🔴 Girl voice selected');
+                          setFormData(prev => ({ ...prev, voiceCategory: 'girl' }));
+                        }}
+                        className={`px-4 py-3 rounded-lg border-2 transition-colors flex items-center justify-center gap-2 ${
+                          formData.voiceCategory === 'girl'
+                            ? 'bg-pink-600 border-pink-500 text-white'
+                            : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        👧 Girl Voice
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      User will only hear this voice category during gameplay. Cartelas will be assigned separately after user creation.
+                      <br />
+                      <span className="text-yellow-400">Current selection: {formData.voiceCategory || 'none'}</span>
+                    </p>
+                  </div>
+
                   {formErrors.length > 0 && (
                     <div className="p-3 bg-red-600/20 border border-red-600 rounded-lg">
                       <ul className="text-sm text-red-400 space-y-1">
@@ -970,6 +1439,294 @@ const AdminUserManagement: React.FC = () => {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cartela Viewing Modal */}
+        {showCartelaModal && selectedUserCartelas && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+              <div className="p-4 sm:p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-medium text-white">
+                      Assigned Cartelas - {selectedUserCartelas.user.username}
+                    </h3>
+                    <p className="text-sm text-slate-400">
+                      {selectedUserCartelas.user.email} • {selectedUserCartelas.total} cartelas
+                      {selectedUserCartelas.range && (
+                        <span> • Range: {selectedUserCartelas.range.start}-{selectedUserCartelas.range.end}</span>
+                      )}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowCartelaModal(false);
+                      setSelectedUserCartelas(null);
+                    }}
+                    className="text-slate-400 hover:text-white transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {selectedUserCartelas.cartelas.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="text-slate-400 mb-2">No cartelas assigned</div>
+                    <p className="text-sm text-slate-500 mb-4">
+                      This user has no cartelas assigned to them. Use the "Assign Cartelas" button to add cartelas.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setShowCartelaModal(false);
+                        setSelectedUserCartelas(null);
+                        if (selectedUserCartelas?.user) {
+                          const user = users.find(u => u.id === selectedUserCartelas.user.id);
+                          if (user) {
+                            openCartelaAssignModal(user);
+                          }
+                        }
+                      }}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 mx-auto"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Assign Cartelas Now
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Cartela Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {selectedUserCartelas.cartelas.slice(0, 20).map((cartela) => (
+                        <div
+                          key={cartela.id}
+                          className="bg-slate-700 rounded-lg p-3 border border-slate-600"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-white">
+                              Card #{cartela.card_id}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              {cartela.is_winner && (
+                                <span className="text-xs bg-yellow-600 text-yellow-100 px-1.5 py-0.5 rounded">
+                                  Winner
+                                </span>
+                              )}
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                cartela.is_active 
+                                  ? 'bg-green-600 text-green-100' 
+                                  : 'bg-red-600 text-red-100'
+                              }`}>
+                                {cartela.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {/* BINGO Card Preview */}
+                          <div className="bg-slate-800 rounded p-2">
+                            <div className="grid grid-cols-5 gap-1 text-xs">
+                              {/* Header */}
+                              <div className="text-center font-bold text-red-400">B</div>
+                              <div className="text-center font-bold text-blue-400">I</div>
+                              <div className="text-center font-bold text-green-400">N</div>
+                              <div className="text-center font-bold text-yellow-400">G</div>
+                              <div className="text-center font-bold text-purple-400">O</div>
+                              
+                              {/* Numbers */}
+                              {[0, 1, 2, 3, 4].map(row => (
+                                <React.Fragment key={row}>
+                                  <div className="text-center text-slate-300 py-0.5">
+                                    {cartela.numbers.B[row]}
+                                  </div>
+                                  <div className="text-center text-slate-300 py-0.5">
+                                    {cartela.numbers.I[row]}
+                                  </div>
+                                  <div className="text-center text-slate-300 py-0.5">
+                                    {cartela.numbers.N[row]}
+                                  </div>
+                                  <div className="text-center text-slate-300 py-0.5">
+                                    {cartela.numbers.G[row]}
+                                  </div>
+                                  <div className="text-center text-slate-300 py-0.5">
+                                    {cartela.numbers.O[row]}
+                                  </div>
+                                </React.Fragment>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <div className="mt-2 text-xs text-slate-400">
+                            Assigned: {new Date(cartela.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {selectedUserCartelas.cartelas.length > 20 && (
+                      <div className="text-center py-4 border-t border-slate-600">
+                        <p className="text-sm text-slate-400">
+                          Showing first 20 of {selectedUserCartelas.total} cartelas
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Full range: {selectedUserCartelas.range?.start}-{selectedUserCartelas.range?.end}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-4 border-t border-slate-600 mt-6">
+                  <button
+                    onClick={() => {
+                      setShowCartelaModal(false);
+                      setSelectedUserCartelas(null);
+                    }}
+                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Loading Cartelas Overlay */}
+        {loadingCartelas && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+              <div className="flex items-center space-x-3">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400"></div>
+                <span className="text-white">Loading cartelas...</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Progress Modal */}
+        {showProgressModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-white">Creating User</h3>
+                  {progressComplete && !progressError && (
+                    <button
+                      onClick={() => setShowProgressModal(false)}
+                      className="text-slate-400 hover:text-white transition-colors"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {/* Progress Bar */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-300">
+                        {creationProgress.phase === 'copying' ? 'Copying Cartelas' : 
+                         creationProgress.phase === 'validation' ? 'Validating Data' :
+                         creationProgress.phase === 'checking' ? 'Checking Existing Users' :
+                         creationProgress.phase === 'validating_cartelas' ? 'Validating Cartelas' :
+                         creationProgress.phase === 'creating_user' ? 'Creating User Account' :
+                         creationProgress.phase === 'setting_voice' ? 'Setting Voice Category' :
+                         creationProgress.phase === 'logging' ? 'Creating Admin Log' :
+                         creationProgress.phase === 'completed' ? 'Completed' :
+                         'Processing...'}
+                      </span>
+                      <span className="text-slate-400">
+                        {creationProgress.percentage > 0 ? `${creationProgress.percentage}%` : ''}
+                      </span>
+                    </div>
+                    
+                    <div className="w-full bg-slate-700 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all duration-300 ${
+                          progressError ? 'bg-red-500' : 
+                          progressComplete ? 'bg-green-500' : 'bg-blue-500'
+                        }`}
+                        style={{ 
+                          width: `${Math.max(creationProgress.percentage, progressError ? 100 : 5)}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Progress Message */}
+                  <div className="text-sm text-slate-300">
+                    {progressError ? (
+                      <div className="text-red-400">
+                        ❌ {progressError}
+                      </div>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        {!progressComplete && (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+                        )}
+                        <span>
+                          {progressComplete && !progressError ? '✅ ' : ''}
+                          {creationProgress.message}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Progress Details for Cartela Copying */}
+                  {creationProgress.phase === 'copying' && creationProgress.total > 0 && (
+                    <div className="text-xs text-slate-400 bg-slate-700 p-3 rounded">
+                      <div className="flex justify-between">
+                        <span>Cartelas Copied:</span>
+                        <span>{creationProgress.current} / {creationProgress.total}</span>
+                      </div>
+                      <div className="mt-1 text-slate-500">
+                        This may take a moment for large ranges...
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex justify-end pt-4 border-t border-slate-600">
+                    {progressError ? (
+                      <div className="flex space-x-3">
+                        <button
+                          onClick={() => {
+                            setShowProgressModal(false);
+                            setShowCreateModal(true);
+                          }}
+                          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium transition-colors"
+                        >
+                          Try Again
+                        </button>
+                        <button
+                          onClick={() => setShowProgressModal(false)}
+                          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    ) : progressComplete ? (
+                      <button
+                        onClick={() => setShowProgressModal(false)}
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                      >
+                        Done
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setShowProgressModal(false);
+                          setShowCreateModal(true);
+                        }}
+                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1041,6 +1798,161 @@ const AdminUserManagement: React.FC = () => {
                   >
                     Close
                   </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cartela Assignment Modal */}
+        {showCartelaAssignModal && selectedUserForCartelas && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="p-4 sm:p-6">
+                <h3 className="text-lg font-medium text-white mb-4">
+                  Assign Cartelas - {selectedUserForCartelas.username}
+                </h3>
+
+                <div className="space-y-4">
+                  {/* Assignment Type Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Assignment Method
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setAssignmentType('copy')}
+                        className={`px-4 py-3 rounded-lg border-2 transition-colors flex items-center justify-center gap-2 ${
+                          assignmentType === 'copy'
+                            ? 'bg-blue-600 border-blue-500 text-white'
+                            : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        📋 Copy Range
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAssignmentType('upload')}
+                        className={`px-4 py-3 rounded-lg border-2 transition-colors flex items-center justify-center gap-2 ${
+                          assignmentType === 'upload'
+                            ? 'bg-green-600 border-green-500 text-white'
+                            : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        📄 Upload PDF
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Copy Range Options */}
+                  {assignmentType === 'copy' && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Cartela Range to Copy
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label htmlFor="copyRangeStart" className="block text-xs text-slate-400 mb-1">
+                            Start Card ID
+                          </label>
+                          <input
+                            type="number"
+                            id="copyRangeStart"
+                            value={copyRangeStart}
+                            onChange={(e) => setCopyRangeStart(parseInt(e.target.value) || 1)}
+                            min="1"
+                            className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                            placeholder="e.g., 1"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="copyRangeEnd" className="block text-xs text-slate-400 mb-1">
+                            End Card ID
+                          </label>
+                          <input
+                            type="number"
+                            id="copyRangeEnd"
+                            value={copyRangeEnd}
+                            onChange={(e) => setCopyRangeEnd(parseInt(e.target.value) || 50)}
+                            min="1"
+                            className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                            placeholder="e.g., 50"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Will copy cartelas {copyRangeStart}-{copyRangeEnd} ({copyRangeEnd - copyRangeStart + 1} cartelas)
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Upload PDF Options */}
+                  {assignmentType === 'upload' && (
+                    <div className="space-y-4">
+                      <div>
+                        <label htmlFor="uploadFile" className="block text-sm font-medium text-slate-300 mb-1">
+                          PDF File
+                        </label>
+                        <input
+                          type="file"
+                          id="uploadFile"
+                          accept=".pdf"
+                          onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                        />
+                        <p className="text-xs text-slate-400 mt-1">
+                          Select a PDF file containing cartela layouts
+                        </p>
+                      </div>
+                      <div>
+                        <label htmlFor="uploadCount" className="block text-sm font-medium text-slate-300 mb-1">
+                          Number of Cartelas to Extract
+                        </label>
+                        <input
+                          type="number"
+                          id="uploadCount"
+                          value={uploadCount}
+                          onChange={(e) => setUploadCount(parseInt(e.target.value) || 50)}
+                          min="1"
+                          max="1000"
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                          placeholder="e.g., 50"
+                        />
+                        <p className="text-xs text-slate-400 mt-1">
+                          Maximum number of cartelas to extract from the PDF
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {error && (
+                    <div className="p-3 bg-red-600/20 border border-red-600 rounded-lg">
+                      <p className="text-sm text-red-400">{error}</p>
+                    </div>
+                  )}
+
+                  <div className="flex space-x-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCartelaAssignModal(false);
+                        setSelectedUserForCartelas(null);
+                        setError('');
+                      }}
+                      className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAssignCartelas}
+                      disabled={assigningCartelas || (assignmentType === 'upload' && !uploadFile)}
+                      className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+                    >
+                      {assigningCartelas ? 'Assigning...' : 'Assign Cartelas'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
