@@ -9,8 +9,8 @@ async function migrate() {
     // Create daily_bonuses table if it doesn't exist
     await client.query(`
       CREATE TABLE IF NOT EXISTS daily_bonuses (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
         bonus_date DATE NOT NULL,
         daily_profit DECIMAL(10,2) DEFAULT 0,
         bonus_amount DECIMAL(10,2) DEFAULT 200,

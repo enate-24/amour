@@ -30,12 +30,23 @@ router.post('/', [
     const { cartelaId, gameId, patterns, calledNumbers: clientCalledNumbers } = req.body;
     console.log('📥 Winner check request body:', { cartelaId, gameId, patterns, clientCalledNumbers: clientCalledNumbers?.length || 0 });
 
-    // Find the cartela by ID or card_id from PostgreSQL database (single optimized query)
+    // Find the cartela by ID or card_id from PostgreSQL database
     const startTime = Date.now();
-    const cartela = await db.get(
-      'SELECT * FROM cartelas WHERE (id = $1 OR card_id = $1) AND is_active = 1 LIMIT 1',
+    
+    // Try to find by card_id first (string comparison)
+    let cartela = await db.get(
+      'SELECT * FROM cartelas WHERE card_id = $1 AND is_active = 1 LIMIT 1',
       [cartelaId]
     );
+    
+    // If not found and cartelaId is numeric, try by id (integer comparison)
+    if (!cartela && /^\d+$/.test(cartelaId)) {
+      cartela = await db.get(
+        'SELECT * FROM cartelas WHERE id = $1 AND is_active = 1 LIMIT 1',
+        [parseInt(cartelaId)]
+      );
+    }
+    
     console.log(`⏱️ Cartela lookup took: ${Date.now() - startTime}ms`);
 
     if (!cartela) {
@@ -62,7 +73,11 @@ router.post('/', [
 
     // Get the game from PostgreSQL database
     const gameStartTime = Date.now();
-    const game = await db.get('SELECT * FROM games WHERE id = $1', [targetGameId]);
+    
+    // Convert targetGameId to integer if it's not already
+    const gameIdAsInt = typeof targetGameId === 'number' ? targetGameId : parseInt(targetGameId);
+    const game = await db.get('SELECT * FROM games WHERE id = $1', [gameIdAsInt]);
+    
     console.log(`⏱️ Game lookup took: ${Date.now() - gameStartTime}ms`);
     if (!game) {
       console.error('❌ Game not found:', targetGameId);
@@ -120,6 +135,15 @@ router.post('/', [
       });
     }
 
+    console.log('🔍 Cartela numbers after parsing:', {
+      isArray: Array.isArray(cartelaNumbers),
+      length: cartelaNumbers?.length,
+      type: typeof cartelaNumbers,
+      firstElement: cartelaNumbers?.[0],
+      firstElementType: typeof cartelaNumbers?.[0],
+      sample: cartelaNumbers?.slice(0, 5)
+    });
+
     // Convert 2D array format to BINGO column format if needed
     // Database stores as [[row1], [row2], ...] but validation expects {B: [...], I: [...], N: [...], G: [...], O: [...]}
     if (Array.isArray(cartelaNumbers) && cartelaNumbers.length === 5 && Array.isArray(cartelaNumbers[0])) {
@@ -147,6 +171,34 @@ router.post('/', [
       }
       cartelaNumbers = bingoFormat;
       console.log('✅ Converted to BINGO format:', cartelaNumbers);
+    }
+    // Convert flat array format to BINGO column format if needed
+    else if (Array.isArray(cartelaNumbers) && cartelaNumbers.length === 25) {
+      console.log('🔄 Converting flat array format to BINGO column format');
+      const bingoFormat = {
+        B: [],
+        I: [],
+        N: [],
+        G: [],
+        O: []
+      };
+      const columns = ['B', 'I', 'N', 'G', 'O'];
+      
+      // Convert flat array to 5x5 grid, then to columns
+      for (let col = 0; col < 5; col++) {
+        for (let row = 0; row < 5; row++) {
+          const index = row * 5 + col; // row-major order
+          const value = cartelaNumbers[index];
+          // Convert "FREE" or "Free" strings to 0 for the center square
+          if (col === 2 && row === 2 && (value === "FREE" || value === "Free")) {
+            bingoFormat[columns[col]].push(0);
+          } else {
+            bingoFormat[columns[col]].push(value);
+          }
+        }
+      }
+      cartelaNumbers = bingoFormat;
+      console.log('✅ Converted flat array to BINGO format:', cartelaNumbers);
     }
 
     // Handle "FREE" or "Free" strings in BINGO format (already in column format)
@@ -196,7 +248,9 @@ router.post('/', [
       card_id_type: typeof formattedCartela.card_id,
       has_numbers: !!formattedCartela.numbers,
       numbers_type: typeof formattedCartela.numbers,
-      is_array: Array.isArray(formattedCartela.numbers)
+      is_array: Array.isArray(formattedCartela.numbers),
+      numbers_keys: formattedCartela.numbers ? Object.keys(formattedCartela.numbers) : 'none',
+      sample_numbers: formattedCartela.numbers
     });
 
     // Validate cartela structure
@@ -238,7 +292,7 @@ router.post('/', [
         
         const existingAnalysis = await db.get(
           'SELECT winner_cartela_ids FROM game_analysis WHERE game_id = $1',
-          [targetGameId]
+          [gameIdAsInt]
         );
 
         console.log('📊 Existing analysis result:', existingAnalysis);
@@ -270,7 +324,7 @@ router.post('/', [
           `, [
             JSON.stringify(existingWinners),
             new Date().toISOString(),
-            targetGameId
+            gameIdAsInt
           ]);
 
           console.log('📊 Update result:', updateResult);
@@ -280,7 +334,7 @@ router.post('/', [
             console.log('📝 No existing record found, creating new game_analysis record...');
             // Get game details for required fields
             console.log('🎮 Fetching game details for new record...');
-            const gameDetails = await db.get('SELECT * FROM games WHERE id = $1', [targetGameId]);
+            const gameDetails = await db.get('SELECT * FROM games WHERE id = $1', [gameIdAsInt]);
             console.log('📊 Game details:', gameDetails);
             
             if (gameDetails) {
@@ -293,7 +347,7 @@ router.post('/', [
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
               `, [
                 require('crypto').randomUUID(),
-                targetGameId,
+                gameIdAsInt,
                 gameDetails.game_number || 0,
                 1, // players
                 parseFloat(gameDetails.bet_money) || 0,
@@ -349,7 +403,7 @@ router.post('/', [
     const response = {
       success: true,
       cartelaId: cartela.card_id,
-      gameId: targetGameId,
+      gameId: gameIdAsInt,
       win: isWinner,
       cardType: isWinner ? 'win' : 'stillnotwin',
       soundType: isWinner ? 'winner' : 'notwinner',

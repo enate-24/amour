@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User } from '../types/auth';
 import { offlineAuthManager } from '../utils/offlineAuthManager';
+import { offlineStorage } from '../utils/offlineStorage';
 import { networkStatusManager } from '../utils/networkStatus';
 
 // Use Vite proxy for API calls - always use relative URLs

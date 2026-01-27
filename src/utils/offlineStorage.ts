@@ -26,6 +26,10 @@ class OfflineStorageManager {
   private syncQueue: SyncQueueItem[] = [];
   private readonly SYNC_QUEUE_KEY = 'sync_queue';
 
+  isInitialized(): boolean {
+    return this.db !== null;
+  }
+
   async initialize(): Promise<void> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, this.dbVersion);
@@ -132,7 +136,10 @@ class OfflineStorageManager {
 
   // Store game data with full offline support
   async storeGame(gameData: any): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
+    if (!this.db) {
+      console.log('🔄 Auto-initializing offline storage...');
+      await this.initialize();
+    }
 
     const transaction = this.db.transaction(['games'], 'readwrite');
     const store = transaction.objectStore('games');
@@ -158,7 +165,10 @@ class OfflineStorageManager {
 
   // Retrieve games from offline storage
   async getGames(userId?: string): Promise<any[]> {
-    if (!this.db) throw new Error('Database not initialized');
+    if (!this.db) {
+      console.log('🔄 Auto-initializing offline storage...');
+      await this.initialize();
+    }
 
     const transaction = this.db.transaction(['games'], 'readonly');
     const store = transaction.objectStore('games');
@@ -193,7 +203,10 @@ class OfflineStorageManager {
 
   // Get cartelas from offline storage
   async getCartelas(): Promise<any[]> {
-    if (!this.db) throw new Error('Database not initialized');
+    if (!this.db) {
+      console.log('🔄 Auto-initializing offline storage...');
+      await this.initialize();
+    }
 
     const transaction = this.db.transaction(['cartelas'], 'readonly');
     const store = transaction.objectStore('cartelas');

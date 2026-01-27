@@ -18,13 +18,24 @@ async function addUserIdToGames() {
     `);
     console.log(`   users.id type: ${tableInfo.rows[0]?.data_type || 'unknown'}\n`);
 
-    // Step 2: Add user_id column (without foreign key constraint for now)
-    console.log('Step 2: Adding user_id column...');
-    await db.pool.query(`
-      ALTER TABLE games 
-      ADD COLUMN IF NOT EXISTS user_id TEXT
+    // Step 2: Check if user_id column already exists and its type
+    console.log('Step 2: Checking if user_id column exists...');
+    const columnInfo = await db.pool.query(`
+      SELECT column_name, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'games' AND column_name = 'user_id'
     `);
-    console.log('✅ Column added\n');
+    
+    if (columnInfo.rows.length > 0) {
+      console.log(`   user_id column already exists as ${columnInfo.rows[0].data_type}\n`);
+    } else {
+      console.log('   Adding user_id column...');
+      await db.pool.query(`
+        ALTER TABLE games 
+        ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+      `);
+      console.log('✅ Column added\n');
+    }
 
     // Step 3: Create index for performance
     console.log('Step 3: Creating index...');
@@ -74,8 +85,6 @@ async function addUserIdToGames() {
     console.log('1. Restart the backend server');
     console.log('2. Test the dashboard page');
     console.log('3. You should now see bet amounts instead of 0\n');
-
-    process.exit(0);
   } catch (error) {
     console.error('❌ Migration failed:', error.message);
     console.error(error.stack);
@@ -83,4 +92,4 @@ async function addUserIdToGames() {
   }
 }
 
-addUserIdToGames();
+module.exports = addUserIdToGames;

@@ -889,7 +889,6 @@ router.post('/users/with-progress', authenticateToken, requireAdmin, [
 
     // Create new user
     const newUser = {
-      id: require('uuid').v4(),
       username,
       email,
       shopname,
@@ -905,7 +904,8 @@ router.post('/users/with-progress', authenticateToken, requireAdmin, [
       updatedAt: new Date().toISOString()
     };
 
-    await users.create(newUser);
+    const createdUser = await users.create(newUser);
+    const userId = createdUser.id;
 
     sendProgress({
       type: 'progress',
@@ -914,7 +914,7 @@ router.post('/users/with-progress', authenticateToken, requireAdmin, [
     });
 
     // Set user voice category (no cartela assignment)
-    await userSettings.create(newUser.id, { 
+    await userSettings.create(userId, { 
       voiceCategory: voiceCategory,
       selectedPattern: 'Two Lines',
       betAmount: 10.0,
@@ -933,22 +933,33 @@ router.post('/users/with-progress', authenticateToken, requireAdmin, [
       adminId: req.user.id,
       action: 'CREATE_USER',
       targetType: 'USER',
-      targetId: newUser.id,
+      targetId: userId,
       details: { 
         username, 
         email, 
         role, 
         shopname, 
         userType, 
-        balance: newUser.balance,
+        balance: initialBalance,
         voiceCategory: voiceCategory,
         note: 'User created without cartelas - cartelas to be assigned separately'
       },
       ipAddress: req.ip || req.connection.remoteAddress
     });
 
-    // Remove password from response
-    const { password: _, ...userResponse } = newUser;
+    // Remove password from response and add the generated ID
+    const userResponse = {
+      id: userId,
+      username,
+      email,
+      shopname,
+      role,
+      userType,
+      balance: initialBalance,
+      is_active: true,
+      createdAt: newUser.createdAt,
+      updatedAt: newUser.updatedAt
+    };
 
     sendProgress({
       type: 'success',
@@ -1068,7 +1079,6 @@ router.post('/users', authenticateToken, requireAdmin, [
 
     // Create new user
     const newUser = {
-      id: require('uuid').v4(),
       username,
       email,
       shopname,
@@ -1084,14 +1094,15 @@ router.post('/users', authenticateToken, requireAdmin, [
       updatedAt: new Date().toISOString()
     };
 
-    await users.create(newUser);
+    const createdUser = await users.create(newUser);
+    const userId = createdUser.id;
 
     let copiedCartelas = [];
     
     // Only assign cartelas if range was provided
     if (willAssignCartelas) {
       console.log(`🔗 Copying cartelas from range ${cartelaRangeStart}-${cartelaRangeEnd} to user_cartelas table`);
-      copiedCartelas = await userCartelas.copyFromCartelas(newUser.id, {
+      copiedCartelas = await userCartelas.copyFromCartelas(userId, {
         start: cartelaRangeStart,
         end: cartelaRangeEnd
       });
@@ -1100,7 +1111,7 @@ router.post('/users', authenticateToken, requireAdmin, [
     }
 
     // Set user voice category
-    await userSettings.create(newUser.id, { 
+    await userSettings.create(userId, { 
       voiceCategory: voiceCategory,
       selectedPattern: 'Two Lines',
       betAmount: 10.0,
@@ -1113,14 +1124,14 @@ router.post('/users', authenticateToken, requireAdmin, [
       adminId: req.user.id,
       action: willAssignCartelas ? 'CREATE_USER_WITH_CARTELAS' : 'CREATE_USER',
       targetType: 'USER',
-      targetId: newUser.id,
+      targetId: userId,
       details: { 
         username, 
         email, 
         role, 
         shopname, 
         userType, 
-        balance: newUser.balance,
+        balance: initialBalance,
         cartelaRange: willAssignCartelas ? `${cartelaRangeStart}-${cartelaRangeEnd}` : 'none',
         copiedCartelas: copiedCartelas.length,
         voiceCategory: voiceCategory
@@ -1128,8 +1139,19 @@ router.post('/users', authenticateToken, requireAdmin, [
       ipAddress: req.ip || req.connection.remoteAddress
     });
 
-    // Remove password from response
-    const { password: _, ...userResponse } = newUser;
+    // Remove password from response and add the generated ID
+    const userResponse = {
+      id: userId,
+      username,
+      email,
+      shopname,
+      role,
+      userType,
+      balance: initialBalance,
+      is_active: true,
+      createdAt: newUser.createdAt,
+      updatedAt: newUser.updatedAt
+    };
 
     const response = {
       message: willAssignCartelas 

@@ -1,6 +1,18 @@
 const express = require('express');
 const { body, validationResult, param } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
+
+// Helper function to validate game ID (accepts both UUID and integer)
+const validateGameId = () => {
+  return param('id').custom((value) => {
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+    const isInteger = /^\d+$/.test(value);
+    if (!isUUID && !isInteger) {
+      throw new Error('Invalid game ID format');
+    }
+    return true;
+  });
+};
 const { users, adminLogs } = require('../data/database.js');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const db = require('../db');
@@ -102,11 +114,11 @@ router.post('/', authenticateToken, [
     console.log(`🎯 Generated random number sequence for new game ${newGame.id}`);
 
     // Create game in database with user_id
-    await db.run(`
-      INSERT INTO games (id, game_number, status, bet_money, win_money, cartelas_selected, number_sequence, total_numbers, winner_pattern, house_cut_percentage, user_id, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    const result = await db.run(`
+      INSERT INTO games (game_number, status, bet_money, win_money, cartelas_selected, number_sequence, total_numbers, winner_pattern, house_cut_percentage, user_id, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING id
     `, [
-      newGame.id,
       newGame.gameNumber,
       newGame.status,
       newGame.betMoney,
@@ -116,17 +128,19 @@ router.post('/', authenticateToken, [
       newGame.totalNumbers,
       newGame.winnerPattern,
       newGame.houseCutPercentage,
-      req.user.id, // user_id - link game to user
+      req.user.id, // user_id (from database, already correct type)
       newGame.createdAt,
       newGame.updatedAt
     ]);
+    
+    // Update newGame with the database-generated ID
+    newGame.id = result.id;
 
     // Log admin action in database
     await db.run(`
-      INSERT INTO admin_logs (id, admin_id, action, target_type, target_id, details, ip_address, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO admin_logs (admin_id, action, target_type, target_id, details, ip_address, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
     `, [
-      uuidv4(),
       req.user.id,
       'CREATE_GAME',
       'GAME',
@@ -253,7 +267,7 @@ router.get('/', async (req, res) => {
 
 // Start game (authenticated users can start their own games)
 router.put('/:id/start', authenticateToken, [
-  param('id').isUUID().withMessage('Invalid game ID')
+  validateGameId()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -322,10 +336,9 @@ router.put('/:id/start', authenticateToken, [
     // OPTIMIZATION: Log admin action asynchronously (non-blocking)
     setImmediate(() => {
       db.run(`
-        INSERT INTO admin_logs (id, admin_id, action, target_type, target_id, details, ip_address, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO admin_logs (admin_id, action, target_type, target_id, details, ip_address, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
       `, [
-        uuidv4(),
         req.user.id,
         'START_GAME',
         'GAME',
@@ -348,7 +361,7 @@ router.put('/:id/start', authenticateToken, [
 
 // Update game winner pattern (authenticated users can update their own games)
 router.patch('/:id/pattern', authenticateToken, [
-  param('id').isUUID().withMessage('Invalid game ID'),
+  validateGameId(),
   body('winnerPattern').isString().isIn(['One Line', 'Two Lines', 'Three Lines', 'Full House']).withMessage('Invalid winner pattern')
 ], async (req, res) => {
   try {
@@ -393,7 +406,7 @@ router.patch('/:id/pattern', authenticateToken, [
 
 // Call next number (authenticated users)
 router.put('/:id/call-number', authenticateToken, [
-  param('id').isUUID().withMessage('Invalid game ID'),
+  validateGameId(),
   body('calledNumbers').optional().isArray().withMessage('Called numbers must be an array')
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -542,7 +555,7 @@ router.put('/:id/call-number', authenticateToken, [
 
 // Finish user session game (authenticated users can finish their own sessions)
 router.put('/:id/finish-session', authenticateToken, [
-  param('id').isUUID().withMessage('Invalid game ID'),
+  validateGameId(),
   body('winMoney').isFloat({ min: 0 }).withMessage('Win money must be non-negative'),
   body('winnerCartelaIds').optional().isArray().withMessage('Winner cartela IDs must be an array')
 ], async (req, res) => {
@@ -639,10 +652,9 @@ router.put('/:id/finish-session', authenticateToken, [
     // Log action in database (use user_logs for regular users, admin_logs for admins)
     if (req.user.role === 'admin') {
       await db.run(`
-        INSERT INTO admin_logs (id, admin_id, action, target_type, target_id, details, ip_address, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO admin_logs (admin_id, action, target_type, target_id, details, ip_address, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
       `, [
-        uuidv4(),
         req.user.id,
         'FINISH_GAME',
         'GAME',
@@ -694,11 +706,10 @@ router.put('/:id/finish-session', authenticateToken, [
 
         // Create bonus record if it doesn't exist
         if (!bonusRecord) {
-          const { v4: uuidv4 } = require('uuid');
           await db.run(`
-            INSERT INTO daily_bonuses (id, user_id, bonus_date, daily_profit, bonus_amount, requirements_met, bonus_claimed, bonus_used)
-            VALUES ($1, $2, $3, $4, 200, 0, 0, 0)
-          `, [uuidv4(), userId, today, dailyProfit]);
+            INSERT INTO daily_bonuses (user_id, bonus_date, daily_profit, bonus_amount, requirements_met, bonus_claimed, bonus_used)
+            VALUES ($1, $2, $3, 200, 0, 0, 0)
+          `, [userId, today, dailyProfit]);
           bonusRecord = await db.get(bonusCheckQuery, [userId, today]);
         } else {
           // Update daily profit if bonus not used yet
@@ -759,8 +770,6 @@ router.put('/:id/finish-session', authenticateToken, [
             }
 
             // Create a bonus deduction game record to affect all profit calculations
-            const { v4: uuidv4 } = require('uuid');
-            const bonusGameId = uuidv4();
             const bonusGameNumber = 999999; // Special number for bonus deduction games
             
             console.log(`📝 Creating bonus deduction game #${bonusGameNumber}...`);
@@ -768,12 +777,11 @@ router.put('/:id/finish-session', authenticateToken, [
             // Insert a "bonus deduction" game with negative profit
             await client.query(`
               INSERT INTO games (
-                id, game_number, user_id, bet_money, win_money, 
+                game_number, user_id, bet_money, win_money, 
                 cartelas_selected, total_numbers, house_cut_percentage, 
                 status, created_at, updated_at
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             `, [
-              bonusGameId,
               bonusGameNumber,
               userId,
               0,        // bet_money = 0
@@ -928,10 +936,9 @@ router.put('/:id/finish', requireAdmin, [
 
     // Log admin action in database
     await db.run(`
-      INSERT INTO admin_logs (id, admin_id, action, target_type, target_id, details, ip_address, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO admin_logs (admin_id, action, target_type, target_id, details, ip_address, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
     `, [
-      uuidv4(),
       req.user.id,
       'FINISH_GAME',
       'GAME',
@@ -995,10 +1002,9 @@ router.put('/:id/cancel', requireAdmin, [
 
     // Log admin action in database
     await db.run(`
-      INSERT INTO admin_logs (id, admin_id, action, target_type, target_id, details, ip_address, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO admin_logs (admin_id, action, target_type, target_id, details, ip_address, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
     `, [
-      uuidv4(),
       req.user.id,
       'CANCEL_GAME',
       'GAME',
@@ -1290,7 +1296,6 @@ router.post('/analysis/save', [
       // Insert new record
       await db.run(`
         INSERT INTO game_analysis (
-          id,
           game_id,
           game_number,
           players,
@@ -1310,9 +1315,8 @@ router.post('/analysis/save', [
           winner_cartela_ids,
           created_at,
           updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       `, [
-        uuidv4(),
         gameId,
         gameNumber,
         players,
@@ -1582,7 +1586,6 @@ router.post('/session', authenticateToken, [
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Debug: Log user type and balance information
     console.log('🔍 User Balance Check:', {
       userId: user.id,
       username: user.username,
@@ -1590,6 +1593,15 @@ router.post('/session', authenticateToken, [
       balance: user.balance,
       totalBet: req.body.totalBet,
       houseCut: req.body.houseCut
+    });
+
+    // Debug: Check req.user.id type and value
+    console.log('🔍 req.user.id Debug:', {
+      value: req.user.id,
+      type: typeof req.user.id,
+      isUUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.user.id),
+      parseInt: parseInt(req.user.id),
+      parseIntType: typeof parseInt(req.user.id)
     });
 
     const gameNumber = (user.totalGamesPlayed || 0) + 1;
@@ -1607,6 +1619,7 @@ router.post('/session', authenticateToken, [
 
     const gameId = uuidv4();
     const createdAt = new Date().toISOString();
+    let dbGameId = gameId; // Initialize with UUID as fallback
 
       // Validate that betAmount * selectedCartelas.length equals totalBet
       const calculatedTotalBet = betAmount * selectedCartelas.length;
@@ -1620,27 +1633,45 @@ router.post('/session', authenticateToken, [
 
       // Save to database using the games table (reusing existing structure)
       try {
-        await db.run(`
-          INSERT INTO games (id, game_number, status, bet_money, bet_amount_per_cartela, win_money, cartelas_selected, selected_cartelas, called_numbers, number_sequence, total_numbers, winner_pattern, house_cut_percentage, user_id, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-        `, [
-          gameId,
-          gameNumber,
-          'started',
-          totalBet,
-          betAmount, // NEW: Store bet amount per cartela
-          playerWin,
-          selectedCartelas.length, // This is the count
-          JSON.stringify(selectedCartelas), // Store the actual selected cartela IDs
-          JSON.stringify([]), // No called numbers for user sessions
-          JSON.stringify(numbers), // Generated shuffled sequence for user session
-          75, // Default total numbers
-          selectedPattern, // Use the user's selected pattern from settings
-          housePercentage,
-          req.user.id, // user_id - link game to user
-          createdAt,
-          createdAt
-        ]);
+        // Use the user.id from the database (which is always an integer)
+        // rather than trying to parse req.user.id from JWT token
+        const userId = req.user.id; // This comes from the database, so it's always the correct type
+        
+        console.log('✅ Using user ID from database:', userId, '(type:', typeof userId, ')');
+        
+        const insertValues = [
+          userId, // user_id (integer from database)
+          'started', // status
+          totalBet, // bet_amount (NOT NULL - this is the main bet amount)
+          betAmount, // bet_amount_per_cartela (individual cartela bet)
+          housePercentage, // house_cut_percentage
+          playerWin, // total_prize (what player can win)
+          selectedPattern, // winner_pattern (selected pattern)
+          createdAt, // created_at
+          createdAt, // updated_at
+          JSON.stringify(numbers), // number_sequence (shuffled sequence)
+          JSON.stringify(selectedCartelas), // selected_cartelas (cartela IDs)
+          gameNumber, // game_number
+          totalBet, // bet_money (duplicate for compatibility)
+          playerWin, // win_money (duplicate for compatibility)
+          selectedCartelas.length, // cartelas_selected (count)
+          JSON.stringify([]), // called_numbers (empty for user sessions)
+          75 // total_numbers
+        ];
+        
+        const result = await db.run(`
+          INSERT INTO games (
+            user_id, status, bet_amount, bet_amount_per_cartela, house_cut_percentage, 
+            total_prize, winner_pattern, created_at, updated_at, number_sequence, 
+            selected_cartelas, game_number, bet_money, win_money, cartelas_selected, 
+            called_numbers, total_numbers
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+          RETURNING id
+        `, insertValues);
+        
+        // Get the auto-generated ID from the database
+        dbGameId = result.id || result.insertId || gameId;
 
       console.log('✅ Game session saved to database');
     } catch (dbError) {
@@ -1724,10 +1755,10 @@ router.post('/session', authenticateToken, [
     console.log('✅ Game session created successfully');
 
     const response = {
-      gameId: gameId, // Return UUID instead of game number for API calls
+      gameId: dbGameId, // Use database-generated ID
       gameNumber: gameNumber, // Also return game number for display
       lastGame: {
-        _id: gameId,
+        _id: dbGameId,
         gameId: gameNumber,
         cartela: cartelaNumbers,
         cutAmount: housePercentage,
@@ -1771,7 +1802,7 @@ router.post('/session', authenticateToken, [
 
 // Get game by ID
 router.get('/:id', [
-  param('id').isUUID().withMessage('Invalid game ID')
+  validateGameId()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -1952,16 +1983,15 @@ router.post('/check-winners', authenticateToken, [
         // Update the game_analysis table with winner cartela IDs
         const updateAnalysisQuery = `
           INSERT INTO game_analysis (
-            id, game_id, winner_cartela_ids, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5)
+            game_id, winner_cartela_ids, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4)
           ON CONFLICT (game_id) 
           DO UPDATE SET 
-            winner_cartela_ids = $3,
-            updated_at = $5
+            winner_cartela_ids = $2,
+            updated_at = $4
         `;
 
         await db.run(updateAnalysisQuery, [
-          require('crypto').randomUUID(),
           gameId,
           JSON.stringify(winnerCartelaIds),
           new Date().toISOString(),
@@ -2015,7 +2045,7 @@ router.post('/check-winners', authenticateToken, [
 
 // Get number sequence for a game (for offline caching)
 router.get('/:id/number-sequence', [
-  param('id').isUUID().withMessage('Invalid game ID')
+  validateGameId()
 ], authenticateToken, async (req, res) => {
   try {
     const errors = validationResult(req);

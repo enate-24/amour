@@ -113,7 +113,12 @@ const initializeOfflineSystem = async () => {
     await offlineStorage.initialize();
     console.log('✅ Offline storage initialized');
     
-    // 2. Register service worker
+    // 2. Initialize offline game manager
+    const { offlineGameManager } = await import('./utils/offlineGameManager');
+    await offlineGameManager.initialize();
+    console.log('✅ Offline game manager initialized');
+    
+    // 3. Register service worker
     await registerServiceWorker({
       onUpdate: (registration) => {
         console.log('🔄 New app version available');
@@ -127,14 +132,19 @@ const initializeOfflineSystem = async () => {
       }
     });
     
-    // 3. Initialize audio manager
+    // 4. Initialize audio manager
     await initializeAudioManager();
     
-    // 4. Initialize cartela cache
+    // 5. Initialize cartela cache
     await initializeCartelaCache();
     
-    // 5. Initialize demo user for offline testing
+    // 6. Initialize demo user for offline testing
     await initializeDemoUser();
+    
+    // 7. Initialize sync manager
+    const { offlineSyncManager } = await import('./utils/offlineSyncManager');
+    await offlineSyncManager.initialize();
+    console.log('✅ Sync manager initialized');
     
     console.log('🎉 Offline-first system ready!');
   } catch (error) {

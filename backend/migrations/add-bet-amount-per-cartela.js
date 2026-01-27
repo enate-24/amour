@@ -25,25 +25,20 @@ async function addBetAmountPerCartela() {
     const countResult = await db.pool.query(`
       SELECT 
         COUNT(*) as total_games,
-        COUNT(CASE WHEN bet_amount_per_cartela IS NULL THEN 1 END) as games_needing_migration,
-        COUNT(CASE WHEN cartelas_selected = 0 THEN 1 END) as games_with_zero_cartelas
+        COUNT(CASE WHEN bet_amount_per_cartela IS NULL THEN 1 END) as games_needing_migration
       FROM games
     `);
     
     const stats = countResult.rows[0];
     console.log(`   Total games: ${stats.total_games}`);
     console.log(`   Games needing migration: ${stats.games_needing_migration}`);
-    console.log(`   Games with zero cartelas: ${stats.games_with_zero_cartelas}`);
     console.log('');
 
-    // Update games where cartelas_selected > 0
-    console.log('Step 3: Updating games with valid cartela counts...');
+    // Update games - set default bet_amount_per_cartela to 5.0 for existing games
+    console.log('Step 3: Setting default bet_amount_per_cartela for existing games...');
     const updateResult = await db.pool.query(`
       UPDATE games 
-      SET bet_amount_per_cartela = CASE 
-        WHEN cartelas_selected > 0 THEN bet_money / cartelas_selected
-        ELSE 5.0
-      END
+      SET bet_amount_per_cartela = 5.0
       WHERE bet_amount_per_cartela IS NULL
     `);
     
@@ -74,11 +69,10 @@ async function addBetAmountPerCartela() {
     const sampleResult = await db.pool.query(`
       SELECT 
         id,
-        game_number,
-        bet_money,
-        cartelas_selected,
+        status,
+        bet_amount,
         bet_amount_per_cartela,
-        (bet_amount_per_cartela * cartelas_selected) as calculated_total
+        created_at
       FROM games
       WHERE bet_amount_per_cartela IS NOT NULL
       ORDER BY created_at DESC
@@ -87,7 +81,7 @@ async function addBetAmountPerCartela() {
     
     console.log('   Recent games:');
     sampleResult.rows.forEach(game => {
-      console.log(`   Game #${game.game_number}: ${game.cartelas_selected} cartelas × ${game.bet_amount_per_cartela} = ${game.bet_money} (calculated: ${game.calculated_total})`);
+      console.log(`   Game #${game.id}: bet_amount=${game.bet_amount}, bet_amount_per_cartela=${game.bet_amount_per_cartela}`);
     });
     console.log('');
 
@@ -96,8 +90,6 @@ async function addBetAmountPerCartela() {
     console.log('1. Update backend API to use bet_amount_per_cartela');
     console.log('2. Update frontend to display per-cartela amount');
     console.log('3. Test with new games to verify correct storage\n');
-
-    process.exit(0);
   } catch (error) {
     console.error('❌ Migration failed:', error.message);
     console.error(error.stack);
@@ -105,4 +97,4 @@ async function addBetAmountPerCartela() {
   }
 }
 
-addBetAmountPerCartela();
+module.exports = addBetAmountPerCartela;

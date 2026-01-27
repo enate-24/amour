@@ -69,6 +69,18 @@ const CardList: React.FC = () => {
   const renderBingoCard = (cartela: Cartela) => {
     const columns = ['B', 'I', 'N', 'G', 'O'] as const;
 
+    // Add safety check for cartela numbers
+    if (!cartela.numbers || typeof cartela.numbers !== 'object') {
+      console.warn('Invalid cartela numbers format:', cartela.numbers);
+      return (
+        <div className="inline-block bg-white rounded-xl shadow-lg p-3 sm:p-4">
+          <div className="text-red-500 text-center p-4">
+            Invalid cartela data
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="inline-block bg-white rounded-xl shadow-lg p-3 sm:p-4">
         {/* BINGO Header */}

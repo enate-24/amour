@@ -18,15 +18,35 @@ class OfflineSyncManager {
   private lastSyncTime: number | null = null;
   private syncInterval: ReturnType<typeof setInterval> | null = null;
   private listeners = new Set<(status: SyncStatus) => void>();
+  private initialized = false;
 
   constructor() {
     this.setupNetworkListener();
+    // Don't start periodic sync immediately - wait for initialization
+  }
+
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+    
+    console.log('🔄 Initializing sync manager...');
+    
+    // Ensure dependencies are initialized
+    if (!offlineStorage.isInitialized()) {
+      await offlineStorage.initialize();
+    }
+    
+    if (!offlineGameManager.isInitialized()) {
+      await offlineGameManager.initialize();
+    }
+    
+    this.initialized = true;
     this.startPeriodicSync();
+    console.log('✅ Sync manager initialized');
   }
 
   private setupNetworkListener(): void {
     networkStatusManager.subscribe((isOnline) => {
-      if (isOnline && !this.syncInProgress) {
+      if (isOnline && !this.syncInProgress && this.initialized) {
         console.log('🌐 Network restored - starting sync...');
         this.performFullSync();
       }
@@ -35,9 +55,14 @@ class OfflineSyncManager {
   }
 
   private startPeriodicSync(): void {
+    if (!this.initialized) {
+      console.log('⚠️ Sync manager not initialized, skipping periodic sync setup');
+      return;
+    }
+    
     // Sync every 5 minutes when online
     this.syncInterval = setInterval(() => {
-      if (networkStatusManager.isOnline && !this.syncInProgress) {
+      if (networkStatusManager.isOnline && !this.syncInProgress && this.initialized) {
         this.performFullSync();
       }
     }, 5 * 60 * 1000);
@@ -55,16 +80,30 @@ class OfflineSyncManager {
     try {
       console.log('🔄 Starting full sync...');
 
-      // 1. Sync offline storage queue
+      // 1. Ensure offline storage is initialized
+      if (!offlineStorage.isInitialized()) {
+        console.log('🔄 Initializing offline storage for sync...');
+        await offlineStorage.initialize();
+      }
+
+      // 2. Sync offline storage queue
       await offlineStorage.syncWithServer();
 
-      // 2. Process offline queue
+      // 3. Process offline queue
       await offlineQueue.processQueue();
 
-      // 3. Sync games
-      await offlineGameManager.syncAllGames();
+      // 4. Ensure offline game manager is initialized and sync games
+      try {
+        if (!offlineGameManager.isInitialized()) {
+          console.log('🔄 Initializing offline game manager for sync...');
+          await offlineGameManager.initialize();
+        }
+        await offlineGameManager.syncAllGames();
+      } catch (error) {
+        console.warn('⚠️ Game sync failed, continuing with other sync operations:', error);
+      }
 
-      // 4. Update last sync time
+      // 5. Update last sync time
       this.lastSyncTime = Date.now();
       localStorage.setItem('lastSyncTime', this.lastSyncTime.toString());
 
@@ -86,6 +125,10 @@ class OfflineSyncManager {
       pendingItems: queueStatus.count + offlineQueue.getQueueSize(),
       syncInProgress: this.syncInProgress
     };
+  }
+
+  isInitialized(): boolean {
+    return this.initialized;
   }
 
   subscribe(listener: (status: SyncStatus) => void): () => void {

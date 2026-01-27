@@ -25,9 +25,15 @@ interface OfflineGameState {
 
 class OfflineGameManager {
   private currentGame: OfflineGameState | null = null;
+  private initialized: boolean = false;
+
+  isInitialized(): boolean {
+    return this.initialized;
+  }
 
   async initialize(): Promise<void> {
     await offlineStorage.initialize();
+    this.initialized = true;
     console.log('🎮 Offline Game Manager initialized');
   }
 
@@ -196,6 +202,11 @@ class OfflineGameManager {
 
   // Sync all offline games with server
   async syncAllGames(): Promise<void> {
+    if (!this.initialized) {
+      console.log('🔄 Auto-initializing offline game manager for sync...');
+      await this.initialize();
+    }
+
     const games = await offlineStorage.getGames();
     const offlineGames = games.filter(g => g.offlineCreated);
 

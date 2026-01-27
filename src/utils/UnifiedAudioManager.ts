@@ -334,13 +334,13 @@ export class UnifiedAudioManager {
     const voicePath = `${category} sound`;
     
     if (cdnEnabled && cdnBaseUrl) {
-      const cdnUrl = `${cdnBaseUrl}/sounds/${voicePath}/${actualFileId}`;
+      const cdnUrl = `${cdnBaseUrl}/sounds/${encodeURIComponent(voicePath)}/${encodeURIComponent(actualFileId)}`;
       console.log(`🌐 Using CDN URL (${category}): ${cdnUrl}`);
       return cdnUrl;
     }
     
     // Fallback to local
-    const localUrl = `/sounds/${voicePath}/${actualFileId}`;
+    const localUrl = `/sounds/${encodeURIComponent(voicePath)}/${encodeURIComponent(actualFileId)}`;
     console.log(`🔊 Using local URL (${category}): ${localUrl}`);
     return localUrl;
   }
@@ -367,11 +367,23 @@ export class UnifiedAudioManager {
       console.log(`📥 Downloading (${category}): ${fileId} from ${url}`);
       
       const response = await fetch(url);
+      console.log(`📡 Fetch response for ${fileId}:`, {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        contentLength: response.headers.get('content-length'),
+        contentType: response.headers.get('content-type')
+      });
+      
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
       const blob = await response.blob();
+      console.log(`📦 Blob for ${fileId}:`, {
+        size: blob.size,
+        type: blob.type
+      });
       
       // Validate blob
       if (blob.size === 0) {

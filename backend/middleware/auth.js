@@ -30,11 +30,23 @@ const authenticateToken = async (req, res, next) => {
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     console.log('✅ Token verified successfully for user:', decoded.email || decoded.id);
+    console.log('🔍 Decoded token payload:', JSON.stringify(decoded, null, 2));
 
     // Get user from database
-    const user = await users.findById(decoded.id);
+    let user = await users.findById(decoded.id);
+    
+    // Handle UUID to integer ID transition
+    if (!user && typeof decoded.id === 'string' && decoded.email) {
+      console.log('🔄 User not found by ID, trying email lookup for transition period...');
+      user = await users.findByEmail(decoded.email);
+      if (user) {
+        console.log('✅ Found user by email during UUID->integer transition:', user.username);
+      }
+    }
+    
     if (!user) {
-      console.error('❌ User not found');
+      console.error('❌ User not found for ID:', decoded.id, '(type:', typeof decoded.id, ')');
+      console.error('❌ Also tried email:', decoded.email);
       return res.status(401).json({ error: 'User not found' });
     }
 
@@ -45,6 +57,12 @@ const authenticateToken = async (req, res, next) => {
     }
 
     console.log('✅ User authenticated successfully:', user.username, user.role);
+    console.log('🔍 User object from DB:', {
+      id: user.id,
+      idType: typeof user.id,
+      username: user.username,
+      role: user.role
+    });
 
     // Attach user to request
     req.user = user;

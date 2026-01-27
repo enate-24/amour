@@ -19,8 +19,12 @@ types.setTypeParser(types.builtins.FLOAT8, parseFloat);
 // Support both DATABASE_URL (Render/production) and individual params (local development)
 const dbConfig = process.env.DATABASE_URL ? {
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
+  ssl: process.env.DATABASE_URL.includes('aivencloud.com') ? {
+    // Aiven-specific SSL configuration
+    rejectUnauthorized: false, // Aiven uses self-signed certificates
+    checkServerIdentity: () => undefined // Skip hostname verification for Aiven
+  } : {
+    rejectUnauthorized: true // Use proper SSL verification for other providers
   },
   max: 3, // Reduced pool size to avoid overwhelming remote database
   min: 0, // No minimum connections to avoid connection issues
@@ -501,12 +505,12 @@ const userOperations = {
     const isAdmin = userData.role === 'admin';
 
     if (isAdmin) {
-      // Admin users don't need these fields
+      // Admin users don't need these fields - let PostgreSQL auto-generate the ID
       const result = await run(`
-        INSERT INTO users (id, username, email, shopname, password, role, is_active, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO users (username, email, shopname, password, role, is_active, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id
       `, [
-        userData.id,
         userData.username,
         userData.email,
         userData.shopname || null,
@@ -516,14 +520,14 @@ const userOperations = {
         userData.createdAt || new Date().toISOString(),
         userData.updatedAt || new Date().toISOString()
       ]);
-      return result;
+      return { ...result, id: result.id };
     } else {
-      // Regular users include all fields
+      // Regular users include all fields - let PostgreSQL auto-generate the ID
       const result = await run(`
-        INSERT INTO users (id, username, email, shopname, password, role, user_type, balance, balance_limit, total_games_played, total_winnings, is_active, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        INSERT INTO users (username, email, shopname, password, role, user_type, balance, balance_limit, total_games_played, total_winnings, is_active, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        RETURNING id
       `, [
-        userData.id,
         userData.username,
         userData.email,
         userData.shopname || null,
@@ -802,18 +806,91 @@ const cartelaOperations = {
 
 // Database operations for user_cartelas
 const userCartelaOperations = {
+  // Helper function to convert flat array to BINGO column format
+  convertToBingoFormat: (numbers) => {
+    // If already in BINGO format, return as is
+    if (numbers && typeof numbers === 'object' && !Array.isArray(numbers) && numbers.B) {
+      return numbers;
+    }
+    
+    // If it's a flat array of 25 numbers, convert to BINGO format
+    if (Array.isArray(numbers) && numbers.length === 25) {
+      const bingoFormat = {
+        B: [],
+        I: [],
+        N: [],
+        G: [],
+        O: []
+      };
+      const columns = ['B', 'I', 'N', 'G', 'O'];
+      
+      // Convert flat array to 5x5 grid, then to columns
+      for (let col = 0; col < 5; col++) {
+        for (let row = 0; row < 5; row++) {
+          const index = row * 5 + col; // row-major order
+          const value = numbers[index];
+          // Convert center square to 0 for FREE space
+          if (col === 2 && row === 2) {
+            bingoFormat[columns[col]].push(0);
+          } else {
+            bingoFormat[columns[col]].push(value);
+          }
+        }
+      }
+      return bingoFormat;
+    }
+    
+    // If it's a 2D array (5x5), convert to BINGO format
+    if (Array.isArray(numbers) && numbers.length === 5 && Array.isArray(numbers[0])) {
+      const bingoFormat = {
+        B: [],
+        I: [],
+        N: [],
+        G: [],
+        O: []
+      };
+      const columns = ['B', 'I', 'N', 'G', 'O'];
+      
+      // Transpose: convert rows to columns
+      for (let col = 0; col < 5; col++) {
+        for (let row = 0; row < 5; row++) {
+          const value = numbers[row][col];
+          // Convert center square to 0 for FREE space
+          if (col === 2 && row === 2) {
+            bingoFormat[columns[col]].push(0);
+          } else {
+            bingoFormat[columns[col]].push(value);
+          }
+        }
+      }
+      return bingoFormat;
+    }
+    
+    // Return empty BINGO format as fallback
+    return {
+      B: [0, 0, 0, 0, 0],
+      I: [0, 0, 0, 0, 0],
+      N: [0, 0, 0, 0, 0],
+      G: [0, 0, 0, 0, 0],
+      O: [0, 0, 0, 0, 0]
+    };
+  },
+
   findByUserId: async (userId) => {
     const userCartelas = await all('SELECT * FROM user_cartelas WHERE user_id = $1 AND is_active = 1 ORDER BY card_id', [userId]);
-    return userCartelas.map(cartela => ({
-      id: cartela.id,
-      user_id: cartela.user_id,
-      card_id: cartela.card_id,
-      numbers: JSON.parse(cartela.numbers || '{}'),
-      pattern: cartela.pattern,
-      is_active: cartela.is_active,
-      is_winner: cartela.is_winner,
-      created_at: cartela.created_at
-    }));
+    return userCartelas.map(cartela => {
+      const parsedNumbers = JSON.parse(cartela.numbers || '[]');
+      return {
+        id: cartela.id,
+        user_id: cartela.user_id,
+        card_id: cartela.card_id,
+        numbers: userCartelaOperations.convertToBingoFormat(parsedNumbers),
+        pattern: cartela.pattern,
+        is_active: cartela.is_active,
+        is_winner: cartela.is_winner,
+        created_at: cartela.created_at
+      };
+    });
   },
 
   create: (userCartelaData) => run(`
@@ -889,30 +966,53 @@ const userCartelaOperations = {
     
     for (let i = 0; i < sourceCartelas.length; i++) {
       const cartela = sourceCartelas[i];
+      
+      // Convert PostgreSQL array to 5x5 grid format for user_cartelas
+      let numbersGrid;
+      if (Array.isArray(cartela.numbers)) {
+        // Convert flat array to 5x5 grid
+        numbersGrid = [];
+        for (let row = 0; row < 5; row++) {
+          const rowData = [];
+          for (let col = 0; col < 5; col++) {
+            const num = cartela.numbers[row * 5 + col];
+            rowData.push(num === 0 ? 'FREE' : num);
+          }
+          numbersGrid.push(rowData);
+        }
+      } else {
+        // Fallback: create empty grid
+        numbersGrid = [
+          [0, 0, 0, 0, 0],
+          [0, 0, 0, 0, 0],
+          [0, 0, 'FREE', 0, 0],
+          [0, 0, 0, 0, 0],
+          [0, 0, 0, 0, 0]
+        ];
+      }
+
       const userCartela = {
-        id: require('uuid').v4(),
         user_id: userId,
         card_id: cartela.card_id,
-        numbers: JSON.parse(cartela.numbers || '{}'),
+        numbers: JSON.stringify(numbersGrid), // Store as JSON string for user_cartelas
         pattern: cartela.pattern,
-        is_active: true,
-        is_winner: false,
+        is_active: 1,
+        is_winner: 0,
         created_at: new Date().toISOString()
       };
 
-      // Use the create method from the same object
+      // Insert into user_cartelas table (using auto-generated ID)
       await run(`
-        INSERT INTO user_cartelas (id, user_id, card_id, numbers, pattern, is_active, is_winner, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO user_cartelas (user_id, card_id, numbers, pattern, is_active, is_winner, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
       `, [
-        userCartela.id,
         userCartela.user_id,
         userCartela.card_id,
-        JSON.stringify(userCartela.numbers),
+        userCartela.numbers,
         userCartela.pattern,
-        userCartela.is_active ? 1 : 0,
-        userCartela.is_winner ? 1 : 0,
-        userCartela.created_at || new Date().toISOString()
+        userCartela.is_active,
+        userCartela.is_winner,
+        userCartela.created_at
       ]);
       
       copiedCartelas.push(userCartela);
@@ -955,10 +1055,10 @@ const adminLogOperations = {
   findAll: () => all('SELECT * FROM admin_logs ORDER BY created_at DESC'),
 
   create: (logData) => run(`
-    INSERT INTO admin_logs (id, admin_id, action, target_type, target_id, details, ip_address, created_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    INSERT INTO admin_logs (admin_id, action, target_type, target_id, details, ip_address, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING id
   `, [
-    logData.id,
     logData.adminId,
     logData.action,
     logData.targetType,

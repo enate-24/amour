@@ -1538,19 +1538,19 @@ const AdminUserManagement: React.FC = () => {
                               {[0, 1, 2, 3, 4].map(row => (
                                 <React.Fragment key={row}>
                                   <div className="text-center text-slate-300 py-0.5">
-                                    {cartela.numbers.B[row]}
+                                    {Array.isArray(cartela.numbers) && cartela.numbers[row] ? cartela.numbers[row][0] : '?'}
                                   </div>
                                   <div className="text-center text-slate-300 py-0.5">
-                                    {cartela.numbers.I[row]}
+                                    {Array.isArray(cartela.numbers) && cartela.numbers[row] ? cartela.numbers[row][1] : '?'}
                                   </div>
                                   <div className="text-center text-slate-300 py-0.5">
-                                    {cartela.numbers.N[row]}
+                                    {Array.isArray(cartela.numbers) && cartela.numbers[row] ? cartela.numbers[row][2] : '?'}
                                   </div>
                                   <div className="text-center text-slate-300 py-0.5">
-                                    {cartela.numbers.G[row]}
+                                    {Array.isArray(cartela.numbers) && cartela.numbers[row] ? cartela.numbers[row][3] : '?'}
                                   </div>
                                   <div className="text-center text-slate-300 py-0.5">
-                                    {cartela.numbers.O[row]}
+                                    {Array.isArray(cartela.numbers) && cartela.numbers[row] ? cartela.numbers[row][4] : '?'}
                                   </div>
                                 </React.Fragment>
                               ))}
