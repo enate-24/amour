@@ -1,100 +1,161 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { X, ChevronLeft, ChevronRight, Search, RefreshCw, AlertCircle } from 'lucide-react';
-import { useCartela } from '../hooks/useCartela';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { X, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { Cartela } from '../lib/api';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { simpleApiClient } from '../utils/simpleApiClient';
 
-const CARDS_PER_PAGE = 50;
+interface CartelasResponse {
+  cartelas: Cartela[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasMore: boolean;
+  userId: string;
+  loadTime?: number;
+}
 
-const CardList: React.FC = () => {
-  const { cartelas, loading, error, refreshCartelas } = useCartela();
+const CardListOptimized: React.FC = () => {
+  const [cartelas, setCartelas] = useState<Cartela[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCartela, setSelectedCartela] = useState<Cartela | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [selectedCartelaIds, setSelectedCartelaIds] = useState<Set<string>>(new Set());
+  
+  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCartelas, setTotalCartelas] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loadTime, setLoadTime] = useState<number>(0);
-  const [refreshing, setRefreshing] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  
+  // Search state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredCartelas, setFilteredCartelas] = useState<Cartela[]>([]);
+  
+  const limit = 50; // Cards per page
 
-  // Memoized filtered and paginated cartelas
-  const { paginatedCartelas, totalPages, totalCartelas } = useMemo(() => {
-    let filtered = cartelas;
+  // Memoized filtered cartelas for client-side search
+  const searchResults = useMemo(() => {
+    if (!searchTerm.trim()) return cartelas;
     
-    // Filter by search term if provided
-    if (searchTerm.trim()) {
-      const search = searchTerm.toLowerCase();
-      filtered = cartelas.filter(cartela => 
-        cartela.card_id.toLowerCase().includes(search)
-      );
-    }
-    
-    // Sort numerically by card_id
-    filtered.sort((a, b) => Number(a.card_id) - Number(b.card_id));
-    
-    // Paginate
-    const startIndex = (currentPage - 1) * CARDS_PER_PAGE;
-    const endIndex = startIndex + CARDS_PER_PAGE;
-    const paginated = filtered.slice(startIndex, endIndex);
-    
-    return {
-      paginatedCartelas: paginated,
-      totalPages: Math.ceil(filtered.length / CARDS_PER_PAGE),
-      totalCartelas: filtered.length
-    };
-  }, [cartelas, currentPage, searchTerm]);
+    const search = searchTerm.toLowerCase();
+    return cartelas.filter(cartela => 
+      cartela.card_id.toLowerCase().includes(search)
+    );
+  }, [cartelas, searchTerm]);
 
-  // Reset to page 1 when search changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
-
-  // Fetch selected cartela IDs from active games with caching
-  useEffect(() => {
-    const fetchSelectedCartelas = async () => {
-      try {
-        setFetchError(null);
-        const response = await simpleApiClient.getSelectedCartelasStatus();
-        const data = response.data as { selectedCartelaIds?: string[] };
-        setSelectedCartelaIds(new Set(data.selectedCartelaIds || []));
-        setLoadTime(response.loadTime);
-        console.log(`Fetched selected cartela IDs in ${response.loadTime}ms (cached: ${response.fromCache})`);
-      } catch (error) {
-        console.error('Error fetching selected cartelas:', error);
-        setFetchError(error instanceof Error ? error.message : 'Failed to fetch selected cartelas');
+  // Fetch cartelas with pagination and caching
+  const fetchCartelas = useCallback(async (page: number = 1, useCache: boolean = true) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+      const token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        throw new Error('No authentication token found');
       }
-    };
 
-    fetchSelectedCartelas();
+      // Check cache first for better performance
+      const cacheKey = `cartelas_page_${page}_limit_${limit}`;
+      const cachedData = useCache ? sessionStorage.getItem(cacheKey) : null;
+      
+      if (cachedData) {
+        const data: CartelasResponse = JSON.parse(cachedData);
+        setCartelas(data.cartelas);
+        setCurrentPage(data.page);
+        setTotalPages(data.totalPages);
+        setTotalCartelas(data.total);
+        setHasMore(data.hasMore);
+        setLoadTime(data.loadTime || 0);
+        setLoading(false);
+        console.log(`✅ Loaded page ${data.page} from cache (${data.cartelas.length} cartelas)`);
+        return;
+      }
+
+      const startTime = Date.now();
+      const response = await fetch(`${API_BASE_URL}/cartelas/user-cartelas?page=${page}&limit=${limit}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data: CartelasResponse = await response.json();
+      const clientLoadTime = Date.now() - startTime;
+      
+      // Cache the response for better performance
+      if (useCache) {
+        sessionStorage.setItem(cacheKey, JSON.stringify({
+          ...data,
+          loadTime: data.loadTime || clientLoadTime
+        }));
+      }
+      
+      setCartelas(data.cartelas);
+      setCurrentPage(data.page);
+      setTotalPages(data.totalPages);
+      setTotalCartelas(data.total);
+      setHasMore(data.hasMore);
+      setLoadTime(data.loadTime || clientLoadTime);
+      
+      console.log(`✅ Loaded page ${data.page}/${data.totalPages} (${data.cartelas.length}/${data.total} cartelas) in ${data.loadTime || clientLoadTime}ms`);
+      
+    } catch (err) {
+      console.error('Error fetching cartelas:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch cartelas');
+    } finally {
+      setLoading(false);
+    }
+  }, [limit]);
+
+  // Fetch selected cartela IDs from active games
+  const fetchSelectedCartelas = useCallback(async () => {
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${API_BASE_URL}/cartelas/status/active-games`);
+
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedCartelaIds(new Set(data.selectedCartelaIds || []));
+      }
+    } catch (error) {
+      console.error('Error fetching selected cartelas:', error);
+    }
   }, []);
 
-  // WebSocket for real-time cartela selection updates
+  // Load initial page
+  useEffect(() => {
+    fetchCartelas(1);
+    fetchSelectedCartelas();
+  }, [fetchCartelas, fetchSelectedCartelas]);
+
+  // WebSocket for real-time updates
   useWebSocket({
     onCartelaSelected: (data) => {
       console.log('🔔 WebSocket: Cartela selected:', data.cartelaId);
-      // Refresh the selected cartelas list
-      const fetchSelectedCartelas = async () => {
-        try {
-          const response = await simpleApiClient.getSelectedCartelasStatus();
-          const data = response.data as { selectedCartelaIds?: string[] };
-          setSelectedCartelaIds(new Set(data.selectedCartelaIds || []));
-        } catch (error) {
-          console.error('Error fetching selected cartelas:', error);
-        }
-      };
       fetchSelectedCartelas();
     }
   });
 
   const handleCartelaClick = async (cartela: Cartela) => {
-    // If cartela doesn't have complete numbers, fetch them
+    // If cartela doesn't have numbers, fetch them
     if (!cartela.numbers || Object.keys(cartela.numbers).length === 0) {
       try {
-        const response = await simpleApiClient.getCartelaDetails(cartela.id);
-        const data = response.data as { cartela?: Cartela };
-        setSelectedCartela(data.cartela || cartela);
-        console.log(`Fetched cartela details in ${response.loadTime}ms (cached: ${response.fromCache})`);
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+        const response = await fetch(`${API_BASE_URL}/cartelas/${cartela.id}?includeNumbers=true`);
+        if (response.ok) {
+          const data = await response.json();
+          setSelectedCartela(data.cartela);
+        } else {
+          setSelectedCartela(cartela);
+        }
       } catch (error) {
         console.error('Error fetching cartela details:', error);
         setSelectedCartela(cartela);
@@ -112,7 +173,9 @@ const CardList: React.FC = () => {
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages && newPage !== currentPage) {
-      setCurrentPage(newPage);
+      // Clear search when changing pages
+      setSearchTerm('');
+      fetchCartelas(newPage);
     }
   };
 
@@ -120,42 +183,20 @@ const CardList: React.FC = () => {
     setSearchTerm(e.target.value);
   };
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    setFetchError(null);
-    try {
-      await refreshCartelas();
-      // Also refresh selected cartelas
-      const response = await simpleApiClient.getSelectedCartelasStatus();
-      const data = response.data as { selectedCartelaIds?: string[] };
-      setSelectedCartelaIds(new Set(data.selectedCartelaIds || []));
-    } catch (error) {
-      console.error('Error refreshing:', error);
-      setFetchError(error instanceof Error ? error.message : 'Failed to refresh data');
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
   const clearCache = () => {
-    simpleApiClient.clearCache();
-    refreshCartelas();
+    // Clear session storage cache
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key && key.startsWith('cartelas_page_')) {
+        sessionStorage.removeItem(key);
+      }
+    }
+    // Refresh current page
+    fetchCartelas(currentPage, false);
   };
 
   const renderBingoCard = (cartela: Cartela) => {
     const columns = ['B', 'I', 'N', 'G', 'O'] as const;
-
-    // Add safety check for cartela numbers
-    if (!cartela.numbers || typeof cartela.numbers !== 'object') {
-      console.warn('Invalid cartela numbers format:', cartela.numbers);
-      return (
-        <div className="inline-block bg-white rounded-xl shadow-lg p-3 sm:p-4">
-          <div className="text-red-500 text-center p-4">
-            Invalid cartela data
-          </div>
-        </div>
-      );
-    }
 
     return (
       <div className="inline-block bg-white rounded-xl shadow-lg p-3 sm:p-4">
@@ -176,7 +217,7 @@ const CardList: React.FC = () => {
           {Array.from({ length: 5 }, (_, rowIndex) =>
             columns.map((column, colIndex) => {
               const isCenter = rowIndex === 2 && colIndex === 2;
-              const number = cartela.numbers[column]?.[rowIndex];
+              const number = cartela.numbers?.[column]?.[rowIndex];
 
               return (
                 <div
@@ -198,8 +239,6 @@ const CardList: React.FC = () => {
   };
 
   const renderPagination = () => {
-    if (totalPages <= 1) return null;
-
     const maxVisiblePages = 5;
     const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
     const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
@@ -264,54 +303,30 @@ const CardList: React.FC = () => {
     );
   };
 
+  const displayCartelas = searchTerm ? searchResults : cartelas;
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-6 sm:mb-8">
-        <div className="flex items-center justify-between mb-3 sm:mb-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">
-            Cartela List
-            {totalCartelas > 0 && (
-              <span className="text-lg text-gray-600 ml-2">
-                ({totalCartelas} total)
-              </span>
-            )}
-          </h1>
-          
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing || loading}
-            className="p-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white rounded-lg transition-colors flex items-center gap-2"
-            title="Refresh cartelas"
-          >
-            <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
-        </div>
-
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-3 sm:mb-4">
+          Cartela List
+          {totalCartelas > 0 && (
+            <span className="text-lg text-gray-600 ml-2">
+              ({totalCartelas} total)
+            </span>
+          )}
+        </h1>
+        
         {/* Performance Info */}
         {loadTime > 0 && (
           <div className="text-sm text-gray-500 mb-3">
-            Last loaded in {loadTime}ms
+            Loaded in {loadTime}ms
             <button 
               onClick={clearCache}
               className="ml-2 text-blue-500 hover:text-blue-700 underline"
             >
               Clear Cache
-            </button>
-          </div>
-        )}
-
-        {/* Fetch Error */}
-        {fetchError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-            <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
-            <p className="text-red-700 text-sm">{fetchError}</p>
-            <button 
-              onClick={handleRefresh}
-              className="ml-auto text-red-600 hover:text-red-800 underline text-sm"
-            >
-              Retry
             </button>
           </div>
         )}
@@ -351,7 +366,7 @@ const CardList: React.FC = () => {
         <div className="text-center py-12">
           <p className="text-red-400 text-lg mb-4">Error: {error}</p>
           <button
-            onClick={refreshCartelas}
+            onClick={() => fetchCartelas(currentPage, false)}
             className="px-3 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
           >
             Try Again
@@ -359,15 +374,15 @@ const CardList: React.FC = () => {
         </div>
       )}
 
-      {/* Cartela Cards Display */}
+      {/* Cartela Cards Display - Optimized Grid */}
       {!loading && !error && (
         <div>
           {/* Search Results Info */}
           {searchTerm && (
             <div className="mb-4 p-3 bg-blue-50 rounded-lg">
               <p className="text-blue-700">
-                Found {paginatedCartelas.length} cartela(s) matching "{searchTerm}"
-                {paginatedCartelas.length === 0 && (
+                Found {searchResults.length} cartela(s) matching "{searchTerm}"
+                {searchResults.length === 0 && (
                   <button 
                     onClick={() => setSearchTerm('')}
                     className="ml-2 text-blue-500 hover:text-blue-700 underline"
@@ -380,7 +395,7 @@ const CardList: React.FC = () => {
           )}
 
           <div className="flex flex-wrap gap-2 sm:gap-2.5">
-            {paginatedCartelas.map((cartela: Cartela, index: number) => (
+            {displayCartelas.map((cartela: Cartela, index: number) => (
               <button
                 key={cartela.id || `cartela-${index}`}
                 onClick={() => handleCartelaClick(cartela)}
@@ -396,21 +411,21 @@ const CardList: React.FC = () => {
             ))}
           </div>
 
-          {paginatedCartelas.length === 0 && !searchTerm && (
+          {displayCartelas.length === 0 && !searchTerm && (
             <div className="mt-6 p-4 sm:p-6 bg-blue-50 rounded-lg">
               <p className="text-blue-700 font-medium text-center text-sm sm:text-base">
-                No cartelas available. Please check if the backend server is running.
+                No cartelas available on this page.
               </p>
             </div>
           )}
 
-          {/* Pagination - only show when not searching or when search has results */}
-          {(!searchTerm || paginatedCartelas.length > 0) && renderPagination()}
+          {/* Pagination - only show when not searching */}
+          {!searchTerm && totalPages > 1 && renderPagination()}
           
           {/* Page Info */}
-          {totalCartelas > 0 && (
+          {!searchTerm && totalCartelas > 0 && (
             <div className="text-center mt-4 text-gray-600">
-              Showing {((currentPage - 1) * CARDS_PER_PAGE) + 1} to {Math.min(currentPage * CARDS_PER_PAGE, totalCartelas)} of {totalCartelas} cartelas
+              Showing {((currentPage - 1) * limit) + 1} to {Math.min(currentPage * limit, totalCartelas)} of {totalCartelas} cartelas
             </div>
           )}
         </div>
@@ -451,4 +466,4 @@ const CardList: React.FC = () => {
   );
 };
 
-export default CardList;
+export default CardListOptimized;

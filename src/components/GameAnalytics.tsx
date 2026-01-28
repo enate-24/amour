@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, RefreshCw } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -36,59 +36,74 @@ const GameAnalytics: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const { user } = useAuth();
 
+  // Debug logging
+  useEffect(() => {
+    try {
+      console.log('🔍 GameAnalytics component mounted');
+      console.log('👤 Current user:', user);
+      console.log('🌐 API Base URL:', API_BASE_URL);
+      console.log('🌐 Environment VITE_API_URL:', import.meta.env.VITE_API_URL);
+      console.log('🌐 Current origin:', window.location.origin);
+    } catch (err) {
+      console.error('❌ Error in debug logging:', err);
+    }
+  }, [user]);
+
   // For regular users, automatically filter by their username
   const isRegularUser = user && user.role !== 'admin';
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
-  // Fetch games data from database
-  useEffect(() => {
-    // For regular users, automatically set their username for filtering
-    if (isRegularUser && user?.username && usernameSearch !== user.username) {
-      setUsernameSearch(user.username);
-    } else {
-      fetchGamesData();
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        hour12: true
+      });
+    } catch {
+      return dateString;
     }
-  }, [usernameSearch, isRegularUser, user?.username]);
+  };
 
-  // Filter games based on search term
-  useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredGames(gamesData);
-    } else {
-      const filtered = gamesData.filter(game =>
-        game.gameNumber.toString().includes(searchTerm.trim()) ||
-        game.gameId.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredGames(filtered);
-    }
-  }, [searchTerm, gamesData]);
-
-  const fetchGamesData = async () => {
+  const fetchGamesData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
       const token = localStorage.getItem('auth_token');
       if (!token) {
-        setError('Authentication token not found');
+        setError('Authentication token not found. Please log in again.');
         return;
       }
 
-      const url = new URL(`${API_BASE_URL}/games/analysis`);
+      // Build URL properly - handle both absolute and relative URLs
+      let fetchUrl = `${API_BASE_URL}/games/analysis`;
+      const params = new URLSearchParams();
       if (usernameSearch) {
-        url.searchParams.append('username', usernameSearch);
+        params.append('username', usernameSearch);
+      }
+      if (params.toString()) {
+        fetchUrl += `?${params.toString()}`;
       }
 
-      const response = await fetch(url.toString(), {
+      console.log('🔍 Fetching games data from:', fetchUrl);
+
+      const response = await fetch(fetchUrl, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
 
+      console.log('📥 Response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Games data received:', data);
 
         // Transform the API data to match our interface
         // Note: PostgreSQL returns lowercase field names
@@ -110,34 +125,58 @@ const GameAnalytics: React.FC = () => {
           playersDetails: game.playersDetails || []
       }));
 
+        console.log('🎯 Transformed games:', transformedGames);
         setGamesData(transformedGames);
       } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to fetch games data');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('❌ API Error:', response.status, errorData);
+        setError(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
     } catch (error) {
-      console.error('Error fetching games data:', error);
-      setError('Network error: Please check if the API server is running');
+      console.error('❌ Network error fetching games data:', error);
+      
+      // More specific error handling
+      if (error instanceof TypeError) {
+        if (error.message.includes('Failed to construct')) {
+          setError('Configuration error: Invalid API URL. Please check your environment settings.');
+        } else if (error.message.includes('fetch')) {
+          setError('Network error: Unable to connect to the server. Please check if the backend is running.');
+        } else {
+          setError(`Network error: ${error.message}`);
+        }
+      } else {
+        setError(`Network error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [API_BASE_URL, usernameSearch]); // Add dependencies for useCallback
 
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        hour12: true
-      });
-    } catch {
-      return dateString;
+  // Initialize component and set username for regular users
+  useEffect(() => {
+    if (isRegularUser && user?.username && usernameSearch !== user.username) {
+      setUsernameSearch(user.username);
     }
-  };
+  }, [isRegularUser, user?.username]); // Only depend on user changes
+
+  // Fetch games data when username search changes
+  useEffect(() => {
+    fetchGamesData();
+  }, [fetchGamesData]); // Depend on the memoized function
+
+  // Filter games based on search term
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setFilteredGames(gamesData);
+    } else {
+      const filtered = gamesData.filter(game =>
+        game.gameNumber.toString().includes(searchTerm.trim()) ||
+        game.gameId.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredGames(filtered);
+    }
+  }, [searchTerm, gamesData]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -157,6 +196,9 @@ const GameAnalytics: React.FC = () => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-400 mx-auto mb-4"></div>
           <p>Loading game analytics...</p>
+          <p className="text-sm text-slate-400 mt-2">
+            If this takes too long, check the browser console for errors
+          </p>
         </div>
       </div>
     );
@@ -167,7 +209,17 @@ const GameAnalytics: React.FC = () => {
       <div className="p-4 sm:p-6 bg-slate-900 min-h-screen text-white">
         <div className="text-center">
           <div className="bg-red-600 text-white p-4 rounded-lg mb-4">
-            <p className="text-sm sm:text-base">Error: {error}</p>
+            <p className="text-sm sm:text-base font-semibold mb-2">Game Analytics Error</p>
+            <p className="text-sm sm:text-base">{error}</p>
+          </div>
+          <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4 mb-4">
+            <h3 className="text-blue-400 font-semibold mb-2">Troubleshooting Steps:</h3>
+            <ul className="text-left text-sm text-slate-300 space-y-1">
+              <li>1. Check if the backend server is running</li>
+              <li>2. Verify your authentication token is valid</li>
+              <li>3. Check browser console for detailed errors</li>
+              <li>4. Try refreshing the page</li>
+            </ul>
           </div>
           <button
             onClick={handleRefresh}

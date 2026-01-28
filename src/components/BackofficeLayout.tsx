@@ -7,7 +7,8 @@ import {
   X,
   Shield,
   User,
-  Grid3x3
+  Grid3x3,
+  TrendingUp
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
@@ -94,6 +95,7 @@ const BackofficeLayout: React.FC = () => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'text-blue-400' },
     { id: 'cartela-management', label: 'Cartela Management', icon: Grid3x3, color: 'text-green-400' },
+    { id: 'game-analytics', label: 'Game Analytics', icon: TrendingUp, color: 'text-cyan-400' },
     ...(userRole === 'admin' ? [
       { id: 'user-management', label: 'User Management', icon: User, color: 'text-purple-400' },
       { id: 'cartela-assignment', label: 'Cartela & Voice Assignment', icon: Grid3x3, color: 'text-yellow-400' },

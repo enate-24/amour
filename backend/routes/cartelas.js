@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
-const { users, games, cartelas, userCartelas } = require('../data/database.js');
+const { users, games, cartelas, userCartelas, pool } = require('../data/database.js');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
@@ -271,86 +271,97 @@ router.get('/all-cartelas-light', async (req, res) => {
   }
 });
 
-// Get all cartelas from database (public endpoint) - OPTIMIZED
+// Get all cartelas from database (public endpoint) - HEAVILY OPTIMIZED
 router.get('/all-cartelas', async (req, res) => {
   try {
-    console.log('📦 Fetching all cartelas with full data...');
+    console.log('📦 Fetching all cartelas with optimized query...');
     const startTime = Date.now();
     
-    // Fetch all cartelas from database
-    const allCartelas = await cartelas.findAll();
-
-    const fetchDuration = Date.now() - startTime;
-    console.log(`✅ Fetched ${allCartelas.length} cartelas from DB in ${fetchDuration}ms`);
+    // Add query parameters for pagination and filtering
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500); // Cap at 500 per page
+    const offset = (page - 1) * limit;
+    const includeNumbers = req.query.includeNumbers !== 'false'; // Default true
     
-    if (allCartelas.length > 0) {
-      console.log('Sample cartela from DB:', {
-        id: allCartelas[0].id,
-        card_id: allCartelas[0].card_id
-      });
-    }
+    // Use Promise.all for parallel queries
+    const [countResult, cartelasResult] = await Promise.all([
+      // Get total count
+      pool.query('SELECT COUNT(*) as total FROM cartelas WHERE is_active = 1'),
+      // Get paginated cartelas with conditional number inclusion
+      pool.query(`
+        SELECT id, card_id, user_id, game_id, 
+               ${includeNumbers ? 'numbers,' : ''} 
+               pattern, is_active, purchased_at, is_winner
+        FROM cartelas 
+        WHERE is_active = 1 
+        ORDER BY CAST(card_id AS INTEGER)
+        LIMIT $1 OFFSET $2
+      `, [limit, offset])
+    ]);
 
-    // Transform the data to match the expected format with parsed numbers
-    // OPTIMIZATION: Skip expensive winner checking for initial load
-    // Winner checking should be done on-demand during gameplay, not on cartela list load
+    const totalCartelas = parseInt(countResult.rows[0].total);
+    const allCartelas = cartelasResult.rows;
+    
+    const fetchDuration = Date.now() - startTime;
+    console.log(`✅ Fetched ${allCartelas.length}/${totalCartelas} cartelas from DB in ${fetchDuration}ms`);
+
+    // Optimized transformation - skip expensive operations for list view
     const transformedCartelas = allCartelas.map((cartela) => {
-      let numbers;
-      try {
-        // Parse the JSON string from database
-        const rawNumbers = typeof cartela.numbers === 'string'
-          ? JSON.parse(cartela.numbers)
-          : cartela.numbers;
-
-        // Handle different number formats
-        if (Array.isArray(rawNumbers) && rawNumbers.length === 5 && Array.isArray(rawNumbers[0])) {
-          // Convert 2D array format to object format
-          numbers = {
-            B: rawNumbers.map(row => row[0]),
-            I: rawNumbers.map(row => row[1]),
-            N: rawNumbers.map(row => row[2]),
-            G: rawNumbers.map(row => row[3]),
-            O: rawNumbers.map(row => row[4])
-          };
-        } else if (rawNumbers && typeof rawNumbers === 'object' && rawNumbers.B) {
-          // Already in correct object format
-          numbers = rawNumbers;
-        } else {
-          throw new Error('Invalid number format');
-        }
-      } catch (error) {
-        console.error(`Error parsing numbers for cartela ${cartela.card_id}:`, error);
-        numbers = { B: [], I: [], N: [], G: [], O: [] };
-      }
-
-      // Return minimal cartela data for list view
-      // Winner checking is expensive and should only be done during active gameplay
-      return {
+      const baseCartela = {
         id: cartela.id,
         card_id: cartela.card_id,
         user_id: cartela.user_id,
         game_id: cartela.game_id,
-        numbers,
         pattern: cartela.pattern,
         is_active: cartela.is_active,
         purchased_at: cartela.purchased_at,
-        isWinner: cartela.is_winner || false, // Static winner status from database
-        dynamicWinnerStatus: false, // Skip expensive checking on list load
-        win: false,
-        cardType: 'stillnotwin',
-        soundType: 'notwinner',
-        potentialWinningPatterns: [],
+        isWinner: cartela.is_winner || false,
         createdAt: cartela.purchased_at
       };
+
+      // Only parse numbers if requested (for detailed view)
+      if (includeNumbers && cartela.numbers) {
+        try {
+          const rawNumbers = typeof cartela.numbers === 'string'
+            ? JSON.parse(cartela.numbers)
+            : cartela.numbers;
+
+          if (Array.isArray(rawNumbers) && rawNumbers.length === 5 && Array.isArray(rawNumbers[0])) {
+            // Convert 2D array format to object format
+            baseCartela.numbers = {
+              B: rawNumbers.map(row => row[0]),
+              I: rawNumbers.map(row => row[1]),
+              N: rawNumbers.map(row => row[2]),
+              G: rawNumbers.map(row => row[3]),
+              O: rawNumbers.map(row => row[4])
+            };
+          } else if (rawNumbers && typeof rawNumbers === 'object' && rawNumbers.B) {
+            baseCartela.numbers = rawNumbers;
+          } else {
+            baseCartela.numbers = { B: [], I: [], N: [], G: [], O: [] };
+          }
+        } catch (error) {
+          console.warn(`Error parsing numbers for cartela ${cartela.card_id}:`, error);
+          baseCartela.numbers = { B: [], I: [], N: [], G: [], O: [] };
+        }
+      }
+
+      return baseCartela;
     });
 
     const totalDuration = Date.now() - startTime;
-    console.log(`✅ Successfully transformed ${transformedCartelas.length} cartelas in ${totalDuration}ms total`);
+    console.log(`✅ Optimized processing completed in ${totalDuration}ms total`);
 
     res.json({
       cartelas: transformedCartelas,
-      total: transformedCartelas.length,
+      total: totalCartelas,
+      page: page,
+      limit: limit,
+      totalPages: Math.ceil(totalCartelas / limit),
+      hasMore: page < Math.ceil(totalCartelas / limit),
       source: 'database',
-      loadTime: totalDuration
+      loadTime: totalDuration,
+      includeNumbers: includeNumbers
     });
   } catch (error) {
     console.error('Get all cartelas error:', error);
@@ -361,42 +372,89 @@ router.get('/all-cartelas', async (req, res) => {
   }
 });
 
-// Get cartelas for current authenticated user
+// Get cartelas for current authenticated user - OPTIMIZED
 router.get('/user-cartelas', authenticateToken, async (req, res) => {
   try {
     console.log('🎯 /user-cartelas endpoint hit!');
     const userId = req.user.id;
-    console.log(`📦 Fetching cartelas for user: ${userId}`);
-
-    // Get user's cartelas from user_cartelas table
-    const userCartelaList = await userCartelas.findByUserId(userId);
-    console.log(`✅ Found ${userCartelaList.length} cartelas for user ${userId}`);
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100); // Cap at 100 per page
+    const offset = (page - 1) * limit;
     
-    if (userCartelaList.length > 0) {
-      console.log(`📋 User cartela card_ids:`, userCartelaList.map(c => c.card_id).sort((a, b) => parseInt(a) - parseInt(b)));
-    }
+    console.log(`📦 Fetching cartelas for user: ${userId} (page ${page}, limit ${limit})`);
+    const startTime = Date.now();
 
-    // Transform the data to match the expected format
-    const transformedCartelas = userCartelaList.map((cartela) => ({
-      id: cartela.id,
-      card_id: cartela.card_id,
-      user_id: cartela.user_id,
-      game_id: null, // User cartelas don't have game_id
-      numbers: cartela.numbers,
-      pattern: cartela.pattern,
-      is_active: cartela.is_active,
-      purchased_at: cartela.created_at,
-      isWinner: cartela.is_winner || false,
-      win: false,
-      cardType: 'stillnotwin',
-      soundType: 'notwinner',
-      createdAt: cartela.created_at
-    }));
+    // Use Promise.all for parallel queries to improve performance
+    const [countResult, userCartelaList] = await Promise.all([
+      // Get total count
+      pool.query(
+        'SELECT COUNT(*) as total FROM user_cartelas WHERE user_id = $1 AND is_active = 1',
+        [userId]
+      ),
+      // Get paginated user cartelas with optimized query
+      pool.query(`
+        SELECT id, card_id, user_id, numbers, pattern, is_active, created_at, is_winner
+        FROM user_cartelas 
+        WHERE user_id = $1 AND is_active = 1 
+        ORDER BY CAST(card_id AS INTEGER)
+        LIMIT $2 OFFSET $3
+      `, [userId, limit, offset])
+    ]);
+    
+    const totalCartelas = parseInt(countResult.rows[0].total);
+    const queryTime = Date.now() - startTime;
+    
+    console.log(`✅ Found ${userCartelaList.rows.length} cartelas for user ${userId} (page ${page}/${Math.ceil(totalCartelas / limit)}) in ${queryTime}ms`);
+
+    // Optimized data transformation with minimal processing
+    const transformedCartelas = userCartelaList.rows.map((cartela) => {
+      let numbers = { B: [], I: [], N: [], G: [], O: [] };
+      
+      try {
+        const parsed = JSON.parse(cartela.numbers || '[]');
+        
+        // Fast path for already formatted data
+        if (parsed && typeof parsed === 'object' && parsed.B) {
+          numbers = parsed;
+        } else if (Array.isArray(parsed) && parsed.length === 25) {
+          // Convert flat array to BINGO format efficiently
+          const columns = ['B', 'I', 'N', 'G', 'O'];
+          for (let col = 0; col < 5; col++) {
+            numbers[columns[col]] = [];
+            for (let row = 0; row < 5; row++) {
+              const index = row * 5 + col;
+              numbers[columns[col]].push(col === 2 && row === 2 ? 0 : parsed[index]);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`Failed to parse numbers for cartela ${cartela.card_id}:`, e);
+      }
+
+      // Return minimal data structure for list view
+      return {
+        id: cartela.id,
+        card_id: cartela.card_id,
+        user_id: cartela.user_id,
+        numbers: numbers,
+        is_active: cartela.is_active,
+        isWinner: cartela.is_winner || false,
+        createdAt: cartela.created_at
+      };
+    });
+
+    const totalTime = Date.now() - startTime;
+    console.log(`⚡ Total processing time: ${totalTime}ms`);
 
     res.json({
       cartelas: transformedCartelas,
-      total: transformedCartelas.length,
-      userId: userId
+      total: totalCartelas,
+      page: page,
+      limit: limit,
+      totalPages: Math.ceil(totalCartelas / limit),
+      hasMore: page < Math.ceil(totalCartelas / limit),
+      userId: userId,
+      loadTime: totalTime
     });
   } catch (error) {
     console.error('Get user cartelas error:', error);

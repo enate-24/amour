@@ -23,6 +23,7 @@ import Balance from './components/Balance';
 import Sidebar from './components/Sidebar';
 import BackofficeLayout from './components/BackofficeLayout';
 import BackofficeDashboard from './components/BackofficeDashboard';
+import SimplePerformanceMonitor from './components/SimplePerformanceMonitor';
 
 import AdminUserManagement from './components/AdminUserManagement';
 import AdminCartelaAssignment from './components/AdminCartelaAssignment';
@@ -30,6 +31,8 @@ import CartelaManagement from './components/CartelaManagement';
 import PackageManagement from './components/PackageManagement';
 import NewAccountPage from './components/NewAccountPage';
 import NewGame from './components/NewGame';
+import GameAnalytics from './components/GameAnalytics';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Initialize audio manager with smart caching (no repeated downloads)
 const initializeAudioManager = async () => {
@@ -210,7 +213,7 @@ function AppContent() {
       }
     } else {
       // Regular user - redirect from root or any non-user path to game
-      const validUserPaths = ['/dashboard', '/game', '/balance', '/select-cartela', '/newgame', '/card-list', '/settings', '/new-account'];
+      const validUserPaths = ['/dashboard', '/game', '/balance', '/select-cartela', '/newgame', '/card-list', '/game-analytics', '/settings', '/new-account'];
       const isValidUserPath = validUserPaths.some(path => currentPath === path);
       
       if (currentPath === '/' || !isValidUserPath) {
@@ -260,6 +263,11 @@ function AppContent() {
           <Route path="user-management" element={<AdminUserManagement />} />
           <Route path="cartela-assignment" element={<AdminCartelaAssignment />} />
           <Route path="package-management" element={<PackageManagement />} />
+          <Route path="game-analytics" element={
+            <ErrorBoundary>
+              <GameAnalytics />
+            </ErrorBoundary>
+          } />
           <Route path="" element={<BackofficeDashboard />} />
         </Route>
         <Route path="*" element={<BackofficeLayout />} />
@@ -319,10 +327,15 @@ function AppContent() {
           <Routes>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/balance" element={<Balance />} />
-            <Route path="/game" element={<GamePage onNavigateToLottery={() => navigate('/newgame')} />} />
+            <Route path="/game" element={<GamePage />} />
             <Route path="/select-cartela" element={<Selectcartela />} />
             <Route path="/newgame" element={<NewGame />} />
             <Route path="/card-list" element={<CardList />} />
+            <Route path="/game-analytics" element={
+              <ErrorBoundary>
+                <GameAnalytics />
+              </ErrorBoundary>
+            } />
             <Route path="/settings" element={<Settings />} />
             <Route path="/new-account" element={
               <NewAccountPage
@@ -343,6 +356,9 @@ function AppContent() {
           </Routes>
         </main>
       </div>
+      
+      {/* Simple Performance Monitor - Only show in development or for admins */}
+      {(import.meta.env.DEV || user?.role === 'admin') && <SimplePerformanceMonitor />}
     </div>
   );
 }

@@ -885,22 +885,8 @@ const GamePageOptimized = (): JSX.Element => {
       const isSelected = selectedCartelasArray.includes(inputId.trim());
       
       if (!isSelected) {
-        // Show simple notification message for 2 seconds
+        // Show simple notification message for 2 seconds - NO SOUND for unregistered cartelas
         setNotificationMessage(`Cartela ${inputId.trim()} not registered`);
-        
-        // Play notwinner sound using UnifiedAudioManager
-        const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
-        schedulePlay(() => {
-          try {
-            if (audioManagerRef.current) {
-              audioManagerRef.current.playSound('notwinner').catch((error) => {
-                console.warn('⚠️ Could not play notwinner sound:', error);
-              });
-            }
-          } catch (error) {
-            // Silent fail
-          }
-        });
         
         // Clear message after 2 seconds
         setTimeout(() => {
@@ -919,123 +905,243 @@ const GamePageOptimized = (): JSX.Element => {
       console.log(`🎮 Game ID:`, gameId);
       console.log(`📋 Selected pattern:`, selectedPattern);
 
-      const requestBody = {
-        cartelaId: inputId.trim(),
-        gameId: gameId,
-        patterns: [selectedPattern],
-        calledNumbers: calledNumbersToSend
-      };
-      
-      console.log('📤 Sending request:', requestBody);
-
-      const response = await fetch(`${API_BASE_URL}/winner-check`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-      
-      console.log('📥 Response status:', response.status);
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('✅ Winner check result:', result);
-        console.log('📦 Cartela in result:', result.cartela);
-        console.log('🔢 Numbers in cartela:', result.cartela?.numbers);
-        console.log('🔢 Numbers type:', typeof result.cartela?.numbers);
-        console.log('🔢 Is array?:', Array.isArray(result.cartela?.numbers));
-        
-        // The backend should already include cartela data
-        // If it's missing or malformed, show the result anyway
-        if (!result.cartela || !result.cartela.numbers) {
-          console.warn('⚠️ Cartela data missing or incomplete in response');
-        } else if (result.cartela.numbers) {
-          // Check if numbers is a 2D array, if not, try to parse/convert it
-          if (typeof result.cartela.numbers === 'string') {
-            try {
-              result.cartela.numbers = JSON.parse(result.cartela.numbers);
-              console.log('✅ Parsed numbers from string:', result.cartela.numbers);
-            } catch (e) {
-              console.error('❌ Failed to parse numbers string:', e);
-            }
-          }
-          
-          // If numbers is an object (like {B: [...], I: [...], N: [...], G: [...], O: [...]}), convert to 2D array
-          if (result.cartela.numbers && typeof result.cartela.numbers === 'object' && !Array.isArray(result.cartela.numbers)) {
-            console.log('🔄 Converting numbers object to 2D array');
-            const numbersObj = result.cartela.numbers as any;
-            
-            // Check if it has BINGO keys
-            if (numbersObj.B && numbersObj.I && numbersObj.N && numbersObj.G && numbersObj.O) {
-              result.cartela.numbers = [
-                numbersObj.B,
-                numbersObj.I,
-                numbersObj.N,
-                numbersObj.G,
-                numbersObj.O
-              ];
-              console.log('✅ Converted to 2D array:', result.cartela.numbers);
-            } else {
-              console.error('❌ Numbers object does not have BINGO keys:', numbersObj);
-            }
-          }
-          
-          // Verify it's a 2D array
-          if (Array.isArray(result.cartela.numbers)) {
-            if (result.cartela.numbers.length > 0 && !Array.isArray(result.cartela.numbers[0])) {
-              console.warn('⚠️ Numbers is not a 2D array, it might be flat');
-            } else {
-              console.log('✅ Numbers is a valid 2D array with', result.cartela.numbers.length, 'columns');
-            }
-          }
-        }
-        
-        setCartelaCheckResult(result);
-        setShowCartelaCheckModal(true);
-        
-        // Play sound based on result using UnifiedAudioManager
-        const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
-        schedulePlay(() => {
-          try {
-            const soundName = result.win ? 'winner' : 'notwinner';
-            console.log(`🔊 Playing ${soundName} sound with voice category`);
-            
-            if (audioManagerRef.current) {
-              audioManagerRef.current.playSound(soundName).catch((error) => {
-                console.warn(`⚠️ Could not play ${soundName} sound:`, error);
-              });
-            } else {
-              console.warn('⚠️ Audio manager not available for winner sound');
-            }
-          } catch (error) {
-            console.warn('⚠️ Error playing winner sound:', error);
-          }
-        });
-      } else {
-        let errorData;
-        try {
-          errorData = await response.json();
-        } catch (e) {
-          errorData = { message: await response.text() };
-        }
-        console.error('❌ Winner check error response:', errorData);
-        console.error('❌ Status:', response.status);
-        
-        // Show error in modal instead of alert
-        setCartelaCheckResult({
-          success: false,
+      // Check if we're online or offline
+      if (isOnline) {
+        // ONLINE MODE: Use API call
+        const requestBody = {
           cartelaId: inputId.trim(),
           gameId: gameId,
-          win: false,
-          cardType: 'error',
-          soundType: 'notwinner',
-          winningPatterns: [],
-          calledNumbersCount: called.length,
-          message: errorData.message || errorData.errors?.[0]?.msg || `Error checking cartela (Status: ${response.status})`
+          patterns: [selectedPattern],
+          calledNumbers: calledNumbersToSend
+        };
+        
+        console.log('📤 Sending request:', requestBody);
+
+        const response = await fetch(`${API_BASE_URL}/winner-check`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestBody)
         });
-        setShowCartelaCheckModal(true);
+        
+        console.log('📥 Response status:', response.status);
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('✅ Winner check result:', result);
+          console.log('📦 Cartela in result:', result.cartela);
+          console.log('🔢 Numbers in cartela:', result.cartela?.numbers);
+          console.log('🔢 Numbers type:', typeof result.cartela?.numbers);
+          console.log('🔢 Is array?:', Array.isArray(result.cartela?.numbers));
+          
+          // The backend should already include cartela data
+          // If it's missing or malformed, show the result anyway
+          if (!result.cartela || !result.cartela.numbers) {
+            console.warn('⚠️ Cartela data missing or incomplete in response');
+          } else if (result.cartela.numbers) {
+            // Check if numbers is a 2D array, if not, try to parse/convert it
+            if (typeof result.cartela.numbers === 'string') {
+              try {
+                result.cartela.numbers = JSON.parse(result.cartela.numbers);
+                console.log('✅ Parsed numbers from string:', result.cartela.numbers);
+              } catch (e) {
+                console.error('❌ Failed to parse numbers string:', e);
+              }
+            }
+            
+            // If numbers is an object (like {B: [...], I: [...], N: [...], G: [...], O: [...]}), convert to 2D array
+            if (result.cartela.numbers && typeof result.cartela.numbers === 'object' && !Array.isArray(result.cartela.numbers)) {
+              console.log('🔄 Converting numbers object to 2D array');
+              const numbersObj = result.cartela.numbers as any;
+              
+              // Check if it has BINGO keys
+              if (numbersObj.B && numbersObj.I && numbersObj.N && numbersObj.G && numbersObj.O) {
+                result.cartela.numbers = [
+                  numbersObj.B,
+                  numbersObj.I,
+                  numbersObj.N,
+                  numbersObj.G,
+                  numbersObj.O
+                ];
+                console.log('✅ Converted to 2D array:', result.cartela.numbers);
+              } else {
+                console.error('❌ Numbers object does not have BINGO keys:', numbersObj);
+              }
+            }
+            
+            // Verify it's a 2D array
+            if (Array.isArray(result.cartela.numbers)) {
+              if (result.cartela.numbers.length > 0 && !Array.isArray(result.cartela.numbers[0])) {
+                console.warn('⚠️ Numbers is not a 2D array, it might be flat');
+              } else {
+                console.log('✅ Numbers is a valid 2D array with', result.cartela.numbers.length, 'columns');
+              }
+            }
+          }
+          
+          setCartelaCheckResult(result);
+          setShowCartelaCheckModal(true);
+          
+          // Play sound based on result using UnifiedAudioManager
+          const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
+          schedulePlay(() => {
+            try {
+              const soundName = result.win ? 'winner' : 'notwinner';
+              console.log(`🔊 Playing ${soundName} sound with voice category`);
+              
+              if (audioManagerRef.current) {
+                audioManagerRef.current.playSound(soundName).catch((error) => {
+                  console.warn(`⚠️ Could not play ${soundName} sound:`, error);
+                });
+              } else {
+                console.warn('⚠️ Audio manager not available for winner sound');
+              }
+            } catch (error) {
+              console.warn('⚠️ Error playing winner sound:', error);
+            }
+          });
+        } else {
+          let errorData;
+          try {
+            errorData = await response.json();
+          } catch (e) {
+            errorData = { message: await response.text() };
+          }
+          console.error('❌ Winner check error response:', errorData);
+          console.error('❌ Status:', response.status);
+          
+          // Show error in modal instead of alert
+          setCartelaCheckResult({
+            success: false,
+            cartelaId: inputId.trim(),
+            gameId: gameId,
+            win: false,
+            cardType: 'error',
+            soundType: 'notwinner',
+            winningPatterns: [],
+            calledNumbersCount: called.length,
+            message: errorData.message || errorData.errors?.[0]?.msg || `Error checking cartela (Status: ${response.status})`
+          });
+          setShowCartelaCheckModal(true);
+        }
+      } else {
+        // OFFLINE MODE: Use local pattern detection
+        console.log('🔌 OFFLINE MODE: Checking cartela locally');
+        
+        try {
+          // Import pattern detection utilities
+          const { checkWinningPatterns, validateCartela, countCompletedLines, convertCartelaToGrid } = await import('../utils/patternDetection');
+          const { offlineStorage } = await import('../utils/offlineStorage');
+          
+          // Get cartela data from offline storage
+          const cartelas = await offlineStorage.getCartelas();
+          const cartela = cartelas.find(c => c.card_id === inputId.trim());
+          
+          if (!cartela) {
+            setCartelaCheckResult({
+              success: false,
+              cartelaId: inputId.trim(),
+              gameId: gameId,
+              win: false,
+              cardType: 'error',
+              soundType: 'notwinner',
+              winningPatterns: [],
+              calledNumbersCount: called.length,
+              message: `Cartela ${inputId.trim()} not found in offline storage. Please sync when online.`
+            });
+            setShowCartelaCheckModal(true);
+            return;
+          }
+          
+          console.log('📋 Found cartela in offline storage:', cartela);
+          
+          // Validate cartela structure
+          if (!validateCartela(cartela)) {
+            setCartelaCheckResult({
+              success: false,
+              cartelaId: inputId.trim(),
+              gameId: gameId,
+              win: false,
+              cardType: 'error',
+              soundType: 'notwinner',
+              winningPatterns: [],
+              calledNumbersCount: called.length,
+              message: 'Invalid cartela data structure'
+            });
+            setShowCartelaCheckModal(true);
+            return;
+          }
+          
+          // Check winning patterns using offline logic
+          const winningPatterns = checkWinningPatterns(calledNumbersToSend, cartela, [selectedPattern]);
+          const isWinner = winningPatterns.length > 0;
+          
+          // Get completed lines for display
+          const grid = convertCartelaToGrid(cartela);
+          const { lines: completedLines } = countCompletedLines(grid, calledNumbersToSend);
+          
+          console.log(`🎯 OFFLINE RESULT: ${isWinner ? 'WINNER' : 'NO WIN'}`);
+          console.log(`🏆 Winning patterns: ${winningPatterns.join(', ')}`);
+          console.log(`📏 Completed lines: ${completedLines.join(', ')}`);
+          
+          // Create result object similar to API response
+          const result = {
+            success: true,
+            cartelaId: inputId.trim(),
+            gameId: gameId,
+            win: isWinner,
+            cardType: isWinner ? 'win' : 'stillnotwin',
+            soundType: isWinner ? 'winner' : 'notwinner',
+            winningPatterns: winningPatterns,
+            calledNumbersCount: called.length,
+            message: isWinner 
+              ? `Winner! Pattern: ${winningPatterns.join(', ')}`
+              : `Not a winner yet. Completed ${completedLines.length} lines.`,
+            cartela: {
+              ...cartela,
+              completedLines: completedLines
+            }
+          };
+          
+          setCartelaCheckResult(result);
+          setShowCartelaCheckModal(true);
+          
+          // Play sound based on result
+          const schedulePlay = (window as any).requestIdleCallback || requestAnimationFrame;
+          schedulePlay(() => {
+            try {
+              const soundName = result.win ? 'winner' : 'notwinner';
+              console.log(`🔊 Playing ${soundName} sound with voice category (offline)`);
+              
+              if (audioManagerRef.current) {
+                audioManagerRef.current.playSound(soundName).catch((error) => {
+                  console.warn(`⚠️ Could not play ${soundName} sound:`, error);
+                });
+              } else {
+                console.warn('⚠️ Audio manager not available for winner sound');
+              }
+            } catch (error) {
+              console.warn('⚠️ Error playing winner sound:', error);
+            }
+          });
+          
+        } catch (error) {
+          console.error('❌ Offline cartela check error:', error);
+          setCartelaCheckResult({
+            success: false,
+            cartelaId: inputId.trim(),
+            gameId: gameId,
+            win: false,
+            cardType: 'error',
+            soundType: 'notwinner',
+            winningPatterns: [],
+            calledNumbersCount: called.length,
+            message: 'Failed to check cartela offline. Please try again.'
+          });
+          setShowCartelaCheckModal(true);
+        }
       }
     } catch (error) {
       console.error('Error checking cartela:', error);
@@ -1057,14 +1163,14 @@ const GamePageOptimized = (): JSX.Element => {
         winningPatterns: [],
         calledNumbersCount: called.length,
         message: isNetworkError 
-          ? 'Cannot check cartela while offline. Please reconnect to verify winners.'
+          ? 'Network error occurred. Switching to offline mode...'
           : 'Failed to check cartela. Please try again.'
       });
       setShowCartelaCheckModal(true);
     } finally {
       setCheckingCartela(false);
     }
-  }, [inputId, selectedPattern, currentGameData, called, API_BASE_URL]);
+  }, [inputId, selectedPattern, currentGameData, called, API_BASE_URL, isOnline]);
 
   // Memoized styles
   const btnStyle = useMemo(() => ({
@@ -1473,6 +1579,34 @@ const GamePageOptimized = (): JSX.Element => {
         marginTop: "clamp(15px, 3vw, 20px)",
         marginLeft: "clamp(0px, 8vw, 70px)"
       }}>
+        {/* Offline Mode Indicator */}
+        {!isOnline && (
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            background: "linear-gradient(135deg, rgba(255, 165, 0, 0.15), rgba(255, 140, 0, 0.08))",
+            padding: "6px 10px",
+            borderRadius: "8px",
+            border: "1px solid rgba(255, 165, 0, 0.4)",
+            boxShadow: "0 2px 6px rgba(0, 0, 0, 0.3)"
+          }}>
+            <div style={{
+              fontSize: "14px",
+              filter: "drop-shadow(0 1px 2px rgba(255, 165, 0, 0.3))"
+            }}>
+              📱
+            </div>
+            <div style={{
+              fontSize: "12px",
+              color: "#FFD700",
+              fontWeight: "bold",
+              textShadow: "0 1px 2px rgba(0, 0, 0, 0.5)"
+            }}>
+              OFFLINE
+            </div>
+          </div>
+        )}
         {/* Auto Call Timer - Compact */}
         <div style={{
           display: "flex",
