@@ -377,11 +377,14 @@ router.get('/user-cartelas', authenticateToken, async (req, res) => {
   try {
     console.log('🎯 /user-cartelas endpoint hit!');
     const userId = req.user.id;
-    const page = parseInt(req.query.page) || 1;
-    const limit = Math.min(parseInt(req.query.limit) || 50, 100); // Cap at 100 per page
-    const offset = (page - 1) * limit;
+    const page = parseInt(req.query.page);
+    const requestedLimit = parseInt(req.query.limit);
     
-    console.log(`📦 Fetching cartelas for user: ${userId} (page ${page}, limit ${limit})`);
+    // If no pagination parameters provided, return ALL cartelas
+    const limit = page && requestedLimit ? Math.min(requestedLimit, 100) : null;
+    const offset = page && limit ? (page - 1) * limit : 0;
+    
+    console.log(`📦 Fetching cartelas for user: ${userId} ${limit ? `(page ${page}, limit ${limit})` : '(ALL cartelas)'}`);
     const startTime = Date.now();
 
     // Use Promise.all for parallel queries to improve performance
@@ -391,20 +394,31 @@ router.get('/user-cartelas', authenticateToken, async (req, res) => {
         'SELECT COUNT(*) as total FROM user_cartelas WHERE user_id = $1 AND is_active = 1',
         [userId]
       ),
-      // Get paginated user cartelas with optimized query
-      pool.query(`
-        SELECT id, card_id, user_id, numbers, pattern, is_active, created_at, is_winner
-        FROM user_cartelas 
-        WHERE user_id = $1 AND is_active = 1 
-        ORDER BY CAST(card_id AS INTEGER)
-        LIMIT $2 OFFSET $3
-      `, [userId, limit, offset])
+      // Get user cartelas with optional pagination
+      limit ? 
+        pool.query(`
+          SELECT id, card_id, user_id, numbers, pattern, is_active, created_at, is_winner
+          FROM user_cartelas 
+          WHERE user_id = $1 AND is_active = 1 
+          ORDER BY CAST(card_id AS INTEGER)
+          LIMIT $2 OFFSET $3
+        `, [userId, limit, offset]) :
+        pool.query(`
+          SELECT id, card_id, user_id, numbers, pattern, is_active, created_at, is_winner
+          FROM user_cartelas 
+          WHERE user_id = $1 AND is_active = 1 
+          ORDER BY CAST(card_id AS INTEGER)
+        `, [userId])
     ]);
     
     const totalCartelas = parseInt(countResult.rows[0].total);
     const queryTime = Date.now() - startTime;
     
-    console.log(`✅ Found ${userCartelaList.rows.length} cartelas for user ${userId} (page ${page}/${Math.ceil(totalCartelas / limit)}) in ${queryTime}ms`);
+    if (limit) {
+      console.log(`✅ Found ${userCartelaList.rows.length} cartelas for user ${userId} (page ${page}/${Math.ceil(totalCartelas / limit)}) in ${queryTime}ms`);
+    } else {
+      console.log(`✅ Found ALL ${userCartelaList.rows.length} cartelas for user ${userId} in ${queryTime}ms`);
+    }
 
     // Optimized data transformation with minimal processing
     const transformedCartelas = userCartelaList.rows.map((cartela) => {
@@ -449,10 +463,10 @@ router.get('/user-cartelas', authenticateToken, async (req, res) => {
     res.json({
       cartelas: transformedCartelas,
       total: totalCartelas,
-      page: page,
-      limit: limit,
-      totalPages: Math.ceil(totalCartelas / limit),
-      hasMore: page < Math.ceil(totalCartelas / limit),
+      page: page || 1,
+      limit: limit || totalCartelas,
+      totalPages: limit ? Math.ceil(totalCartelas / limit) : 1,
+      hasMore: limit ? page < Math.ceil(totalCartelas / limit) : false,
       userId: userId,
       loadTime: totalTime
     });

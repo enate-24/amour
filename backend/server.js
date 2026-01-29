@@ -80,7 +80,6 @@ app.use(cors({
       ...frontendUrls,
       // Fallback for backward compatibility
       'https://abisinya-bingo.netlify.app',
-      'https://abisinya-bingo.vercel.app',
       'https://fidel-bingo.vercel.app'
     ];
 
