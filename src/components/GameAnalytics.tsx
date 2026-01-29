@@ -91,6 +91,7 @@ const GameAnalytics: React.FC = () => {
       }
 
       console.log('🔍 Fetching games data from:', fetchUrl);
+      console.log('🔐 Using token:', token ? `${token.substring(0, 20)}...` : 'none');
 
       const response = await fetch(fetchUrl, {
         headers: {
@@ -100,6 +101,7 @@ const GameAnalytics: React.FC = () => {
       });
 
       console.log('📥 Response status:', response.status);
+      console.log('📥 Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (response.ok) {
         const data = await response.json();
@@ -128,9 +130,30 @@ const GameAnalytics: React.FC = () => {
         console.log('🎯 Transformed games:', transformedGames);
         setGamesData(transformedGames);
       } else {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        const errorText = await response.text();
+        console.error('❌ API Error Response:', errorText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText || `HTTP ${response.status}: ${response.statusText}` };
+        }
+        
         console.error('❌ API Error:', response.status, errorData);
-        setError(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        
+        // Provide specific error messages based on status code
+        if (response.status === 401) {
+          setError('Authentication failed. Please log in again.');
+        } else if (response.status === 403) {
+          setError('Access denied. You do not have permission to view game analytics.');
+        } else if (response.status === 404) {
+          setError('Game analytics endpoint not found. Please check if the backend is running.');
+        } else if (response.status >= 500) {
+          setError(`Server error (${response.status}): ${errorData.error || 'Internal server error'}`);
+        } else {
+          setError(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
       }
     } catch (error) {
       console.error('❌ Network error fetching games data:', error);
@@ -141,6 +164,8 @@ const GameAnalytics: React.FC = () => {
           setError('Configuration error: Invalid API URL. Please check your environment settings.');
         } else if (error.message.includes('fetch')) {
           setError('Network error: Unable to connect to the server. Please check if the backend is running.');
+        } else if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+          setError('Network connection failed. Please check your internet connection and ensure the backend server is running.');
         } else {
           setError(`Network error: ${error.message}`);
         }
@@ -219,14 +244,42 @@ const GameAnalytics: React.FC = () => {
               <li>2. Verify your authentication token is valid</li>
               <li>3. Check browser console for detailed errors</li>
               <li>4. Try refreshing the page</li>
+              <li>5. Check network connectivity</li>
             </ul>
           </div>
-          <button
-            onClick={handleRefresh}
-            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm sm:text-base"
-          >
-            Retry
-          </button>
+          <div className="bg-gray-900/20 border border-gray-500/30 rounded-lg p-4 mb-4">
+            <h3 className="text-gray-400 font-semibold mb-2">Debug Information:</h3>
+            <div className="text-left text-xs text-slate-400 space-y-1">
+              <p><strong>API URL:</strong> {API_BASE_URL}</p>
+              <p><strong>Environment:</strong> {import.meta.env.MODE}</p>
+              <p><strong>User Role:</strong> {user?.role || 'Unknown'}</p>
+              <p><strong>Token Present:</strong> {localStorage.getItem('auth_token') ? 'Yes' : 'No'}</p>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={handleRefresh}
+              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm sm:text-base"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => {
+                // Test basic connectivity
+                fetch(`${API_BASE_URL}/health`)
+                  .then(response => response.json())
+                  .then(data => {
+                    alert(`Backend Health Check: ${JSON.stringify(data, null, 2)}`);
+                  })
+                  .catch(err => {
+                    alert(`Backend Health Check Failed: ${err.message}`);
+                  });
+              }}
+              className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm sm:text-base"
+            >
+              Test Connection
+            </button>
+          </div>
         </div>
       </div>
     );
