@@ -132,10 +132,22 @@ class SimpleApiClient {
   }
 
   // Get user cartelas with caching
-  async getUserCartelas(page?: number, limit?: number) {
-    const cacheKey = page && limit ? `user_cartelas_${page}_${limit}` : 'user_cartelas_all';
-    const url = page && limit ? `/cartelas/user-cartelas?page=${page}&limit=${limit}` : '/cartelas/user-cartelas';
-    const cacheTime = page && limit ? 3 * 60 * 1000 : 5 * 60 * 1000; // Cache all cartelas for 5 minutes
+  async getUserCartelas(page?: number, limit?: number, all?: boolean) {
+    let url = '/cartelas/user-cartelas';
+    let cacheKey = 'user_cartelas';
+    
+    if (all) {
+      url += '?all=true';
+      cacheKey = 'user_cartelas_all';
+    } else if (page && limit) {
+      url += `?page=${page}&limit=${limit}`;
+      cacheKey = `user_cartelas_${page}_${limit}`;
+    } else if (limit) {
+      url += `?limit=${limit}`;
+      cacheKey = `user_cartelas_limit_${limit}`;
+    }
+    
+    const cacheTime = all ? 5 * 60 * 1000 : 3 * 60 * 1000; // Cache all cartelas for 5 minutes
     
     return this.fetchWithCache(
       url,

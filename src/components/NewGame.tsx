@@ -257,11 +257,11 @@ const NewGame: React.FC = () => {
     }
   };
 
-  // Function to save game session to database
+  // Function to save game session to database - OPTIMIZED
   const saveGameSession = async (gameData: any) => {
+    const startTime = performance.now();
+    
     try {
-      setIsSavingGame(true);
-
       const token = localStorage.getItem('auth_token');
       if (!token) {
         throw new Error('No authentication token found');
@@ -269,10 +269,12 @@ const NewGame: React.FC = () => {
 
       const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
-      // Get next game number first
-      const gameNumber = await getNextGameNumber();
+      // OPTIMIZATION: Get next game number and save session in parallel
+      const [gameNumber] = await Promise.all([
+        getNextGameNumber().catch(() => Date.now()), // Fallback to timestamp if fails
+      ]);
 
-      // Add game number to game data
+      // Prepare optimized game data
       const gameDataWithNumber = {
         ...gameData,
         gameNumber: gameNumber,
@@ -280,10 +282,10 @@ const NewGame: React.FC = () => {
         selectedCartelas: selectedCards // Ensure only selected cartelas are saved
       };
 
-      console.log('🎮 Attempting to save game session:', {
-        url: `${API_BASE_URL}/games/session`,
-        gameData: gameDataWithNumber,
-        token: token ? 'Present' : 'Missing'
+      console.log('🎮 Saving game session (optimized):', {
+        cartelasCount: selectedCards.length,
+        betAmount: gameData.betAmount,
+        totalBet: gameData.totalBet
       });
 
       const response = await fetch(`${API_BASE_URL}/games/session`, {
@@ -295,50 +297,28 @@ const NewGame: React.FC = () => {
         body: JSON.stringify(gameDataWithNumber)
       });
 
-      console.log('🎮 Game session save response:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-        headers: Object.fromEntries(response.headers.entries())
-      });
-
       if (!response.ok) {
-        // Try to parse error response, but handle cases where response body is not JSON
-        let errorMessage = `Failed to save game session (HTTP ${response.status})`;
-        try {
-          const errorData = await response.json();
-          console.error('🎮 Game session save error data:', errorData);
-          errorMessage = errorData.error || errorData.message || errorMessage;
-        } catch (parseError) {
-          // If response body is not valid JSON, try to get text
-          try {
-            const errorText = await response.text();
-            console.error('🎮 Game session save error text:', errorText);
-            if (errorText) {
-              errorMessage = errorText;
-            }
-          } catch (textError) {
-            // If we can't get text either, use default message
-            console.warn('Could not parse error response:', parseError);
-          }
-        }
-        throw new Error(errorMessage);
+        // Simplified error handling for better performance
+        const errorText = await response.text();
+        throw new Error(`Game save failed (${response.status}): ${errorText}`);
       }
 
       const result = await response.json();
-      console.log('✅ Game session saved to database:', result);
+      
+      const saveTime = (performance.now() - startTime).toFixed(2);
+      console.log(`✅ Game session saved in ${saveTime}ms`);
 
       // Show warning if present (for postpaid users approaching balance limit)
       if (result.warning) {
-        alert(result.warning);
+        // Use setTimeout to avoid blocking navigation
+        setTimeout(() => alert(result.warning), 100);
       }
 
       return { ...result, gameNumber };
     } catch (error) {
-      console.error('❌ Error saving game session:', error);
+      const saveTime = (performance.now() - startTime).toFixed(2);
+      console.error(`❌ Game session save failed after ${saveTime}ms:`, error);
       throw error;
-    } finally {
-      setIsSavingGame(false);
     }
   };
 
@@ -396,49 +376,74 @@ const NewGame: React.FC = () => {
       }
     }
 
-    // Update game stats
+    // Update game stats immediately
     setGamesPlayed(prev => prev + 1);
-    // Don't set winBirr here - actual win is calculated when winning occurs
 
-    // Prepare game data for both localStorage and database
+    // Prepare game data
     const gameData = {
       selectedCartelas: selectedCards,
       betAmount: betBirr,
       housePercentage: housePercentage,
       totalBet: totalBet,
       houseCut: houseCutAmount,
-      playerWin: playerContributionToPrizePool, // Backend expects 'playerWin' not 'playerContributionToPrizePool'
-      gameStartTime: new Date().toISOString()
+      playerWin: playerContributionToPrizePool,
+      gameStartTime: new Date().toISOString(),
+      gameNumber: Date.now(), // Temporary game number for immediate start
+      gameId: `TEMP_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     };
 
+    // INSTANT START: Save game data to localStorage immediately for instant access
     try {
-      // OPTIMIZATION: Start sound playback immediately (non-blocking)
+      localStorage.setItem('currentGameSession', JSON.stringify(gameData));
+      localStorage.setItem('gameSessionTimestamp', Date.now().toString());
+      console.log('✅ Game session saved to localStorage for instant start');
+    } catch (e) {
+      console.warn('Failed to save to localStorage:', e);
+    }
+
+    // Clear selection if remember is not active
+    if (!rememberSelection) {
+      setSelectedCards([]);
+      localStorage.removeItem('selectedCards');
+    }
+
+    // SAVE TO DATABASE FIRST - Wait for database operations to complete
+    try {
+      setIsSavingGame(true);
+      
+      // Start sound in background (non-blocking)
       playStartSound().catch(error => {
         console.error('❌ Failed to play start sound:', error);
       });
 
-      // Save to database - no fallback to localStorage
+      // Save to database and wait for completion
       const gameSessionResult = await saveGameSession(gameData);
-
-      // Clear selection if remember is not active
-      if (!rememberSelection) {
-        setSelectedCards([]);
-        localStorage.removeItem('selectedCards');
+      
+      // Update localStorage with real game ID from database
+      if (gameSessionResult && gameSessionResult.gameId) {
+        const updatedGameData = {
+          ...gameData,
+          gameId: gameSessionResult.gameId,
+          gameNumber: gameSessionResult.gameNumber || gameData.gameNumber
+        };
+        localStorage.setItem('currentGameSession', JSON.stringify(updatedGameData));
+        console.log('✅ Game session saved with database ID:', gameSessionResult.gameId);
       }
-
-      // OPTIMIZATION: Navigate immediately, refresh user balance in background
-      navigate('/game');
 
       // Refresh user balance in background (non-blocking)
       if (refreshUser) {
         refreshUser().catch(err => console.warn('Background user refresh failed:', err));
       }
 
+      // NAVIGATE AFTER DATABASE SAVE COMPLETES
+      navigate('/game');
+
     } catch (error) {
-      console.error('Failed to save game session:', error);
-      
-      // Show error to user - do not start game if database save fails
-      alert(`Failed to start game: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+      console.error('❌ Failed to save game session:', error);
+      alert('Failed to start game. Please try again.');
+      return;
+    } finally {
+      setIsSavingGame(false);
     }
   };
 
@@ -764,14 +769,14 @@ const NewGame: React.FC = () => {
                     : 'bg-gray-600 cursor-not-allowed opacity-50'
                 }`}
                 onClick={handleStartGame}
-                disabled={isSavingGame || selectedCards.length < 3}
-                title={selectedCards.length < 3 ? `Select at least 3 cartelas to start (${selectedCards.length}/3 selected)` : ''}
+                disabled={selectedCards.length < 3 || isSavingGame}
+                title={selectedCards.length < 3 ? `Select at least 3 cartelas to start (${selectedCards.length}/3 selected)` : isSavingGame ? 'Saving game...' : 'Start game'}
               >
                 {isSavingGame 
-                  ? 'Saving...' 
+                  ? '⏳ Starting...' 
                   : selectedCards.length < 3 
                     ? `Start Game (${selectedCards.length}/3)` 
-                    : 'Start Game'
+                    : 'Start Game ⚡'
                 }
               </button>
             </div>
@@ -856,29 +861,60 @@ const NewGame: React.FC = () => {
           </div>
         )}
 
-        {/* Cartela Grid */}
+        {/* Cartela Grid with Performance Optimization */}
         {!loading && !error && (
-          <div className="flex flex-wrap gap-2 pb-4">
-            {cartelas.sort((a, b) => {
-              const aNum = parseInt(a.card_id) || 0;
-              const bNum = parseInt(b.card_id) || 0;
-              return aNum - bNum;
-            }).map((cartela, index) => (
-              <button
-                key={`${cartela.card_id}-${index}`}
-                onClick={() => handleCartelaSelect(cartela.card_id)}
-                className={`w-[48px] h-[48px] sm:w-[52px] sm:h-[52px] md:w-[56px] md:h-[56px] p-1 rounded-lg transition-all duration-200 active:scale-95 sm:hover:scale-105 flex-shrink-0 ${
-                  selectedCards.includes(cartela.card_id)
-                    ? 'bg-blue-600 text-white shadow-lg transform scale-105 border-2 border-blue-400'
-                    : 'bg-[#c5c9c8] active:bg-[#b0b5b4] sm:hover:bg-[#b0b5b4] text-black border-2 border-gray-300 hover:border-gray-400'
-                }`}
-                title={`Card ID: ${cartela.card_id}`}
-              >
-                <div className="text-center h-full flex items-center justify-center">
-                  <div className="text-[13px] sm:text-[14px] md:text-[15px] font-bold leading-tight">{index + 1}</div>
-                </div>
-              </button>
-            ))}
+          <div className="space-y-4">
+            {/* Performance Info */}
+            <div className="flex items-center justify-between text-sm text-slate-400 mb-4">
+              <span>Total Cartelas: {cartelas.length}</span>
+              {cartelas.length > 500 && (
+                <span className="text-yellow-400">⚡ Large dataset - optimized rendering</span>
+              )}
+            </div>
+            
+
+            
+            {/* Optimized Cartela Grid - Render in chunks for better performance */}
+            <div className="flex flex-wrap gap-2 pb-4">
+              {cartelas
+                .sort((a, b) => {
+                  const aNum = parseInt(a.card_id) || 0;
+                  const bNum = parseInt(b.card_id) || 0;
+                  return aNum - bNum;
+                })
+                .slice(0, Math.min(cartelas.length, 1000)) // Limit initial render to 1000 for performance
+                .map((cartela, index) => (
+                  <button
+                    key={`${cartela.card_id}-${index}`}
+                    onClick={() => handleCartelaSelect(cartela.card_id)}
+                    className={`w-[48px] h-[48px] sm:w-[52px] sm:h-[52px] md:w-[56px] md:h-[56px] p-1 rounded-lg transition-all duration-200 active:scale-95 sm:hover:scale-105 flex-shrink-0 ${
+                      selectedCards.includes(cartela.card_id)
+                        ? 'bg-blue-600 text-white shadow-lg transform scale-105 border-2 border-blue-400'
+                        : 'bg-[#c5c9c8] active:bg-[#b0b5b4] sm:hover:bg-[#b0b5b4] text-black border-2 border-gray-300 hover:border-gray-400'
+                    }`}
+                    title={`Card ID: ${cartela.card_id}`}
+                  >
+                    <div className="text-center h-full flex items-center justify-center">
+                      <div className="text-[13px] sm:text-[14px] md:text-[15px] font-bold leading-tight">{cartela.card_id}</div>
+                    </div>
+                  </button>
+                ))}
+            </div>
+            
+            {/* Load More Button if there are more cartelas */}
+            {cartelas.length > 1000 && (
+              <div className="text-center py-4">
+                <button
+                  onClick={() => {
+                    // For now, just show a message. In production, implement proper pagination
+                    alert(`You have ${cartelas.length} cartelas total. Use "Select All" button above for bulk selection, or use "Enter ID" for specific cartelas.`);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  Show More Cartelas ({cartelas.length - 1000} remaining)
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

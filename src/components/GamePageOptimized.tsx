@@ -128,10 +128,86 @@ const GamePageOptimized = (): JSX.Element => {
   const [isGameFinished, setIsGameFinished] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   
-  // Check for active game on component mount - database only, no localStorage fallback
+  // Check for active game on component mount - INSTANT START with localStorage fallback
   useEffect(() => {
     const checkActiveGame = async () => {
       setIsInitialLoading(true);
+      
+      // INSTANT START: Check localStorage first for immediate game data
+      try {
+        const localGameSession = localStorage.getItem('currentGameSession');
+        const sessionTimestamp = localStorage.getItem('gameSessionTimestamp');
+        
+        if (localGameSession && sessionTimestamp) {
+          const gameData = JSON.parse(localGameSession);
+          const timestamp = parseInt(sessionTimestamp);
+          const now = Date.now();
+          
+          // Use localStorage data if it's recent (within 5 minutes)
+          if (now - timestamp < 5 * 60 * 1000) {
+            console.log('🚀 INSTANT START: Using localStorage game data');
+            
+            // Set game data immediately for instant start
+            const instantGameData = {
+              id: gameData.gameId,
+              gameNumber: gameData.gameNumber,
+              cartelasSelected: gameData.selectedCartelas.length,
+              betAmountPerCartela: gameData.betAmount,
+              winMoney: gameData.playerWin,
+              status: 'started',
+              selectedCartelas: gameData.selectedCartelas,
+              totalBet: gameData.totalBet,
+              houseCut: gameData.houseCut,
+              housePercentage: gameData.housePercentage
+            };
+            
+            setCurrentGameData(instantGameData);
+            setSelectedCartelas(gameData.selectedCartelas.length);
+            setBetAmount(gameData.betAmount);
+            setPlayerWin(gameData.playerWin);
+            setCalled([]); // Start with no called numbers
+            
+            console.log('✅ INSTANT START: Game ready immediately', {
+              gameId: instantGameData.id,
+              cartelas: gameData.selectedCartelas.length,
+              betAmount: gameData.betAmount
+            });
+            
+            // Initialize offline game state for instant play
+            try {
+              await offlineGameState.initializeGameState(
+                instantGameData.id,
+                instantGameData,
+                []
+              );
+              console.log('✅ INSTANT START: Offline state initialized');
+            } catch (offlineError) {
+              console.warn('⚠️ Offline state initialization failed:', offlineError);
+            }
+            
+            setIsInitialLoading(false);
+            
+            // BACKGROUND: Sync with backend database (non-blocking)
+            setTimeout(async () => {
+              try {
+                await syncWithBackend();
+              } catch (error) {
+                console.warn('Background sync failed:', error);
+              }
+            }, 500);
+            
+            return; // Exit early - game is ready instantly
+          }
+        }
+      } catch (localError) {
+        console.warn('localStorage game data invalid:', localError);
+      }
+      
+      // FALLBACK: Load from backend if no valid localStorage data
+      await syncWithBackend();
+    };
+    
+    const syncWithBackend = async () => {
       try {
         const token = localStorage.getItem('auth_token');
         
@@ -143,7 +219,7 @@ const GamePageOptimized = (): JSX.Element => {
           return;
         }
 
-        // Fetch active game from backend database only
+        // Fetch active game from backend database
         const response = await fetch(`${API_BASE_URL}/games/active`, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -156,34 +232,21 @@ const GamePageOptimized = (): JSX.Element => {
           
           if (result.game && ['started', 'active'].includes(result.game.status)) {
             // Active game found in backend database
-            console.log('Active game found in backend:', result.game);
+            console.log('Backend game found:', result.game);
             
             setCurrentGameData(result.game);
             setSelectedCartelas(result.game.cartelasSelected || 0);
-            console.log('✅ Game data set:', {
-              gameId: result.game.id,
-              gameNumber: result.game.gameNumber,
-              cartelasSelected: result.game.cartelasSelected,
-              betAmountPerCartela: result.game.betAmountPerCartela,
-              winMoney: result.game.winMoney,
-              status: result.game.status
-            });
-            // Use betAmountPerCartela for per-cartela amount
             setBetAmount(parseFloat(result.game.betAmountPerCartela) || 5);
             setPlayerWin(parseFloat(result.game.winMoney) || 0);
-            
-            // Always clear called numbers on page refresh
-            console.log('🔄 Clearing called numbers on page refresh');
             setCalled([]);
             
-            // Initialize offline game state in IndexedDB and fetch number sequence
+            // Initialize offline game state
             try {
               await offlineGameState.initializeGameState(
                 result.game.id,
                 result.game,
-                [] // Start with no called numbers
+                []
               );
-              console.log('✅ Offline game state initialized');
               
               // Fetch number sequence from API
               try {
@@ -197,7 +260,7 @@ const GamePageOptimized = (): JSX.Element => {
                 if (sequenceResponse.ok) {
                   const sequenceData = await sequenceResponse.json();
                   await offlineGameState.updateNumberSequence(result.game.id, sequenceData.numberSequence);
-                  console.log(`✅ Fetched and cached ${sequenceData.numberSequence.length} numbers in sequence`);
+                  console.log(`✅ Cached ${sequenceData.numberSequence.length} numbers in sequence`);
                 } else {
                   console.warn('⚠️ Failed to fetch number sequence:', sequenceResponse.status);
                 }
@@ -208,20 +271,50 @@ const GamePageOptimized = (): JSX.Element => {
               console.warn('⚠️ Failed to initialize offline game state:', error);
             }
             
-            console.log('✅ Game loaded successfully, setting isInitialLoading to false');
-            console.log('📊 Final game state:', {
-              gameId: result.game.id,
-              gameNumber: result.game.gameNumber,
-              status: result.game.status,
-              cartelasSelected: result.game.cartelasSelected,
-              betAmount: result.game.betAmountPerCartela || 5
-            });
             setIsInitialLoading(false);
-            
             return;
           } else {
             // No active game in backend database
-            console.log('No active game in backend, redirecting to play bingo page');
+            console.log('No active game in backend, checking localStorage...');
+            
+            // Check if we have recent localStorage game data
+            const localGameSession = localStorage.getItem('currentGameSession');
+            const sessionTimestamp = localStorage.getItem('gameSessionTimestamp');
+            
+            if (localGameSession && sessionTimestamp) {
+              const gameData = JSON.parse(localGameSession);
+              const timestamp = parseInt(sessionTimestamp);
+              const now = Date.now();
+              
+              // If localStorage data is very recent (within 30 seconds), use it
+              if (now - timestamp < 30 * 1000) {
+                console.log('🚀 Using recent localStorage game data while backend syncs');
+                
+                const instantGameData = {
+                  id: gameData.gameId,
+                  gameNumber: gameData.gameNumber,
+                  cartelasSelected: gameData.selectedCartelas.length,
+                  betAmountPerCartela: gameData.betAmount,
+                  winMoney: gameData.playerWin,
+                  status: 'started',
+                  selectedCartelas: gameData.selectedCartelas,
+                  totalBet: gameData.totalBet,
+                  houseCut: gameData.houseCut,
+                  housePercentage: gameData.housePercentage
+                };
+                
+                setCurrentGameData(instantGameData);
+                setSelectedCartelas(gameData.selectedCartelas.length);
+                setBetAmount(gameData.betAmount);
+                setPlayerWin(gameData.playerWin);
+                setCalled([]);
+                
+                setIsInitialLoading(false);
+                return;
+              }
+            }
+            
+            // No recent localStorage data, redirect to new game
             setCalled([]);
             setIsInitialLoading(false);
             navigate('/newgame', { replace: true });
@@ -229,7 +322,6 @@ const GamePageOptimized = (): JSX.Element => {
         } else if (response.status === 401) {
           // Token expired or invalid - try to refresh token first
           console.error('❌ Authentication failed (401) - Token expired or invalid');
-          console.log('🔄 Attempting to refresh token...');
           
           try {
             const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
@@ -242,39 +334,22 @@ const GamePageOptimized = (): JSX.Element => {
             
             if (refreshResponse.ok) {
               const refreshData = await refreshResponse.json();
-              console.log('✅ Token refreshed successfully');
               localStorage.setItem('auth_token', refreshData.token);
-              
-              // Retry fetching active game with new token
-              console.log('🔄 Retrying active game fetch with new token...');
               setIsInitialLoading(false);
               window.location.reload();
               return;
             } else {
-              console.error('❌ Token refresh failed');
               localStorage.removeItem('auth_token');
               setIsInitialLoading(false);
               navigate('/login', { replace: true });
             }
           } catch (refreshError) {
-            console.error('❌ Token refresh error:', refreshError);
             localStorage.removeItem('auth_token');
             setIsInitialLoading(false);
             navigate('/login', { replace: true });
           }
-        } else if (response.status === 404) {
-          // No active game found - redirect to new game
-          console.log('No active game found (404), redirecting to play bingo page');
-          setCalled([]);
-          setIsInitialLoading(false);
-          navigate('/newgame', { replace: true });
         } else {
-          // Other API error - log details but don't redirect immediately
-          console.error('⚠️ Error fetching active game:', response.status);
-          const errorData = await response.json().catch(() => ({}));
-          console.error('Error details:', errorData);
-          
-          // Only redirect after logging the error
+          // Other API error
           setCalled([]);
           setIsInitialLoading(false);
           navigate('/newgame', { replace: true });
@@ -282,12 +357,6 @@ const GamePageOptimized = (): JSX.Element => {
         
       } catch (error) {
         console.error('❌ Error checking active game:', error);
-        if (error instanceof Error) {
-          console.error('Error type:', error.name);
-          console.error('Error message:', error.message);
-        }
-        
-        // On network error, redirect to new game page
         setCalled([]);
         setIsInitialLoading(false);
         navigate('/newgame', { replace: true });

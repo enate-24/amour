@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, ChevronLeft, ChevronRight, Search, RefreshCw, AlertCircle } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Search, RefreshCw, AlertCircle, Plus, Play } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useCartela } from '../hooks/useCartela';
 import { Cartela } from '../lib/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { simpleApiClient } from '../utils/simpleApiClient';
 
-const CARDS_PER_PAGE = 50;
+const CARDS_PER_PAGE = 100; // Increased from 50 for better UX
 
 const CardList: React.FC = () => {
+  const navigate = useNavigate();
   const { cartelas, loading, error, refreshCartelas } = useCartela();
   const [selectedCartela, setSelectedCartela] = useState<Cartela | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -17,9 +19,10 @@ const CardList: React.FC = () => {
   const [loadTime, setLoadTime] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [showAllCartelas, setShowAllCartelas] = useState(false);
 
-  // Memoized filtered and paginated cartelas
-  const { paginatedCartelas, totalPages, totalCartelas } = useMemo(() => {
+  // Memoized filtered and paginated cartelas with performance optimization
+  const { paginatedCartelas, totalPages, totalCartelas, displayedCartelas } = useMemo(() => {
     let filtered = cartelas;
     
     // Filter by search term if provided
@@ -33,22 +36,30 @@ const CardList: React.FC = () => {
     // Sort numerically by card_id
     filtered.sort((a, b) => Number(a.card_id) - Number(b.card_id));
     
-    // Paginate
-    const startIndex = (currentPage - 1) * CARDS_PER_PAGE;
-    const endIndex = startIndex + CARDS_PER_PAGE;
-    const paginated = filtered.slice(startIndex, endIndex);
+    // Handle pagination vs show all
+    let paginated = filtered;
+    let displayed = filtered.length;
+    
+    if (!showAllCartelas && filtered.length > CARDS_PER_PAGE) {
+      // Paginate
+      const startIndex = (currentPage - 1) * CARDS_PER_PAGE;
+      const endIndex = startIndex + CARDS_PER_PAGE;
+      paginated = filtered.slice(startIndex, endIndex);
+      displayed = paginated.length;
+    }
     
     return {
       paginatedCartelas: paginated,
       totalPages: Math.ceil(filtered.length / CARDS_PER_PAGE),
-      totalCartelas: filtered.length
+      totalCartelas: filtered.length,
+      displayedCartelas: displayed
     };
-  }, [cartelas, currentPage, searchTerm]);
+  }, [cartelas, currentPage, searchTerm, showAllCartelas]);
 
-  // Reset to page 1 when search changes
+  // Reset to page 1 when search changes or show all changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, showAllCartelas]);
 
   // Fetch selected cartela IDs from active games with caching
   useEffect(() => {
@@ -88,20 +99,36 @@ const CardList: React.FC = () => {
   });
 
   const handleCartelaClick = async (cartela: Cartela) => {
-    // If cartela doesn't have complete numbers, fetch them
-    if (!cartela.numbers || Object.keys(cartela.numbers).length === 0) {
+    console.log('🎯 Cartela clicked:', cartela.card_id, 'Numbers:', cartela.numbers);
+    
+    // Check if cartela has valid numbers data
+    if (!cartela.numbers || typeof cartela.numbers !== 'object') {
+      console.warn('⚠️ Cartela has invalid numbers data:', cartela);
+      
+      // Try to fetch cartela details as fallback
       try {
+        console.log('🔄 Fetching cartela details for:', cartela.card_id);
         const response = await simpleApiClient.getCartelaDetails(cartela.id);
         const data = response.data as { cartela?: Cartela };
-        setSelectedCartela(data.cartela || cartela);
-        console.log(`Fetched cartela details in ${response.loadTime}ms (cached: ${response.fromCache})`);
+        
+        if (data.cartela && data.cartela.numbers) {
+          console.log('✅ Fetched cartela details successfully');
+          setSelectedCartela(data.cartela);
+        } else {
+          console.warn('⚠️ Fetched cartela has no numbers data, using original');
+          setSelectedCartela(cartela);
+        }
       } catch (error) {
-        console.error('Error fetching cartela details:', error);
+        console.error('❌ Error fetching cartela details:', error);
+        // Use original cartela even if numbers are invalid
         setSelectedCartela(cartela);
       }
     } else {
+      // Cartela already has valid numbers data
+      console.log('✅ Using cartela with existing numbers data');
       setSelectedCartela(cartela);
     }
+    
     setShowModal(true);
   };
 
@@ -198,7 +225,7 @@ const CardList: React.FC = () => {
   };
 
   const renderPagination = () => {
-    if (totalPages <= 1) return null;
+    if (totalPages <= 1 || showAllCartelas) return null;
 
     const maxVisiblePages = 5;
     const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
@@ -328,14 +355,51 @@ const CardList: React.FC = () => {
           />
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-          <button className="px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mb-4">
+          <button 
+            onClick={() => navigate('/newgame')}
+            className="px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <Play size={18} />
             New Game
           </button>
-          <button className="px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors">
-            Add Cartela
+          <button 
+            onClick={() => navigate('/admin/cartela-assignment')}
+            className="px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <Plus size={18} />
+            Manage Cartelas
           </button>
         </div>
+
+        {/* Performance Controls */}
+        {totalCartelas > CARDS_PER_PAGE && (
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-yellow-800 font-medium">
+                  Large Dataset ({totalCartelas} cartelas)
+                </p>
+                <p className="text-yellow-700 text-sm">
+                  {showAllCartelas 
+                    ? `Showing all ${displayedCartelas} cartelas` 
+                    : `Showing ${displayedCartelas} of ${totalCartelas} cartelas (paginated)`
+                  }
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAllCartelas(!showAllCartelas)}
+                className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                  showAllCartelas
+                    ? 'bg-yellow-200 hover:bg-yellow-300 text-yellow-800'
+                    : 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                }`}
+              >
+                {showAllCartelas ? 'Use Pagination' : 'Show All'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Loading State */}
@@ -366,8 +430,11 @@ const CardList: React.FC = () => {
           {searchTerm && (
             <div className="mb-4 p-3 bg-blue-50 rounded-lg">
               <p className="text-blue-700">
-                Found {paginatedCartelas.length} cartela(s) matching "{searchTerm}"
-                {paginatedCartelas.length === 0 && (
+                Found {totalCartelas} cartela(s) matching "{searchTerm}"
+                {showAllCartelas && totalCartelas > 0 && (
+                  <span className="ml-2 text-blue-600">(showing all)</span>
+                )}
+                {totalCartelas === 0 && (
                   <button 
                     onClick={() => setSearchTerm('')}
                     className="ml-2 text-blue-500 hover:text-blue-700 underline"
@@ -399,18 +466,46 @@ const CardList: React.FC = () => {
           {paginatedCartelas.length === 0 && !searchTerm && (
             <div className="mt-6 p-4 sm:p-6 bg-blue-50 rounded-lg">
               <p className="text-blue-700 font-medium text-center text-sm sm:text-base">
-                No cartelas available. Please check if the backend server is running.
+                No cartelas available. 
+                <button 
+                  onClick={handleRefresh}
+                  className="ml-2 text-blue-600 hover:text-blue-800 underline"
+                >
+                  Refresh to load cartelas
+                </button>
               </p>
             </div>
           )}
 
+          {/* Performance warning for large datasets */}
+          {paginatedCartelas.length > 500 && showAllCartelas && (
+            <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} className="text-orange-500 flex-shrink-0" />
+                <p className="text-orange-700 text-sm">
+                  Displaying {paginatedCartelas.length} cartelas may affect performance. Consider using pagination for better experience.
+                </p>
+                <button
+                  onClick={() => setShowAllCartelas(false)}
+                  className="ml-auto text-orange-600 hover:text-orange-800 underline text-sm whitespace-nowrap"
+                >
+                  Use Pagination
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Pagination - only show when not searching or when search has results */}
-          {(!searchTerm || paginatedCartelas.length > 0) && renderPagination()}
+          {(!searchTerm || totalCartelas > 0) && renderPagination()}
           
           {/* Page Info */}
           {totalCartelas > 0 && (
             <div className="text-center mt-4 text-gray-600">
-              Showing {((currentPage - 1) * CARDS_PER_PAGE) + 1} to {Math.min(currentPage * CARDS_PER_PAGE, totalCartelas)} of {totalCartelas} cartelas
+              {showAllCartelas ? (
+                `Showing all ${displayedCartelas} cartelas`
+              ) : (
+                `Showing ${((currentPage - 1) * CARDS_PER_PAGE) + 1} to ${Math.min(currentPage * CARDS_PER_PAGE, totalCartelas)} of ${totalCartelas} cartelas`
+              )}
             </div>
           )}
         </div>

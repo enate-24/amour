@@ -236,7 +236,7 @@ export function useCartela(): UseCartelaReturn {
         console.warn('Could not extract user ID from token:', tokenError);
       }
 
-      const response = await fetch(`${API_BASE_URL}/cartelas/user-cartelas`, {
+      const response = await fetch(`${API_BASE_URL}/cartelas/user-cartelas?limit=1000`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
