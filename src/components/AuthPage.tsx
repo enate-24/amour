@@ -120,9 +120,9 @@ const AuthPage: React.FC = () => {
             <GamepadIcon size={40} className="text-slate-900" />
           </div>
           <h1 className="text-5xl font-bold bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 bg-clip-text text-transparent mb-2">
-            ABISINYA BINGO
+            FIDEL BINGO
           </h1>
-          <p className="text-slate-300 text-lg">Welcome back!</p>
+         
         </div>
 
         {/* Auth Form */}
@@ -232,61 +232,8 @@ const AuthPage: React.FC = () => {
               )}
             </button>
           </form>
-          
-          {/* Demo Login Button for Testing */}
-          <div className="mt-4 pt-4 border-t border-slate-600">
-            <button
-              onClick={async () => {
-                try {
-                  console.log('🧪 Testing offline login with demo user...');
-                  
-                  // First test the offline login directly
-                  const testResult = await testOfflineLogin();
-                  if (testResult) {
-                    console.log('✅ Direct offline login test passed');
-                    
-                    // Now try through the signIn function
-                    setFormData({ username: 'demo', password: 'demo' });
-                    const result = await signIn('demo', 'demo');
-                    console.log('Demo login result:', result);
-                  } else {
-                    throw new Error('Direct offline login test failed');
-                  }
-                } catch (error) {
-                  console.error('Demo login failed:', error);
-                  alert('Demo login failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
-                }
-              }}
-              className="w-full py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 rounded-xl font-medium text-white transition-all text-sm"
-            >
-              🧪 Test Demo Login (demo/demo)
-            </button>
-          </div>
-          
-          {/* Demo User Creation for Testing */}
-          {isOffline && !offlineLoginAvailable && (
-            <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-              <p className="text-yellow-300 text-sm mb-2">
-                No offline login available. Create demo user for testing:
-              </p>
-              <button
-                onClick={async () => {
-                  try {
-                    const { createDemoOfflineUser } = await import('../utils/demoOfflineUser');
-                    await createDemoOfflineUser();
-                    // Refresh the page to check offline login availability
-                    window.location.reload();
-                  } catch (error) {
-                    console.error('Failed to create demo user:', error);
-                  }
-                }}
-                className="w-full px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                Create Demo User (Username: demo, Password: demo)
-              </button>
-            </div>
-          )}
-        </div>
+         
+      
 
         {/* Footer */}
         <div className="text-center mt-6">
