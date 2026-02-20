@@ -415,8 +415,6 @@ const NewGame: React.FC = () => {
         console.error('❌ Failed to save to localStorage:', localError);
       }
     }
-      console.warn('Failed to save to localStorage:', e);
-    }
 
     // Clear selection if remember is not active
     if (!rememberSelection) {
