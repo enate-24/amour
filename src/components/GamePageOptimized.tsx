@@ -151,14 +151,12 @@ const GamePageOptimized = (): JSX.Element => {
               hasSession: !!gameData
             });
             
-            if (gameData) {
+            // Use IndexedDB data if it's recent (within 10 minutes)
+            if (gameData && (Date.now() - gameData.timestamp) < 10 * 60 * 1000) {
               const ageInSeconds = (Date.now() - gameData.timestamp) / 1000;
               console.log('📊 Game session age:', ageInSeconds.toFixed(1), 'seconds');
               console.log('📦 Game data from IndexedDB:', gameData);
-                  
-          // Use IndexedDB data if it's recent (within 10 minutes)
-          if (gameData && (Date.now() - gameData.timestamp) < 10 * 60 * 1000) {
-            console.log('🚀 INSTANT START: Using IndexedDB game data');
+              console.log('🚀 INSTANT START: Using IndexedDB game data');
             
             // Set game data immediately for instant start
             const instantGameData = {
