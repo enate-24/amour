@@ -407,7 +407,7 @@ const NewGame: React.FC = () => {
       localStorage.removeItem('selectedCards');
     }
 
-    // SAVE TO DATABASE FIRST - Wait for database operations to complete
+    // INSTANT NAVIGATION - Don't wait for database operations
     try {
       setIsSavingGame(true);
       
@@ -416,34 +416,50 @@ const NewGame: React.FC = () => {
         console.error('❌ Failed to play start sound:', error);
       });
 
-      // Save to database and wait for completion
-      const gameSessionResult = await saveGameSession(gameData);
-      
-      // Update localStorage with real game ID from database
-      if (gameSessionResult && gameSessionResult.gameId) {
-        const updatedGameData = {
-          ...gameData,
-          gameId: gameSessionResult.gameId,
-          gameNumber: gameSessionResult.gameNumber || gameData.gameNumber
-        };
-        localStorage.setItem('currentGameSession', JSON.stringify(updatedGameData));
-        console.log('✅ Game session saved with database ID:', gameSessionResult.gameId);
-      }
-
-      // Refresh user balance in background (non-blocking)
-      if (refreshUser) {
-        refreshUser().catch(err => console.warn('Background user refresh failed:', err));
-      }
-
-      // NAVIGATE AFTER DATABASE SAVE COMPLETES
+      // Navigate immediately for instant game start
       navigate('/game');
 
+      // Save to database in background (non-blocking) with retry
+      const maxRetries = 3;
+      let retryCount = 0;
+      
+      const attemptSave = async (): Promise<any> => {
+        try {
+          return await saveGameSession(gameData);
+        } catch (error) {
+          retryCount++;
+          if (retryCount < maxRetries) {
+            console.log(`⚠️ Save attempt ${retryCount} failed, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
+            return attemptSave();
+          }
+          throw error;
+        }
+      };
+      
+      attemptSave().then(gameSessionResult => {
+        // Update localStorage with real game ID from database
+        if (gameSessionResult && gameSessionResult.gameId) {
+          const updatedGameData = {
+            ...gameData,
+            gameId: gameSessionResult.gameId,
+            gameNumber: gameSessionResult.gameNumber || gameData.gameNumber
+          };
+          localStorage.setItem('currentGameSession', JSON.stringify(updatedGameData));
+          console.log('✅ Game session saved with database ID:', gameSessionResult.gameId);
+        }
+      }).catch(error => {
+        console.error('❌ Background database save failed after retries:', error);
+        // Game continues with localStorage data - show warning to user
+        console.warn('⚠️ Game running in offline mode - will sync when connection is restored');
+      }).finally(() => {
+        setIsSavingGame(false);
+      });
+
     } catch (error) {
-      console.error('❌ Failed to save game session:', error);
-      alert('Failed to start game. Please try again.');
-      return;
-    } finally {
+      console.error('❌ Game start error:', error);
       setIsSavingGame(false);
+      alert('Failed to start game. Please try again.');
     }
   };
 

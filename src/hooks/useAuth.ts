@@ -128,9 +128,87 @@ export const useAuth = () => {
 
       // Validate token format before using it
       if (token && isValidJWT(token)) {
-      console.log('Found valid token in localStorage, verifying with server...');
+        console.log('Found valid token in localStorage');
+        
+        // INSTANT LOAD: Load cached user immediately for instant UI
+        try {
+          const cachedUser = await offlineStorage.retrieve('auth', 'cached_credentials');
+          if (cachedUser && cachedUser.user) {
+            console.log('⚡ INSTANT LOAD: Loading cached user for immediate UI');
+            
+            const mappedUser: User = {
+              id: cachedUser.user.id,
+              username: cachedUser.user.username,
+              email: cachedUser.user.email,
+              role: cachedUser.user.role,
+              userType: cachedUser.user.userType || 'prepaid',
+              balance: Number(cachedUser.user.balance) || 0,
+              balanceLimit: cachedUser.user.balanceLimit,
+              totalGamesPlayed: Number(cachedUser.user.totalGamesPlayed) || 0,
+              totalWinnings: Number(cachedUser.user.totalWinnings) || 0,
+              isActive: cachedUser.user.isActive !== undefined ? Boolean(cachedUser.user.isActive) : true,
+              createdAt: cachedUser.user.createdAt || new Date().toISOString(),
+              updatedAt: cachedUser.user.updatedAt || new Date().toISOString()
+            };
+            
+            setUser(mappedUser);
+            setLoading(false); // Show UI immediately
+            console.log('✅ User loaded from cache instantly:', mappedUser.username);
+          }
+        } catch (cacheError) {
+          console.warn('Could not load cached user for instant display:', cacheError);
+        }
+        
+        // Check if we're online before making API call
+        const isOnline = networkStatusManager.isOnline;
+        console.log('Network status:', isOnline ? 'ONLINE' : 'OFFLINE');
+        
+        if (!isOnline) {
+          // Offline mode - we already loaded cached data above
+          console.log('🔒 Offline mode - using cached user data');
+          
+          // If we didn't load cache above, try again and show error
+          if (!user) {
+            try {
+              const cachedUser = await offlineStorage.retrieve('auth', 'cached_credentials');
+              if (cachedUser && cachedUser.user) {
+                const mappedUser: User = {
+                  id: cachedUser.user.id,
+                  username: cachedUser.user.username,
+                  email: cachedUser.user.email,
+                  role: cachedUser.user.role,
+                  userType: cachedUser.user.userType || 'prepaid',
+                  balance: Number(cachedUser.user.balance) || 0,
+                  balanceLimit: cachedUser.user.balanceLimit,
+                  totalGamesPlayed: Number(cachedUser.user.totalGamesPlayed) || 0,
+                  totalWinnings: Number(cachedUser.user.totalWinnings) || 0,
+                  isActive: cachedUser.user.isActive !== undefined ? Boolean(cachedUser.user.isActive) : true,
+                  createdAt: cachedUser.user.createdAt || new Date().toISOString(),
+                  updatedAt: cachedUser.user.updatedAt || new Date().toISOString()
+                };
+                
+                setUser(mappedUser);
+                setLoading(false);
+              } else {
+                console.warn('⚠️ No cached user data found');
+                localStorage.removeItem('auth_token');
+                setUser(null);
+                setLoading(false);
+              }
+            } catch (cacheError) {
+              console.error('❌ Failed to load cached user:', cacheError);
+              localStorage.removeItem('auth_token');
+              setUser(null);
+              setLoading(false);
+            }
+          }
+          return;
+        }
+        
+        // Online mode - verify with server in background (non-blocking)
+        console.log('🔄 Verifying token with server in background...');
 
-      // Verify token and get user profile
+      // Verify token and get user profile (background refresh)
       fetch(`${API_BASE_URL}/auth/profile`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -169,7 +247,7 @@ export const useAuth = () => {
             updatedAt: data.user.updated_at || data.user.updatedAt || new Date().toISOString()
           };
           setUser(mappedUser);
-          console.log('User authenticated successfully:', mappedUser.username, 'Type:', mappedUser.userType);
+          console.log('✅ User data refreshed from server:', mappedUser.username, 'Type:', mappedUser.userType);
         } else {
           throw new Error('No user data received');
         }
@@ -181,41 +259,12 @@ export const useAuth = () => {
         if (error.message.includes('401')) {
           localStorage.removeItem('auth_token');
           setUser(null);
+          setLoading(false);
         } else {
-          // Server error (500, 503, network error) - try to load cached user data
-          console.log('🔒 Server error or unavailable, checking for cached user data...');
-          
-          try {
-            // Try to get cached username and load user data
-            const cachedUsername = await offlineAuthManager.getCachedUsername();
-            if (cachedUsername) {
-              // Get cached user data from offline storage
-              const cachedUser = await offlineStorage.retrieve('auth', 'cached_credentials');
-              if (cachedUser && cachedUser.user) {
-                console.log('✅ Loading cached user data for offline session');
-                
-                const mappedUser: User = {
-                  id: cachedUser.user.id,
-                  username: cachedUser.user.username,
-                  email: cachedUser.user.email,
-                  role: cachedUser.user.role,
-                  userType: cachedUser.user.userType || 'prepaid',
-                  balance: Number(cachedUser.user.balance) || 0,
-                  balanceLimit: cachedUser.user.balanceLimit,
-                  totalGamesPlayed: Number(cachedUser.user.totalGamesPlayed) || 0,
-                  totalWinnings: Number(cachedUser.user.totalWinnings) || 0,
-                  isActive: cachedUser.user.isActive !== undefined ? Boolean(cachedUser.user.isActive) : true,
-                  createdAt: cachedUser.user.createdAt || new Date().toISOString(),
-                  updatedAt: cachedUser.user.updatedAt || new Date().toISOString()
-                };
-                
-                setUser(mappedUser);
-                console.log('User loaded from cache:', mappedUser.username, 'Type:', mappedUser.userType);
-              }
-            }
-          } catch (cacheError) {
-            console.warn('Failed to load cached user data:', cacheError);
-          }
+          // Server error (500, 503, network error) - keep using cached data
+          console.log('⚠️ Server unavailable, continuing with cached user data');
+          // User is already set from cache, so just ensure loading is false
+          setLoading(false);
         }
       })
       .finally(() => {

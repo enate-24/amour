@@ -143,8 +143,8 @@ const GamePageOptimized = (): JSX.Element => {
           const timestamp = parseInt(sessionTimestamp);
           const now = Date.now();
           
-          // Use localStorage data if it's recent (within 5 minutes)
-          if (now - timestamp < 5 * 60 * 1000) {
+          // Use localStorage data if it's recent (within 10 minutes)
+          if (now - timestamp < 10 * 60 * 1000) {
             console.log('🚀 INSTANT START: Using localStorage game data');
             
             // Set game data immediately for instant start
@@ -190,13 +190,23 @@ const GamePageOptimized = (): JSX.Element => {
             // BACKGROUND: Sync with backend database (non-blocking)
             setTimeout(async () => {
               try {
+                console.log('🔄 Background sync: Checking backend for game data...');
                 await syncWithBackend();
+                
+                // Pre-warm audio pool with first 10 numbers for instant playback
+                if (audioManagerRef.current) {
+                  console.log('🎵 Pre-warming audio pool with first 10 numbers...');
+                  await audioManagerRef.current.prewarmAudioPool([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+                  console.log('✅ Audio pool pre-warmed');
+                }
               } catch (error) {
-                console.warn('Background sync failed:', error);
+                console.warn('⚠️ Background sync failed (game continues with localStorage):', error);
               }
-            }, 500);
+            }, 1000); // Increased delay to give backend more time to save
             
             return; // Exit early - game is ready instantly
+          } else {
+            console.log('⚠️ localStorage game data is too old (>10 minutes), checking backend...');
           }
         }
       } catch (localError) {
@@ -286,9 +296,9 @@ const GamePageOptimized = (): JSX.Element => {
               const timestamp = parseInt(sessionTimestamp);
               const now = Date.now();
               
-              // If localStorage data is very recent (within 30 seconds), use it
-              if (now - timestamp < 30 * 1000) {
-                console.log('🚀 Using recent localStorage game data while backend syncs');
+              // If localStorage data is recent (within 2 minutes), use it and wait for backend
+              if (now - timestamp < 2 * 60 * 1000) {
+                console.log('🚀 Using recent localStorage game data (backend still syncing)');
                 
                 const instantGameData = {
                   id: gameData.gameId,
@@ -309,8 +319,46 @@ const GamePageOptimized = (): JSX.Element => {
                 setPlayerWin(gameData.playerWin);
                 setCalled([]);
                 
+                // Initialize offline game state
+                try {
+                  await offlineGameState.initializeGameState(
+                    instantGameData.id,
+                    instantGameData,
+                    []
+                  );
+                  console.log('✅ Offline state initialized with localStorage data');
+                } catch (offlineError) {
+                  console.warn('⚠️ Offline state initialization failed:', offlineError);
+                }
+                
                 setIsInitialLoading(false);
+                
+                // Retry backend sync after a delay
+                setTimeout(async () => {
+                  console.log('🔄 Retrying backend sync...');
+                  try {
+                    const retryResponse = await fetch(`${API_BASE_URL}/games/active`, {
+                      headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                      }
+                    });
+                    
+                    if (retryResponse.ok) {
+                      const retryResult = await retryResponse.json();
+                      if (retryResult.game && ['started', 'active'].includes(retryResult.game.status)) {
+                        console.log('✅ Backend sync successful on retry');
+                        setCurrentGameData(retryResult.game);
+                      }
+                    }
+                  } catch (retryError) {
+                    console.warn('⚠️ Backend retry failed (game continues with localStorage):', retryError);
+                  }
+                }, 2000);
+                
                 return;
+              } else {
+                console.log('⚠️ localStorage game data is too old (>2 minutes)');
               }
             }
             

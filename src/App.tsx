@@ -107,51 +107,60 @@ const initializeCartelaCache = async () => {
   }
 };
 
-// Initialize comprehensive offline system
+// Initialize comprehensive offline system (non-blocking, runs in background)
 const initializeOfflineSystem = async () => {
-  console.log('🚀 Initializing offline-first system...');
+  console.log('🚀 Initializing offline-first system in background...');
   
   try {
-    // 1. Initialize offline storage
+    // 1. Initialize offline storage (critical - wait for this)
     await offlineStorage.initialize();
     console.log('✅ Offline storage initialized');
     
-    // 2. Initialize offline game manager
-    const { offlineGameManager } = await import('./utils/offlineGameManager');
-    await offlineGameManager.initialize();
-    console.log('✅ Offline game manager initialized');
-    
-    // 3. Register service worker
-    await registerServiceWorker({
-      onUpdate: (registration) => {
-        console.log('🔄 New app version available');
-        // Could show update notification here
-      },
-      onSuccess: (registration) => {
-        console.log('✅ App ready for offline use');
-      },
-      onOfflineReady: () => {
-        console.log('📱 App can work offline');
-      }
+    // 2-7. Run everything else in background without blocking UI
+    Promise.all([
+      // Initialize offline game manager
+      (async () => {
+        const { offlineGameManager } = await import('./utils/offlineGameManager');
+        await offlineGameManager.initialize();
+        console.log('✅ Offline game manager initialized');
+      })(),
+      
+      // Register service worker
+      registerServiceWorker({
+        onUpdate: (registration) => {
+          console.log('🔄 New app version available');
+        },
+        onSuccess: (registration) => {
+          console.log('✅ App ready for offline use');
+        },
+        onOfflineReady: () => {
+          console.log('📱 App can work offline');
+        }
+      }),
+      
+      // Initialize audio manager
+      initializeAudioManager(),
+      
+      // Initialize cartela cache
+      initializeCartelaCache(),
+      
+      // Initialize demo user
+      initializeDemoUser(),
+      
+      // Initialize sync manager
+      (async () => {
+        const { offlineSyncManager } = await import('./utils/offlineSyncManager');
+        await offlineSyncManager.initialize();
+        console.log('✅ Sync manager initialized');
+      })()
+    ]).then(() => {
+      console.log('🎉 Offline-first system fully ready!');
+    }).catch(error => {
+      console.error('⚠️ Some background initializations failed:', error);
     });
     
-    // 4. Initialize audio manager
-    await initializeAudioManager();
-    
-    // 5. Initialize cartela cache
-    await initializeCartelaCache();
-    
-    // 6. Initialize demo user for offline testing
-    await initializeDemoUser();
-    
-    // 7. Initialize sync manager
-    const { offlineSyncManager } = await import('./utils/offlineSyncManager');
-    await offlineSyncManager.initialize();
-    console.log('✅ Sync manager initialized');
-    
-    console.log('🎉 Offline-first system ready!');
   } catch (error) {
-    console.error('❌ Failed to initialize offline system:', error);
+    console.error('❌ Failed to initialize critical offline system:', error);
     // Fallback to basic initialization
     initializeAudioManager();
     initializeCartelaCache();
