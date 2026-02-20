@@ -381,6 +381,7 @@ const NewGame: React.FC = () => {
 
     // Prepare game data
     const gameData = {
+      userId: user?.id,
       selectedCartelas: selectedCards,
       betAmount: betBirr,
       housePercentage: housePercentage,
@@ -392,18 +393,28 @@ const NewGame: React.FC = () => {
       gameId: `TEMP_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     };
 
-    // INSTANT START: Save game data to localStorage immediately for instant access
+    // INSTANT START: Save game data to IndexedDB immediately for instant access
     try {
-      localStorage.setItem('currentGameSession', JSON.stringify(gameData));
-      localStorage.setItem('gameSessionTimestamp', Date.now().toString());
+      const { gameSessionDB } = await import('../utils/gameSessionDB');
+      await gameSessionDB.saveGameSession(gameData);
       
-      console.log('✅ Game session saved to localStorage for instant start:', {
+      console.log('✅ Game session saved to IndexedDB for instant start:', {
         gameId: gameData.gameId,
         cartelas: selectedCards.length,
         timestamp: Date.now()
       });
       console.log('📦 Full game data:', gameData);
     } catch (e) {
+      console.error('❌ Failed to save to IndexedDB:', e);
+      // Fallback to localStorage
+      try {
+        localStorage.setItem('currentGameSession', JSON.stringify(gameData));
+        localStorage.setItem('gameSessionTimestamp', Date.now().toString());
+        console.log('✅ Fallback: Game session saved to localStorage');
+      } catch (localError) {
+        console.error('❌ Failed to save to localStorage:', localError);
+      }
+    }
       console.warn('Failed to save to localStorage:', e);
     }
 
@@ -448,16 +459,25 @@ const NewGame: React.FC = () => {
         }
       };
       
-      attemptSave().then(gameSessionResult => {
-        // Update localStorage with real game ID from database
+      attemptSave().then(async (gameSessionResult) => {
+        // Update IndexedDB with real game ID from database
         if (gameSessionResult && gameSessionResult.gameId) {
-          const updatedGameData = {
-            ...gameData,
-            gameId: gameSessionResult.gameId,
-            gameNumber: gameSessionResult.gameNumber || gameData.gameNumber
-          };
-          localStorage.setItem('currentGameSession', JSON.stringify(updatedGameData));
-          console.log('✅ Game session saved with database ID:', gameSessionResult.gameId);
+          try {
+            const { gameSessionDB } = await import('../utils/gameSessionDB');
+            await gameSessionDB.updateGameSession(gameData.gameId, {
+              gameId: gameSessionResult.gameId,
+              gameNumber: gameSessionResult.gameNumber || gameData.gameNumber
+            });
+            console.log('✅ Game session updated in IndexedDB with database ID:', gameSessionResult.gameId);
+          } catch (updateError) {
+            console.warn('⚠️ Failed to update IndexedDB, using localStorage fallback');
+            const updatedGameData = {
+              ...gameData,
+              gameId: gameSessionResult.gameId,
+              gameNumber: gameSessionResult.gameNumber || gameData.gameNumber
+            };
+            localStorage.setItem('currentGameSession', JSON.stringify(updatedGameData));
+          }
         }
       }).catch(error => {
         console.error('❌ Background database save failed after retries:', error);

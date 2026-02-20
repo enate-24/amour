@@ -128,34 +128,37 @@ const GamePageOptimized = (): JSX.Element => {
   const [isGameFinished, setIsGameFinished] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   
-  // Check for active game on component mount - INSTANT START with localStorage fallback
+  // Check for active game on component mount - INSTANT START with IndexedDB
   useEffect(() => {
     const checkActiveGame = async () => {
       setIsInitialLoading(true);
       
-      // INSTANT START: Check localStorage first for immediate game data
+      // INSTANT START: Check IndexedDB first for immediate game data
       try {
-        const localGameSession = localStorage.getItem('currentGameSession');
-        const sessionTimestamp = localStorage.getItem('gameSessionTimestamp');
+        const { gameSessionDB } = await import('../utils/gameSessionDB');
+        const token = localStorage.getItem('auth_token');
         
-        console.log('🔍 Checking for game session:', {
-          hasSession: !!localGameSession,
-          hasTimestamp: !!sessionTimestamp,
-          timestamp: sessionTimestamp
-        });
-        
-        if (localGameSession && sessionTimestamp) {
-          const gameData = JSON.parse(localGameSession);
-          const timestamp = parseInt(sessionTimestamp);
-          const now = Date.now();
+        if (token) {
+          // Get user ID from token
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          const userId = payload.id || payload.userId || payload.sub;
           
-          const ageInSeconds = (now - timestamp) / 1000;
-          console.log('📊 Game session age:', ageInSeconds.toFixed(1), 'seconds');
-          console.log('📦 Game data:', gameData);
-          
-          // Use localStorage data if it's recent (within 10 minutes)
-          if (now - timestamp < 10 * 60 * 1000) {
-            console.log('🚀 INSTANT START: Using localStorage game data');
+          if (userId) {
+            const gameData = await gameSessionDB.getActiveGameSession(userId);
+            
+            console.log('🔍 Checking for game session in IndexedDB:', {
+              userId,
+              hasSession: !!gameData
+            });
+            
+            if (gameData) {
+              const ageInSeconds = (Date.now() - gameData.timestamp) / 1000;
+              console.log('📊 Game session age:', ageInSeconds.toFixed(1), 'seconds');
+              console.log('📦 Game data from IndexedDB:', gameData);
+                  
+          // Use IndexedDB data if it's recent (within 10 minutes)
+          if (gameData && (Date.now() - gameData.timestamp) < 10 * 60 * 1000) {
+            console.log('🚀 INSTANT START: Using IndexedDB game data');
             
             // Set game data immediately for instant start
             const instantGameData = {
@@ -216,11 +219,72 @@ const GamePageOptimized = (): JSX.Element => {
             
             return; // Exit early - game is ready instantly
           } else {
-            console.log('⚠️ localStorage game data is too old (>10 minutes), checking backend...');
+            console.log('⚠️ IndexedDB game data is too old (>10 minutes) or not found, checking backend...');
           }
         }
-      } catch (localError) {
-        console.warn('localStorage game data invalid:', localError);
+      }
+      } catch (indexedDBError) {
+        console.warn('⚠️ IndexedDB check failed, trying localStorage fallback:', indexedDBError);
+        
+        // FALLBACK: Try localStorage
+        try {
+          const localGameSession = localStorage.getItem('currentGameSession');
+          const sessionTimestamp = localStorage.getItem('gameSessionTimestamp');
+          
+          if (localGameSession && sessionTimestamp) {
+            const gameData = JSON.parse(localGameSession);
+            const timestamp = parseInt(sessionTimestamp);
+            const now = Date.now();
+            
+            if (now - timestamp < 10 * 60 * 1000) {
+              console.log('🚀 FALLBACK: Using localStorage game data');
+              
+              const instantGameData = {
+                id: gameData.gameId,
+                gameNumber: gameData.gameNumber,
+                cartelasSelected: gameData.selectedCartelas.length,
+                betAmountPerCartela: gameData.betAmount,
+                winMoney: gameData.playerWin,
+                status: 'started',
+                selectedCartelas: gameData.selectedCartelas,
+                totalBet: gameData.totalBet,
+                houseCut: gameData.houseCut,
+                housePercentage: gameData.housePercentage
+              };
+              
+              setCurrentGameData(instantGameData);
+              setSelectedCartelas(gameData.selectedCartelas.length);
+              setBetAmount(gameData.betAmount);
+              setPlayerWin(gameData.playerWin);
+              setCalled([]);
+              
+              try {
+                await offlineGameState.initializeGameState(
+                  instantGameData.id,
+                  instantGameData,
+                  []
+                );
+              } catch (offlineError) {
+                console.warn('⚠️ Offline state initialization failed:', offlineError);
+              }
+              
+              setIsInitialLoading(false);
+              
+              setTimeout(async () => {
+                try {
+                  console.log('🔄 Background sync: Checking backend for game data...');
+                  await syncWithBackend();
+                } catch (error) {
+                  console.warn('⚠️ Background sync failed (game continues with localStorage):', error);
+                }
+              }, 1000);
+              
+              return;
+            }
+          }
+        } catch (localStorageError) {
+          console.error('❌ localStorage fallback also failed:', localStorageError);
+        }
       }
       
       // FALLBACK: Load from backend if no valid localStorage data
