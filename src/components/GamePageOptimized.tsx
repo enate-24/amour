@@ -138,10 +138,20 @@ const GamePageOptimized = (): JSX.Element => {
         const localGameSession = localStorage.getItem('currentGameSession');
         const sessionTimestamp = localStorage.getItem('gameSessionTimestamp');
         
+        console.log('🔍 Checking for game session:', {
+          hasSession: !!localGameSession,
+          hasTimestamp: !!sessionTimestamp,
+          timestamp: sessionTimestamp
+        });
+        
         if (localGameSession && sessionTimestamp) {
           const gameData = JSON.parse(localGameSession);
           const timestamp = parseInt(sessionTimestamp);
           const now = Date.now();
+          
+          const ageInSeconds = (now - timestamp) / 1000;
+          console.log('📊 Game session age:', ageInSeconds.toFixed(1), 'seconds');
+          console.log('📦 Game data:', gameData);
           
           // Use localStorage data if it's recent (within 10 minutes)
           if (now - timestamp < 10 * 60 * 1000) {

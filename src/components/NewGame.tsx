@@ -396,7 +396,13 @@ const NewGame: React.FC = () => {
     try {
       localStorage.setItem('currentGameSession', JSON.stringify(gameData));
       localStorage.setItem('gameSessionTimestamp', Date.now().toString());
-      console.log('✅ Game session saved to localStorage for instant start');
+      
+      console.log('✅ Game session saved to localStorage for instant start:', {
+        gameId: gameData.gameId,
+        cartelas: selectedCards.length,
+        timestamp: Date.now()
+      });
+      console.log('📦 Full game data:', gameData);
     } catch (e) {
       console.warn('Failed to save to localStorage:', e);
     }
@@ -416,6 +422,11 @@ const NewGame: React.FC = () => {
         console.error('❌ Failed to play start sound:', error);
       });
 
+      // Small delay to ensure localStorage is written before navigation
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      console.log('🚀 Navigating to game page...');
+      
       // Navigate immediately for instant game start
       navigate('/game');
 
