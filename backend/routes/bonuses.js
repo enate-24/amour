@@ -124,11 +124,20 @@ router.get('/daily', authenticateToken, async (req, res) => {
         
         // If bonus was automatically applied, add to user balance
         if (meetsRequirement) {
-          const user = await users.findById(userId);
-          await users.update(userId, {
-            balance: user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT
-          });
-          console.log(`✅ Auto-applied bonus for user ${userId}: +${DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT} Birr, new balance: ${user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT}`);
+          try {
+            const user = await users.findById(userId);
+            if (user) {
+              await users.update(userId, {
+                balance: user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT
+              });
+              console.log(`✅ Auto-applied bonus for user ${userId}: +${DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT} Birr, new balance: ${user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT}`);
+            } else {
+              console.error('❌ User not found for bonus application:', userId);
+            }
+          } catch (balanceError) {
+            console.error('❌ Error updating user balance:', balanceError);
+            // Continue anyway - bonus record is created
+          }
         }
         
         dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
@@ -153,12 +162,21 @@ router.get('/daily', authenticateToken, async (req, res) => {
           });
           
           // Add bonus to user balance
-          const user = await users.findById(userId);
-          const newBalance = user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT;
-          await users.update(userId, {
-            balance: newBalance
-          });
-          console.log(`✅ Auto-applied bonus for user ${userId}: +${DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT} Birr, new balance: ${newBalance}`);
+          try {
+            const user = await users.findById(userId);
+            if (user) {
+              const newBalance = user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT;
+              await users.update(userId, {
+                balance: newBalance
+              });
+              console.log(`✅ Auto-applied bonus for user ${userId}: +${DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT} Birr, new balance: ${newBalance}`);
+            } else {
+              console.error('❌ User not found for bonus application:', userId);
+            }
+          } catch (balanceError) {
+            console.error('❌ Error updating user balance:', balanceError);
+            // Continue anyway - bonus record is updated
+          }
           
           dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
         } else {
