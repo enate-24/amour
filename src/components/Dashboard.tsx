@@ -25,9 +25,11 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     fetchDashboardData();
-    // Refresh user data to get latest balance
+    // Refresh user data to get latest balance (including bonus updates)
     if (refreshUser) {
-      refreshUser();
+      refreshUser().then(() => {
+        console.log('✅ Dashboard: User balance refreshed on load');
+      });
     }
   }, []);
 
@@ -35,9 +37,12 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const handleFocus = () => {
       if (!document.hidden) {
+        console.log('🔄 Dashboard: Window focused, refreshing data...');
         fetchDashboardData();
         if (refreshUser) {
-          refreshUser();
+          refreshUser().then(() => {
+            console.log('✅ Dashboard: User balance refreshed on focus');
+          });
         }
       }
     };

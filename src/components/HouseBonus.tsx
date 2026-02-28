@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, TrendingUp, Gift } from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useAuth } from '../hooks/useAuth';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -17,6 +18,7 @@ interface HouseBonusData {
 }
 
 const HouseBonus: React.FC = () => {
+  const { refreshUser } = useAuth();
   const [bonusData, setBonusData] = useState<HouseBonusData | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
@@ -56,6 +58,12 @@ const HouseBonus: React.FC = () => {
         const result = await response.json();
         console.log('✅ Bonus data received:', result);
         setBonusData(result.dailyBonus);
+        
+        // Refresh user balance to show updated balance after bonus application
+        if (refreshUser) {
+          await refreshUser();
+          console.log('✅ User balance refreshed after bonus check');
+        }
       } else {
         console.error('❌ Bonus API error:', response.status, response.statusText);
         const errorText = await response.text();
@@ -86,8 +94,16 @@ const HouseBonus: React.FC = () => {
 
       if (response.ok) {
         const result = await response.json();
-        alert(`🎉 House bonus used! You received ${result.bonusAmount} Birr!\nNew daily profit: ${result.newDailyProfit} Birr`);
-        fetchBonusData(); // Refresh data
+        alert(`🎉 House bonus used! You received ${result.bonusAmount} Birr!\nNew balance: ${result.newBalance} Birr\nNew daily profit: ${result.newHouseProfit} Birr`);
+        
+        // Refresh bonus data
+        await fetchBonusData();
+        
+        // Refresh user balance to show updated balance
+        if (refreshUser) {
+          await refreshUser();
+          console.log('✅ User balance refreshed after bonus use');
+        }
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to use house bonus');

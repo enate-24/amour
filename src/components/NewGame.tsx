@@ -120,6 +120,12 @@ const NewGame: React.FC = () => {
           if (bonus.bonusUsed) {
             setBonusNotification("Today's Bonus Claimed!");
           }
+          
+          // Refresh user balance to show updated balance after bonus application
+          if (refreshUser) {
+            await refreshUser();
+            console.log('✅ NewGame: User balance refreshed after bonus check');
+          }
         }
       } catch (error) {
         console.error('Error checking bonus status:', error);
@@ -127,7 +133,7 @@ const NewGame: React.FC = () => {
     };
 
     checkBonusStatus();
-  }, []);
+  }, [refreshUser]);
 
   // Load pattern from settings
   React.useEffect(() => {

@@ -3,6 +3,10 @@
 ## Overview
 The bonus system rewards users with 200 Birr when their daily house profit reaches 1000 Birr or more. The bonus is **automatically applied** and deducted from the daily profit.
 
+**Works for both user types**:
+- **Prepaid users**: Bonus adds to their positive balance
+- **Postpaid users**: Bonus reduces their debt (negative balance)
+
 ---
 
 ## How It Works
@@ -42,6 +46,7 @@ When daily profit reaches >= 1000 Birr, the system **automatically**:
 
 **Example**:
 ```
+Prepaid User:
 Before Bonus:
 - Daily Profit: 1440 Birr
 - User Balance: 500 Birr
@@ -49,6 +54,16 @@ Before Bonus:
 After Automatic Bonus:
 - Daily Profit: 1240 Birr (1440 - 200)
 - User Balance: 700 Birr (500 + 200)
+- Bonus Status: Used ✅
+
+Postpaid User:
+Before Bonus:
+- Daily Profit: 1440 Birr
+- User Balance: -500 Birr (owes 500)
+
+After Automatic Bonus:
+- Daily Profit: 1240 Birr (1440 - 200)
+- User Balance: -300 Birr (owes 300, debt reduced by 200)
 - Bonus Status: Used ✅
 ```
 
@@ -61,6 +76,65 @@ The bonus is checked and applied when:
 - Any API call to `/api/bonuses/daily`
 
 **Timing**: The bonus is applied **once per day** when profit first reaches >= 1000 Birr.
+
+---
+
+## User Types and Bonus Application
+
+### Prepaid Users
+
+**Balance System**: Positive balance (money in account)
+
+**How Bonus Works**:
+1. User plays games and generates house profit
+2. When profit >= 1000 Birr, bonus triggers
+3. 200 Birr is **added** to their balance
+4. Balance increases: `new_balance = old_balance + 200`
+
+**Example**:
+```
+Starting Balance: 500 Birr
+Plays games, generates 1200 Birr profit
+Bonus Applied: +200 Birr
+Final Balance: 700 Birr
+```
+
+**Use Case**: User can use the 200 Birr to play more games
+
+---
+
+### Postpaid Users
+
+**Balance System**: Negative balance (credit/debt system)
+
+**How Bonus Works**:
+1. User plays games on credit (balance goes negative)
+2. When house profit >= 1000 Birr, bonus triggers
+3. 200 Birr is **added** to their balance (reduces debt)
+4. Debt decreases: `new_balance = old_balance + 200`
+
+**Example**:
+```
+Starting Balance: -500 Birr (owes 500)
+Plays games, generates 1200 Birr profit for house
+Bonus Applied: +200 Birr
+Final Balance: -300 Birr (owes 300, debt reduced)
+```
+
+**Use Case**: Reduces the amount the user owes at month-end
+
+---
+
+### Comparison Table
+
+| Aspect | Prepaid User | Postpaid User |
+|--------|--------------|---------------|
+| **Balance Type** | Positive (money in account) | Negative (debt/credit) |
+| **Starting Balance** | 500 Birr | -500 Birr |
+| **After 200 Bonus** | 700 Birr | -300 Birr |
+| **Effect** | More money to play | Less debt to pay |
+| **Payment** | Pre-paid before playing | Pay at month-end |
+| **Bonus Benefit** | Can play more games | Reduces final bill |
 
 ---
 

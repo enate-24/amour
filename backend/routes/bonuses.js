@@ -127,10 +127,18 @@ router.get('/daily', authenticateToken, async (req, res) => {
           try {
             const user = await users.findById(userId);
             if (user) {
+              const oldBalance = user.balance;
+              const newBalance = oldBalance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT;
               await users.update(userId, {
-                balance: user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT
+                balance: newBalance
               });
-              console.log(`✅ Auto-applied bonus for user ${userId}: +${DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT} Birr, new balance: ${user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT}`);
+              console.log(`✅ Auto-applied bonus for user ${userId} (${user.user_type || user.userType || 'unknown'}):`, {
+                bonusAmount: DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT,
+                oldBalance,
+                newBalance,
+                userType: user.user_type || user.userType,
+                effect: user.user_type === 'postpaid' ? 'Debt reduced' : 'Balance increased'
+              });
             } else {
               console.error('❌ User not found for bonus application:', userId);
             }
@@ -165,11 +173,18 @@ router.get('/daily', authenticateToken, async (req, res) => {
           try {
             const user = await users.findById(userId);
             if (user) {
-              const newBalance = user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT;
+              const oldBalance = user.balance;
+              const newBalance = oldBalance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT;
               await users.update(userId, {
                 balance: newBalance
               });
-              console.log(`✅ Auto-applied bonus for user ${userId}: +${DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT} Birr, new balance: ${newBalance}`);
+              console.log(`✅ Auto-applied bonus for user ${userId} (${user.user_type || user.userType || 'unknown'}):`, {
+                bonusAmount: DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT,
+                oldBalance,
+                newBalance,
+                userType: user.user_type || user.userType,
+                effect: user.user_type === 'postpaid' ? 'Debt reduced' : 'Balance increased'
+              });
             } else {
               console.error('❌ User not found for bonus application:', userId);
             }

@@ -331,18 +331,34 @@ export class UnifiedAudioManager {
       actualFileId = 'shuffle-audio-TfqyAnvz.mp3';
     }
     
-    const voicePath = `${category} sound`;
+    // Use backend API routes instead of direct file paths
+    const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
     
-    if (cdnEnabled && cdnBaseUrl) {
-      const cdnUrl = `${cdnBaseUrl}/sounds/${encodeURIComponent(voicePath)}/${encodeURIComponent(actualFileId)}`;
-      console.log(`🌐 Using CDN URL (${category}): ${cdnUrl}`);
-      return cdnUrl;
+    // Determine the correct API endpoint based on file type
+    let apiUrl: string;
+    
+    if (fileId === 'winner' || actualFileId === 'winner.wav' || actualFileId === 'winner.mp3') {
+      apiUrl = `${API_BASE_URL}/sound/winner`;
+    } else if (fileId === 'notwinner' || actualFileId === 'notwinner.wav') {
+      apiUrl = `${API_BASE_URL}/sound/notwinner`;
+    } else if (fileId === 'start' || actualFileId === 'start.wav') {
+      apiUrl = `${API_BASE_URL}/sound/start`;
+    } else if (fileId.includes('shuffle-audio') || actualFileId.includes('shuffle-audio')) {
+      apiUrl = `${API_BASE_URL}/sound/shuffle`;
+    } else {
+      // Number sound (1-75)
+      const numberMatch = actualFileId.match(/^(\d+)\./);
+      if (numberMatch) {
+        const number = numberMatch[1];
+        apiUrl = `${API_BASE_URL}/sound/number/${number}`;
+      } else {
+        console.error(`❌ Could not determine API route for file: ${actualFileId}`);
+        apiUrl = `${API_BASE_URL}/sound/number/${fileId}`;
+      }
     }
     
-    // Fallback to local
-    const localUrl = `/sounds/${encodeURIComponent(voicePath)}/${encodeURIComponent(actualFileId)}`;
-    console.log(`🔊 Using local URL (${category}): ${localUrl}`);
-    return localUrl;
+    console.log(`🔊 Using API URL (${category}): ${apiUrl}`);
+    return apiUrl;
   }
 
   /**
