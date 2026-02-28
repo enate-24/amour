@@ -34,6 +34,36 @@ const NewGame: React.FC = () => {
 
   const patternOptions = ["One Line", "Two Lines", "Three Lines", "Full House"];
 
+  // Sync game number counter with database on component mount
+  React.useEffect(() => {
+    const syncGameNumberCounter = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+        const response = await fetch(`${API_BASE_URL}/games/next-number`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // Set the counter to one less than next number (since we increment before use)
+          const currentMax = data.nextGameNumber - 1;
+          localStorage.setItem('lastGameNumber', currentMax.toString());
+          console.log(`✅ Synced game number counter: ${currentMax}`);
+        }
+      } catch (error) {
+        console.error('⚠️ Could not sync game number counter:', error);
+      }
+    };
+
+    syncGameNumberCounter();
+  }, []);
+
   // Load persisted data on component mount
   React.useEffect(() => {
     const savedRememberSelection = localStorage.getItem('rememberSelection');
@@ -257,8 +287,12 @@ const NewGame: React.FC = () => {
       return result.nextGameNumber;
     } catch (error) {
       console.error('❌ Error getting next game number:', error);
-      // Fallback to timestamp-based number if API fails
-      return Date.now();
+      // Fallback to sequential number based on localStorage counter
+      const lastGameNumber = parseInt(localStorage.getItem('lastGameNumber') || '0');
+      const nextNumber = lastGameNumber + 1;
+      localStorage.setItem('lastGameNumber', nextNumber.toString());
+      console.log(`⚠️ Using fallback game number: ${nextNumber}`);
+      return nextNumber;
     }
   };
 
@@ -276,7 +310,13 @@ const NewGame: React.FC = () => {
 
       // OPTIMIZATION: Get next game number and save session in parallel
       const [gameNumber] = await Promise.all([
-        getNextGameNumber().catch(() => Date.now()), // Fallback to timestamp if fails
+        getNextGameNumber().catch(() => {
+          // Fallback to sequential number if API fails
+          const lastGameNumber = parseInt(localStorage.getItem('lastGameNumber') || '0');
+          const nextNumber = lastGameNumber + 1;
+          localStorage.setItem('lastGameNumber', nextNumber.toString());
+          return nextNumber;
+        }),
       ]);
 
       // Prepare optimized game data
@@ -373,6 +413,7 @@ const NewGame: React.FC = () => {
     const playerContributionToPrizePool = totalBet - houseCutAmount; // Goes to prize pool
 
     // Check if prepaid user has sufficient balance
+    // Postpaid users have unlimited credit, so skip balance check for them
     if (user && user.userType === 'prepaid') {
       const currentBalance = user.balance || 0;
       if (currentBalance < houseCutAmount) {
@@ -386,6 +427,9 @@ const NewGame: React.FC = () => {
         return;
       }
     }
+    
+    // Postpaid users can always play (unlimited credit)
+    // No balance check needed for postpaid users
 
     // Update game stats immediately
     setGamesPlayed(prev => prev + 1);
@@ -400,7 +444,13 @@ const NewGame: React.FC = () => {
       houseCut: houseCutAmount,
       playerWin: playerContributionToPrizePool,
       gameStartTime: new Date().toISOString(),
-      gameNumber: Date.now(), // Temporary game number for immediate start
+      gameNumber: (() => {
+        // Get next sequential game number for instant start
+        const lastGameNumber = parseInt(localStorage.getItem('lastGameNumber') || '0');
+        const nextNumber = lastGameNumber + 1;
+        localStorage.setItem('lastGameNumber', nextNumber.toString());
+        return nextNumber;
+      })(),
       gameId: `TEMP_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     };
 

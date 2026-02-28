@@ -130,7 +130,7 @@ const hasSufficientBalance = (user, requiredAmount) => {
   console.log('💰 hasSufficientBalance called:', {
     userId: user?.id,
     username: user?.username,
-    userType: user?.userType,
+    userType: user?.userType || user?.user_type,
     balance: user?.balance,
     requiredAmount: requiredAmount,
     isAdmin: user?.role === 'admin'
@@ -142,21 +142,24 @@ const hasSufficientBalance = (user, requiredAmount) => {
     return true;
   }
 
+  // Get userType (handle both camelCase and snake_case)
+  const userType = user.userType || user.user_type;
+
   // For prepaid users: check if balance is sufficient (limited by their balance)
-  if (user.userType === 'prepaid') {
+  if (userType === 'prepaid') {
     const hasSufficient = user && user.balance >= requiredAmount;
     console.log(`💰 Prepaid user balance check: ${user.balance} >= ${requiredAmount} = ${hasSufficient}`);
     return hasSufficient;
   }
 
   // For postpaid users: unlimited credit (no limit)
-  if (user.userType === 'postpaid') {
+  if (userType === 'postpaid') {
     console.log('✅ Postpaid user - unlimited credit');
     return true; // Postpaid users have unlimited credit
   }
 
   // Default: check positive balance
-  console.log(`⚠️ Unknown user type: ${user.userType}, checking balance: ${user.balance} >= ${requiredAmount}`);
+  console.log(`⚠️ Unknown user type: ${userType}, checking balance: ${user.balance} >= ${requiredAmount}`);
   return user && user.balance >= requiredAmount;
 };
 
@@ -165,7 +168,7 @@ const deductBalance = async (user, amount) => {
   console.log('💰 deductBalance called:', {
     userId: user?.id,
     username: user?.username,
-    userType: user?.userType,
+    userType: user?.userType || user?.user_type,
     currentBalance: user?.balance,
     amountToDeduct: amount
   });
@@ -178,12 +181,14 @@ const deductBalance = async (user, amount) => {
 
   // Check if user has sufficient balance/credit
   if (!hasSufficientBalance(user, amount)) {
-    console.log(`❌ Insufficient balance: ${user.balance} < ${amount}`);
+    const userType = user.userType || user.user_type;
+    console.log(`❌ Insufficient balance: ${user.balance} < ${amount} (userType: ${userType})`);
     return { success: false, message: 'Insufficient balance' };
   }
 
   try {
     const newBalance = user.balance - amount;
+    const userType = user.userType || user.user_type;
     
     // Update user balance in database
     await users.update(user.id, {
@@ -195,7 +200,7 @@ const deductBalance = async (user, amount) => {
     
     // Check if prepaid user is running low on balance (below 10% of original)
     let warning = null;
-    if (user.userType === 'prepaid' && newBalance > 0) {
+    if (userType === 'prepaid' && newBalance > 0) {
       // Warning when balance is low (you can adjust the threshold)
       if (newBalance < 100) {
         warning = `⚠️ Low balance warning: Your balance is ${newBalance.toFixed(2)} Birr`;
