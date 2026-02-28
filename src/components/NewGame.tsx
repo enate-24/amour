@@ -405,6 +405,7 @@ const NewGame: React.FC = () => {
       
       console.log('✅ Game session saved to IndexedDB for instant start:', {
         gameId: gameData.gameId,
+        userId: gameData.userId,
         cartelas: selectedCards.length,
         timestamp: Date.now()
       });
@@ -415,7 +416,7 @@ const NewGame: React.FC = () => {
       try {
         localStorage.setItem('currentGameSession', JSON.stringify(gameData));
         localStorage.setItem('gameSessionTimestamp', Date.now().toString());
-        console.log('✅ Fallback: Game session saved to localStorage');
+        console.log('✅ Fallback: Game session saved to localStorage with userId:', gameData.userId);
       } catch (localError) {
         console.error('❌ Failed to save to localStorage:', localError);
       }

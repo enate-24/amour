@@ -213,7 +213,7 @@ const GamePageOptimized = (): JSX.Element => {
               } catch (error) {
                 console.warn('⚠️ Background sync failed (game continues with localStorage):', error);
               }
-            }, 1000); // Increased delay to give backend more time to save
+            }, 3000); // Increased delay to 3 seconds to give backend more time to save
             
             return; // Exit early - game is ready instantly
           } else {
