@@ -34,7 +34,7 @@ const NumberGrid = memo(({
     <div style={{
       display: "grid",
       gridTemplateColumns: "repeat(15, minmax(0, 1fr))",
-      gap: "clamp(2px, 0.8vw, 6px)",
+      gap: "clamp(1px, 0.4vw, 3px)",
       width: "100%",
       maxWidth: "100%",
       overflow: "hidden"
@@ -78,22 +78,22 @@ const NumberButton = memo(({
       ? "linear-gradient(180deg, #FFD700 0%, #FFA500 100%)"
       : "linear-gradient(180deg, #8B0000 0%, #600000 100%)",
     color: isCalled ? "#000" : "#fff",
-    border: isCalled ? "2px solid #FFD700" : "1px solid #400000",
-    borderRadius: "clamp(2px, 0.5vw, 4px)",
+    border: isCalled ? "1.5px solid #FFD700" : "0.5px solid #400000",
+    borderRadius: "clamp(1px, 0.3vw, 3px)",
     fontWeight: "bold" as const,
-    fontSize: "clamp(8px, 1.8vw, 18px)",
+    fontSize: "clamp(7px, 1.2vw, 13px)",
     cursor: "default" as const,
     transition: "all 0.2s ease",
-    transform: isCalled ? "scale(1.05)" : "scale(1)",
+    transform: isCalled ? "scale(1.03)" : "scale(1)",
     boxShadow: isCalled
-      ? "0 0 15px rgba(255, 215, 0, 0.8)"
-      : "0 2px 4px rgba(0,0,0,0.5)",
+      ? "0 0 10px rgba(255, 215, 0, 0.6)"
+      : "0 1px 3px rgba(0,0,0,0.4)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "clamp(20px, 3.5vw, 35px)",
+    minHeight: "clamp(15px, 2.5vw, 28px)",
     animation: isShuffling ? "shake 0.5s ease-in-out infinite" : "none",
-    padding: "2px"
+    padding: "1px"
   }), [isCalled, isShuffling]);
 
   return (
@@ -1522,65 +1522,35 @@ const GamePageOptimized = (): JSX.Element => {
       minHeight: "100vh",
       background: "#0F172A",
       color: "#fff",
-      padding: "clamp(10px, 3vw, 50px) clamp(5px, 2vw, 60px)",
+      padding: "clamp(10px, 2vh, 30px) clamp(10px, 2vw, 40px)",
       boxSizing: "border-box",
-      overflowX: "hidden"
+      overflowX: "hidden",
+      overflowY: "auto",
+      display: "flex",
+      flexDirection: "column"
     }}>
-      {/* Last 5 Called Numbers - Golden Balls */}
-      {called.length > 0 && (
-        <div style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: "clamp(8px, 2vw, 25px)",
-          marginBottom: "clamp(15px, 3vw, 25px)",
-          padding: "clamp(10px, 2vw, 15px)",
-          flexWrap: "wrap"
-        }}>
-          {called.slice(-5).reverse().map((num, index) => (
-            <div
-              key={`${num}-${index}`}
-              style={{
-                width: "clamp(50px, 12vw, 90px)",
-                height: "clamp(50px, 12vw, 90px)",
-                borderRadius: "50%",
-                background: index === 0 
-                  ? "radial-gradient(circle at 30% 30%, #FFD700, #FFA500, #FF8C00)"
-                  : "radial-gradient(circle at 30% 30%, #FFA500, #FF8C00, #CC6600)",
-                color: "#000",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: "bold",
-                fontSize: "clamp(20px, 5vw, 36px)",
-                boxShadow: index === 0 
-                  ? "0 8px 20px rgba(255, 215, 0, 0.6), inset 0 -3px 8px rgba(0,0,0,0.3), inset 0 3px 8px rgba(255,255,255,0.4)"
-                  : "0 6px 15px rgba(255, 140, 0, 0.4), inset 0 -3px 8px rgba(0,0,0,0.3), inset 0 3px 8px rgba(255,255,255,0.3)",
-                border: index === 0 ? "3px solid #FFD700" : "2px solid #FFA500",
-                animation: index === 0 ? "bounce 1.5s ease-in-out infinite" : "none",
-                position: "relative" as const,
-                transform: index === 0 ? "scale(1.1)" : "scale(1)",
-                flexShrink: 0
-              }}
-            >
-              <div style={{
-                textShadow: "1px 1px 2px rgba(0,0,0,0.3)"
-              }}>
-                {num}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Last 5 Called Numbers - Golden Balls - Compact for Desktop */}
+      {/* REMOVED - Moved to bottom */}
 
       <style>
         {`
           @keyframes bounce {
             0%, 100% {
-              transform: scale(1.1) translateY(0);
+              transform: scale(1.05) translateY(0);
             }
             50% {
-              transform: scale(1.1) translateY(-8px);
+              transform: scale(1.05) translateY(-4px);
+            }
+          }
+          
+          @keyframes pulse {
+            0%, 100% {
+              transform: scale(1);
+              box-shadow: 0 3px 8px rgba(255, 215, 0, 0.5), inset 0 -2px 4px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.4);
+            }
+            50% {
+              transform: scale(1.08);
+              box-shadow: 0 4px 12px rgba(255, 215, 0, 0.8), inset 0 -2px 4px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.4);
             }
           }
           
@@ -1657,25 +1627,26 @@ const GamePageOptimized = (): JSX.Element => {
         display: "flex",
         flexWrap: "wrap",
         alignItems: "center",
-        gap: "clamp(6px, 1.5vw, 10px)",
-        marginBottom: "clamp(15px, 3vw, 20px)"
+        gap: "clamp(6px, 1vw, 10px)",
+        marginBottom: "clamp(10px, 2vh, 15px)"
       }}>
         <div style={{
-          fontSize: "clamp(24px, 6vw, 48px)",
+          fontSize: "clamp(20px, 4vw, 36px)",
           fontWeight: "bold",
           color: "#FFA500",
-          marginRight: "clamp(5px, 1.5vw, 10px)",
-          width: "100%"
+          marginRight: "clamp(5px, 1vw, 10px)",
+          width: "100%",
+          padding: "0 0 0 clamp(10px, 5vw, 50px)"
         }}>
           GAME <span style={{ color: "#FFD700" }}>{currentGameData?.gameNumber || "..."}</span>
         </div>
         <div style={{
           background: "#FFD700",
           color: "#000",
-          padding: "clamp(6px, 1.5vw, 8px) clamp(10px, 2.5vw, 16px)",
-          borderRadius: 8,
+          padding: "clamp(4px, 1vh, 8px) clamp(8px, 1.5vw, 14px)",
+          borderRadius: 6,
           fontWeight: "bold",
-          fontSize: "clamp(11px, 2.5vw, 14px)",
+          fontSize: "clamp(10px, 1.8vw, 13px)",
           whiteSpace: "nowrap"
         }}>
           GAME STARTED
@@ -1683,10 +1654,10 @@ const GamePageOptimized = (): JSX.Element => {
         <div style={{
           background: "#FFA500",
           color: "#000",
-          padding: "clamp(6px, 1.5vw, 8px) clamp(10px, 2.5vw, 16px)",
-          borderRadius: 8,
+          padding: "clamp(4px, 1vh, 8px) clamp(8px, 1.5vw, 14px)",
+          borderRadius: 6,
           fontWeight: "bold",
-          fontSize: "clamp(11px, 2.5vw, 14px)",
+          fontSize: "clamp(10px, 1.8vw, 13px)",
           whiteSpace: "nowrap"
         }}>
           TOTAL BET {Math.round(betAmount * selectedCartelas)} BIRR
@@ -1694,10 +1665,10 @@ const GamePageOptimized = (): JSX.Element => {
         <div style={{
           background: "#90EE90",
           color: "#000",
-          padding: "clamp(6px, 1.5vw, 8px) clamp(10px, 2.5vw, 16px)",
-          borderRadius: 8,
+          padding: "clamp(4px, 1vh, 8px) clamp(8px, 1.5vw, 14px)",
+          borderRadius: 6,
           fontWeight: "bold",
-          fontSize: "clamp(11px, 2.5vw, 14px)",
+          fontSize: "clamp(10px, 1.8vw, 13px)",
           whiteSpace: "nowrap"
         }}>
           WIN {playerWin.toFixed(1)} BIRR
@@ -1705,10 +1676,10 @@ const GamePageOptimized = (): JSX.Element => {
         <div style={{
           background: "#FFD700",
           color: "#000",
-          padding: "clamp(6px, 1.5vw, 8px) clamp(10px, 2.5vw, 16px)",
-          borderRadius: 8,
+          padding: "clamp(4px, 1vh, 8px) clamp(8px, 1.5vw, 14px)",
+          borderRadius: 6,
           fontWeight: "bold",
-          fontSize: "clamp(11px, 2.5vw, 14px)",
+          fontSize: "clamp(10px, 1.8vw, 13px)",
           whiteSpace: "nowrap"
         }}>
           {selectedCartelas} CARTELA
@@ -1716,10 +1687,10 @@ const GamePageOptimized = (): JSX.Element => {
         <div style={{
           background: "#333",
           color: "#FFD700",
-          padding: "clamp(6px, 1.5vw, 8px) clamp(10px, 2.5vw, 16px)",
-          borderRadius: 8,
+          padding: "clamp(4px, 1vh, 8px) clamp(8px, 1.5vw, 14px)",
+          borderRadius: 6,
           fontWeight: "bold",
-          fontSize: "clamp(11px, 2.5vw, 14px)",
+          fontSize: "clamp(10px, 1.8vw, 13px)",
           whiteSpace: "nowrap"
         }}>
           {called.length}/75
@@ -1730,18 +1701,20 @@ const GamePageOptimized = (): JSX.Element => {
 
       <div style={{
         display: "flex",
-        gap: "clamp(8px, 2vw, 20px)",
+        gap: "clamp(6px, 1vw, 12px)",
         flexWrap: "nowrap",
         width: "100%",
-        maxWidth: "100%",
+        maxWidth: "1200px",
+        margin: "0 auto 0 0",
         overflowX: "auto",
-        overflowY: "hidden"
+        overflowY: "hidden",
+        WebkitOverflowScrolling: "touch"
       }}>
-        {/* Left side - BINGO letters */}
+        {/* Left side - BINGO letters aligned with rows */}
         <div style={{
           display: "flex",
           flexDirection: "column",
-          gap: "clamp(4px, 1vw, 8px)",
+          gap: "clamp(1px, 0.4vw, 3px)",
           flexShrink: 0
         }}>
           {BINGO_LETTERS.map((letter) => (
@@ -1749,24 +1722,25 @@ const GamePageOptimized = (): JSX.Element => {
               background: "linear-gradient(180deg, #FFA500 0%, #FF8C00 100%)",
               color: "#000",
               fontWeight: "bold",
-              borderRadius: "clamp(4px, 1vw, 8px)",
+              borderRadius: "clamp(2px, 0.6vw, 5px)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              width: "clamp(30px, 6vw, 50px)",
-              height: "clamp(30px, 6vw, 50px)",
-              fontSize: "clamp(14px, 3vw, 24px)",
-              boxShadow: "0 2px 4px rgba(0,0,0,0.5)"
+              width: "clamp(35px, 5vw, 55px)",
+              minHeight: "clamp(15px, 2.5vw, 28px)",
+              fontSize: "clamp(14px, 2.5vw, 22px)",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.5)",
+              flex: "1"
             }}>
               {letter}
             </div>
           ))}
         </div>
 
-        {/* Center - Numbers grid */}
+        {/* Numbers grid */}
         <div style={{
           flex: 1,
-          minWidth: 0,
+          minWidth: "300px",
           maxWidth: "100%",
           overflow: "hidden"
         }}>
@@ -1785,17 +1759,19 @@ const GamePageOptimized = (): JSX.Element => {
         display: "flex",
         flexWrap: "wrap",
         alignItems: "center",
-        gap: "clamp(6px, 1.5vw, 10px)",
-        marginTop: "clamp(15px, 3vw, 20px)",
-        marginLeft: "clamp(0px, 8vw, 70px)"
+        gap: "clamp(6px, 1vw, 10px)",
+        marginTop: "clamp(10px, 2vh, 15px)",
+        marginLeft: "clamp(0px, 5vw, 60px)",
+        maxWidth: "1400px",
+        margin: "clamp(10px, 2vh, 15px) auto 0"
       }}>
         {!isGameFinished && (
           <>
             <button
               style={{
                 ...btnStyle,
-                fontSize: "clamp(12px, 2.5vw, 16px)",
-                padding: "clamp(8px, 2vw, 12px) clamp(12px, 3vw, 24px)",
+                fontSize: "clamp(11px, 2vw, 15px)",
+                padding: "clamp(6px, 1.5vh, 10px) clamp(10px, 2.5vw, 20px)",
                 margin: 0,
                 background: selectedCartelas >= 3
                   ? (autoCall
@@ -1814,8 +1790,8 @@ const GamePageOptimized = (): JSX.Element => {
             <button
               style={{
                 ...btnStyle,
-                fontSize: "clamp(12px, 2.5vw, 16px)",
-                padding: "clamp(8px, 2vw, 12px) clamp(12px, 3vw, 24px)",
+                fontSize: "clamp(11px, 2vw, 15px)",
+                padding: "clamp(6px, 1.5vh, 10px) clamp(10px, 2.5vw, 20px)",
                 margin: 0,
                 background: selectedCartelas >= 3 && !isCallingNumber
                   ? "linear-gradient(180deg, #FFA500 0%, #FF8C00 100%)"
@@ -1832,8 +1808,8 @@ const GamePageOptimized = (): JSX.Element => {
             <button
               style={{
                 ...btnStyle,
-                fontSize: "clamp(12px, 2.5vw, 16px)",
-                padding: "clamp(8px, 2vw, 12px) clamp(12px, 3vw, 24px)",
+                fontSize: "clamp(11px, 2vw, 15px)",
+                padding: "clamp(6px, 1.5vh, 10px) clamp(10px, 2.5vw, 20px)",
                 margin: 0,
                 background: selectedCartelas >= 3
                   ? "linear-gradient(180deg, #FFA500 0%, #FF8C00 100%)"
@@ -1850,8 +1826,8 @@ const GamePageOptimized = (): JSX.Element => {
             <button
               style={{
                 ...btnStyle,
-                fontSize: "clamp(12px, 2.5vw, 16px)",
-                padding: "clamp(8px, 2vw, 12px) clamp(12px, 3vw, 24px)",
+                fontSize: "clamp(11px, 2vw, 15px)",
+                padding: "clamp(6px, 1.5vh, 10px) clamp(10px, 2.5vw, 20px)",
                 margin: 0,
                 background: "linear-gradient(180deg, #9333EA 0%, #7C3AED 100%)",
                 cursor: "pointer",
@@ -1873,10 +1849,66 @@ const GamePageOptimized = (): JSX.Element => {
         display: "flex",
         flexWrap: "wrap",
         alignItems: "center",
-        gap: "clamp(10px, 2vw, 15px)",
-        marginTop: "clamp(15px, 3vw, 20px)",
-        marginLeft: "clamp(0px, 8vw, 70px)"
+        gap: "clamp(8px, 1.5vw, 12px)",
+        marginTop: "clamp(10px, 2vh, 15px)",
+        marginLeft: "clamp(0px, 5vw, 60px)",
+        maxWidth: "1400px",
+        margin: "clamp(10px, 2vh, 15px) auto 0"
       }}>
+        {/* Last 2 Called Numbers - Compact Display */}
+        {called.length > 0 && (
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            background: "linear-gradient(135deg, rgba(255, 165, 0, 0.15), rgba(255, 140, 0, 0.08))",
+            padding: "6px 10px",
+            borderRadius: "8px",
+            border: "1px solid rgba(255, 165, 0, 0.4)",
+            boxShadow: "0 2px 6px rgba(0, 0, 0, 0.3)"
+          }}>
+            <div style={{
+              fontSize: "10px",
+              color: "#cbd5e1",
+              fontWeight: "600",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px"
+            }}>
+              Last Called
+            </div>
+            {called.slice(-2).reverse().map((num, index) => (
+              <div
+                key={`${num}-${index}`}
+                style={{
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "50%",
+                  background: index === 0 
+                    ? "radial-gradient(circle at 30% 30%, #FFD700, #FFA500, #FF8C00)"
+                    : "radial-gradient(circle at 30% 30%, #FFA500, #FF8C00, #CC6600)",
+                  color: "#000",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: "bold",
+                  fontSize: "14px",
+                  boxShadow: index === 0 
+                    ? "0 3px 8px rgba(255, 215, 0, 0.5), inset 0 -2px 4px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.4)"
+                    : "0 2px 6px rgba(255, 140, 0, 0.3), inset 0 -2px 4px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.3)",
+                  border: index === 0 ? "2px solid #FFD700" : "1.5px solid #FFA500",
+                  animation: index === 0 ? "pulse 1.5s ease-in-out infinite" : "none",
+                  flexShrink: 0
+                }}
+              >
+                <div style={{
+                  textShadow: "0.5px 0.5px 1px rgba(0,0,0,0.3)"
+                }}>
+                  {num}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         {/* Offline Mode Indicator */}
         {!isOnline && (
           <div style={{
