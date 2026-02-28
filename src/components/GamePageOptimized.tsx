@@ -148,7 +148,8 @@ const GamePageOptimized = (): JSX.Element => {
             
             console.log('🔍 Checking for game session in IndexedDB:', {
               userId,
-              hasSession: !!gameData
+              hasSession: !!gameData,
+              gameData: gameData ? { gameId: gameData.gameId, timestamp: gameData.timestamp } : null
             });
             
             // Use IndexedDB data if it's recent (within 10 minutes)
@@ -216,11 +217,71 @@ const GamePageOptimized = (): JSX.Element => {
             }, 3000); // Increased delay to 3 seconds to give backend more time to save
             
             return; // Exit early - game is ready instantly
+            } else {
+              console.log('⚠️ IndexedDB game data not found or too old, checking localStorage...');
+              // Try localStorage before calling backend
+              const localGameSession = localStorage.getItem('currentGameSession');
+              const sessionTimestamp = localStorage.getItem('gameSessionTimestamp');
+              
+              if (localGameSession && sessionTimestamp) {
+                const gameData = JSON.parse(localGameSession);
+                const timestamp = parseInt(sessionTimestamp);
+                const now = Date.now();
+                
+                if (now - timestamp < 10 * 60 * 1000) {
+                  console.log('🚀 Using localStorage game data (IndexedDB miss)');
+                  
+                  const instantGameData = {
+                    id: gameData.gameId,
+                    gameNumber: gameData.gameNumber,
+                    cartelasSelected: gameData.selectedCartelas.length,
+                    betAmountPerCartela: gameData.betAmount,
+                    winMoney: gameData.playerWin,
+                    status: 'started',
+                    selectedCartelas: gameData.selectedCartelas,
+                    totalBet: gameData.totalBet,
+                    houseCut: gameData.houseCut,
+                    housePercentage: gameData.housePercentage
+                  };
+                  
+                  setCurrentGameData(instantGameData);
+                  setSelectedCartelas(gameData.selectedCartelas.length);
+                  setBetAmount(gameData.betAmount);
+                  setPlayerWin(gameData.playerWin);
+                  setCalled([]);
+                  
+                  try {
+                    await offlineGameState.initializeGameState(
+                      instantGameData.id,
+                      instantGameData,
+                      []
+                    );
+                  } catch (offlineError) {
+                    console.warn('⚠️ Offline state initialization failed:', offlineError);
+                  }
+                  
+                  setIsInitialLoading(false);
+                  
+                  setTimeout(async () => {
+                    try {
+                      console.log('🔄 Background sync: Checking backend for game data...');
+                      await syncWithBackend();
+                    } catch (error) {
+                      console.warn('⚠️ Background sync failed (game continues with localStorage):', error);
+                    }
+                  }, 3000);
+                  
+                  return;
+                }
+              }
+              console.log('⚠️ No recent localStorage data, checking backend...');
+            }
           } else {
-            console.log('⚠️ IndexedDB game data is too old (>10 minutes) or not found, checking backend...');
+            console.log('⚠️ No userId found in token');
           }
+        } else {
+          console.log('⚠️ No auth token found');
         }
-      }
       } catch (indexedDBError) {
         console.warn('⚠️ IndexedDB check failed, trying localStorage fallback:', indexedDBError);
         
