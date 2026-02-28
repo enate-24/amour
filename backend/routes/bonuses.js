@@ -93,21 +93,82 @@ router.get('/daily', authenticateToken, async (req, res) => {
     try {
       dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
 
+      console.log('🔍 Bonus check for user:', userId, {
+        hasExistingBonus: !!dailyBonus,
+        currentDailyProfit: dailyProfit,
+        existingBonusUsed: dailyBonus?.bonus_used,
+        existingStoredProfit: dailyBonus?.daily_profit
+      });
+
       if (!dailyBonus) {
+        // Check if profit meets requirement for automatic bonus
+        const meetsRequirement = dailyProfit >= DAILY_REQUIREMENTS.MIN_DAILY_PROFIT;
+        const adjustedProfit = meetsRequirement ? dailyProfit - DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT : dailyProfit;
+        
+        console.log('📝 Creating new bonus record:', {
+          meetsRequirement,
+          rawProfit: dailyProfit,
+          adjustedProfit,
+          bonusAmount: DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT
+        });
+        
         await dailyBonuses.create({
           userId,
           bonusDate: today,
-          dailyProfit: dailyProfit,
+          dailyProfit: adjustedProfit,
           bonusAmount: 200,
-          requirementsMet: false,
-          bonusClaimed: false,
-          bonusUsed: false
+          requirementsMet: meetsRequirement,
+          bonusClaimed: meetsRequirement,
+          bonusUsed: meetsRequirement
         });
+        
+        // If bonus was automatically applied, add to user balance
+        if (meetsRequirement) {
+          const user = await users.findById(userId);
+          await users.update(userId, {
+            balance: user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT
+          });
+          console.log(`✅ Auto-applied bonus for user ${userId}: +${DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT} Birr, new balance: ${user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT}`);
+        }
+        
         dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
       } else if (!dailyBonus.bonus_used) {
-        // Only update daily profit if bonus hasn't been used (to preserve deduction)
-        await dailyBonuses.update(userId, today, { dailyProfit: dailyProfit });
-        dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
+        console.log('🔄 Updating existing bonus record (not yet used)');
+        
+        // Check if profit now meets requirement for automatic bonus
+        if (dailyProfit >= DAILY_REQUIREMENTS.MIN_DAILY_PROFIT) {
+          const adjustedProfit = dailyProfit - DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT;
+          
+          console.log('💰 Profit meets requirement! Applying bonus:', {
+            rawProfit: dailyProfit,
+            adjustedProfit,
+            bonusAmount: DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT
+          });
+          
+          await dailyBonuses.update(userId, today, { 
+            dailyProfit: adjustedProfit,
+            bonusUsed: true,
+            bonusClaimed: true,
+            requirementsMet: true
+          });
+          
+          // Add bonus to user balance
+          const user = await users.findById(userId);
+          const newBalance = user.balance + DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT;
+          await users.update(userId, {
+            balance: newBalance
+          });
+          console.log(`✅ Auto-applied bonus for user ${userId}: +${DAILY_REQUIREMENTS.HOUSE_BONUS_AMOUNT} Birr, new balance: ${newBalance}`);
+          
+          dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
+        } else {
+          console.log('⏳ Profit not yet at requirement, updating profit only:', dailyProfit);
+          // Update daily profit if bonus hasn't been used
+          await dailyBonuses.update(userId, today, { dailyProfit: dailyProfit });
+          dailyBonus = await dailyBonuses.findByUserAndDate(userId, today);
+        }
+      } else {
+        console.log('✅ Bonus already used, keeping stored profit:', dailyBonus.daily_profit);
       }
       // If bonus was used, keep the stored daily_profit (which has the deduction)
     } catch (bonusError) {

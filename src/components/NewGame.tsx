@@ -118,7 +118,7 @@ const NewGame: React.FC = () => {
           
           // Show "Today's Bonus Claimed" message if bonus was used today
           if (bonus.bonusUsed) {
-           
+            setBonusNotification("Today's Bonus Claimed!");
           }
         }
       } catch (error) {
