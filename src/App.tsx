@@ -12,7 +12,9 @@ import { registerServiceWorker } from './utils/serviceWorker';
 import { offlineStorage } from './utils/offlineStorage';
 import { offlineSyncManager } from './utils/offlineSyncManager';
 import { initializeDemoUser } from './utils/demoOfflineUser';
+import { initialDownloadManager } from './utils/initialDownloadManager';
 import AutoPreloader from './components/AutoPreloader';
+import InitialDownloadModal from './components/InitialDownloadModal';
 import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
 import GamePage from './components/GamePageOptimized';
@@ -170,11 +172,30 @@ const initializeOfflineSystem = async () => {
 function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [preloadComplete, setPreloadComplete] = useState(false);
+  const [showInitialDownload, setShowInitialDownload] = useState(false);
   // Use offline-aware auth for better offline experience
   const { user, loading, signOut } = useAuth();
   const { isOffline } = useOfflineAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Check if initial download is needed when user logs in
+  useEffect(() => {
+    const checkInitialDownload = async () => {
+      if (user && user.id) {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          const needsDownload = await initialDownloadManager.needsInitialDownload(user.id);
+          if (needsDownload) {
+            console.log('📥 Initial download needed for user:', user.id);
+            setShowInitialDownload(true);
+          }
+        }
+      }
+    };
+
+    checkInitialDownload();
+  }, [user]);
 
   // Initialize offline-first systems
   useEffect(() => {
@@ -254,6 +275,20 @@ function AppContent() {
         <Route path="*" element={<AuthPage />} />
       </Routes>
     );
+  }
+
+  // Show initial download modal if needed
+  if (showInitialDownload && user && user.id) {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      return (
+        <InitialDownloadModal
+          userId={user.id}
+          token={token}
+          onComplete={() => setShowInitialDownload(false)}
+        />
+      );
+    }
   }
 
   console.log('User authenticated:', user.username, 'role:', user.role, 'on path:', location.pathname);
