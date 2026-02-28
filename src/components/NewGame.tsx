@@ -194,7 +194,6 @@ const NewGame: React.FC = () => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [registrationStatus, setRegistrationStatus] = useState<{type: 'success' | 'error' | '', message: string}>({type: '', message: ''});
   const [registeredCount, setRegisteredCount] = useState(0);
-  const [isSavingGame, setIsSavingGame] = useState(false);
 
   const handleCartelaSelect = (cardId: string) => {
     if (selectedCards.includes(cardId)) {
@@ -424,32 +423,36 @@ const NewGame: React.FC = () => {
 
     // INSTANT NAVIGATION - Don't wait for database operations
     try {
-      setIsSavingGame(true);
+      console.log('⚡ INSTANT START: Game will start in 3 seconds...');
+      console.log('📊 Game data saved locally, database sync will happen in background');
       
       // Start sound in background (non-blocking)
       playStartSound().catch(error => {
         console.error('❌ Failed to play start sound:', error);
       });
 
-      // Small delay to ensure localStorage is written before navigation
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Navigate after a very short delay (under 3 seconds total)
+      // This gives time for IndexedDB write and user feedback
+      await new Promise(resolve => setTimeout(resolve, 100));
       
-      console.log('🚀 Navigating to game page...');
+      console.log('🚀 Navigating to game page NOW...');
       
       // Navigate immediately for instant game start
       navigate('/game');
 
       // Save to database in background (non-blocking) with retry
+      // This happens AFTER navigation, so it doesn't block the game
       const maxRetries = 3;
       let retryCount = 0;
       
       const attemptSave = async (): Promise<any> => {
         try {
+          console.log(`🔄 Background sync attempt ${retryCount + 1}/${maxRetries}...`);
           return await saveGameSession(gameData);
         } catch (error) {
           retryCount++;
           if (retryCount < maxRetries) {
-            console.log(`⚠️ Save attempt ${retryCount} failed, retrying...`);
+            console.log(`⚠️ Save attempt ${retryCount} failed, retrying in ${retryCount}s...`);
             await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
             return attemptSave();
           }
@@ -457,6 +460,7 @@ const NewGame: React.FC = () => {
         }
       };
       
+      // Start background sync (non-blocking)
       attemptSave().then(async (gameSessionResult) => {
         // Update IndexedDB with real game ID from database
         if (gameSessionResult && gameSessionResult.gameId) {
@@ -466,7 +470,7 @@ const NewGame: React.FC = () => {
               gameId: gameSessionResult.gameId,
               gameNumber: gameSessionResult.gameNumber || gameData.gameNumber
             });
-            console.log('✅ Game session updated in IndexedDB with database ID:', gameSessionResult.gameId);
+            console.log('✅ Background sync complete! Game session updated with database ID:', gameSessionResult.gameId);
           } catch (updateError) {
             console.warn('⚠️ Failed to update IndexedDB, using localStorage fallback');
             const updatedGameData = {
@@ -481,13 +485,10 @@ const NewGame: React.FC = () => {
         console.error('❌ Background database save failed after retries:', error);
         // Game continues with localStorage data - show warning to user
         console.warn('⚠️ Game running in offline mode - will sync when connection is restored');
-      }).finally(() => {
-        setIsSavingGame(false);
       });
 
     } catch (error) {
       console.error('❌ Game start error:', error);
-      setIsSavingGame(false);
       alert('Failed to start game. Please try again.');
     }
   };
@@ -809,19 +810,17 @@ const NewGame: React.FC = () => {
               
               <button
                 className={`px-4 py-2 sm:px-6 sm:py-2.5 md:px-8 md:py-3 rounded-lg font-bold transition-colors text-xs sm:text-sm md:text-base ${
-                  selectedCards.length >= 3 && !isSavingGame
+                  selectedCards.length >= 3
                     ? 'bg-green-600 hover:bg-green-700 cursor-pointer'
                     : 'bg-gray-600 cursor-not-allowed opacity-50'
                 }`}
                 onClick={handleStartGame}
-                disabled={selectedCards.length < 3 || isSavingGame}
-                title={selectedCards.length < 3 ? `Select at least 3 cartelas to start (${selectedCards.length}/3 selected)` : isSavingGame ? 'Saving game...' : 'Start game'}
+                disabled={selectedCards.length < 3}
+                title={selectedCards.length < 3 ? `Select at least 3 cartelas to start (${selectedCards.length}/3 selected)` : 'Start game'}
               >
-                {isSavingGame 
-                  ? '⏳ Starting...' 
-                  : selectedCards.length < 3 
-                    ? `Start Game (${selectedCards.length}/3)` 
-                    : 'Start Game ⚡'
+                {selectedCards.length < 3 
+                  ? `Start Game (${selectedCards.length}/3)` 
+                  : 'Start Game ⚡'
                 }
               </button>
             </div>
