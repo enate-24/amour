@@ -121,7 +121,7 @@ class InitialDownloadManager {
       await cartelaCacheDB.clearCacheForUser(userId);
       
       // Store cartelas
-      await cartelaCacheDB.storeCartelas(data.cartelas);
+      await cartelaCacheDB.saveCartelas(data.cartelas);
       
       console.log(`✅ Downloaded ${data.cartelas.length} cartelas`);
       
@@ -148,7 +148,7 @@ class InitialDownloadManager {
     }
 
     // Preload all sounds
-    await audioManager.preloadAllSounds((downloaded, total) => {
+    await audioManager.preloadAllVoiceCategories((downloaded: number, total: number) => {
       const progress: DownloadProgress = {
         cartelas: {
           total: 0,
