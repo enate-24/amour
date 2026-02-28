@@ -469,7 +469,55 @@ const GamePageOptimized = (): JSX.Element => {
             navigate('/login', { replace: true });
           }
         } else {
-          // Other API error
+          // Other API error (including 404)
+          // Check if we have recent local data before redirecting
+          const localGameSession = localStorage.getItem('currentGameSession');
+          const sessionTimestamp = localStorage.getItem('gameSessionTimestamp');
+          
+          if (localGameSession && sessionTimestamp) {
+            const timestamp = parseInt(sessionTimestamp);
+            const now = Date.now();
+            
+            // If localStorage data is recent (within 5 minutes), use it instead of redirecting
+            if (now - timestamp < 5 * 60 * 1000) {
+              console.log('⚠️ Backend returned error, but using recent localStorage data');
+              const gameData = JSON.parse(localGameSession);
+              
+              const instantGameData = {
+                id: gameData.gameId,
+                gameNumber: gameData.gameNumber,
+                cartelasSelected: gameData.selectedCartelas.length,
+                betAmountPerCartela: gameData.betAmount,
+                winMoney: gameData.playerWin,
+                status: 'started',
+                selectedCartelas: gameData.selectedCartelas,
+                totalBet: gameData.totalBet,
+                houseCut: gameData.houseCut,
+                housePercentage: gameData.housePercentage
+              };
+              
+              setCurrentGameData(instantGameData);
+              setSelectedCartelas(gameData.selectedCartelas.length);
+              setBetAmount(gameData.betAmount);
+              setPlayerWin(gameData.playerWin);
+              setCalled([]);
+              
+              try {
+                await offlineGameState.initializeGameState(
+                  instantGameData.id,
+                  instantGameData,
+                  []
+                );
+              } catch (offlineError) {
+                console.warn('⚠️ Offline state initialization failed:', offlineError);
+              }
+              
+              setIsInitialLoading(false);
+              return;
+            }
+          }
+          
+          // No recent local data, redirect to new game
           setCalled([]);
           setIsInitialLoading(false);
           navigate('/newgame', { replace: true });

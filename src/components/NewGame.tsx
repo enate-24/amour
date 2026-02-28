@@ -350,6 +350,12 @@ const NewGame: React.FC = () => {
   };
 
   const handleStartGame = async () => {
+    // Prevent admin users from starting games
+    if (user && user.role === 'admin') {
+      alert('Admin accounts cannot start games. Please use a regular user account to play.');
+      return;
+    }
+
     if (selectedCards.length < 3) {
       alert('Please select at least 3 cartelas to start the game. You have selected ' + selectedCards.length + ' cartela(s).');
       return;
@@ -442,50 +448,53 @@ const NewGame: React.FC = () => {
 
       // Save to database in background (non-blocking) with retry
       // This happens AFTER navigation, so it doesn't block the game
-      const maxRetries = 3;
-      let retryCount = 0;
-      
-      const attemptSave = async (): Promise<any> => {
-        try {
-          console.log(`🔄 Background sync attempt ${retryCount + 1}/${maxRetries}...`);
-          return await saveGameSession(gameData);
-        } catch (error) {
-          retryCount++;
-          if (retryCount < maxRetries) {
-            console.log(`⚠️ Save attempt ${retryCount} failed, retrying in ${retryCount}s...`);
-            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
-            return attemptSave();
-          }
-          throw error;
-        }
-      };
-      
-      // Start background sync (non-blocking)
-      attemptSave().then(async (gameSessionResult) => {
-        // Update IndexedDB with real game ID from database
-        if (gameSessionResult && gameSessionResult.gameId) {
+      // Add initial delay to let navigation complete first
+      setTimeout(async () => {
+        const maxRetries = 3;
+        let retryCount = 0;
+        
+        const attemptSave = async (): Promise<any> => {
           try {
-            const { gameSessionDB } = await import('../utils/gameSessionDB');
-            await gameSessionDB.updateGameSession(gameData.gameId, {
-              gameId: gameSessionResult.gameId,
-              gameNumber: gameSessionResult.gameNumber || gameData.gameNumber
-            });
-            console.log('✅ Background sync complete! Game session updated with database ID:', gameSessionResult.gameId);
-          } catch (updateError) {
-            console.warn('⚠️ Failed to update IndexedDB, using localStorage fallback');
-            const updatedGameData = {
-              ...gameData,
-              gameId: gameSessionResult.gameId,
-              gameNumber: gameSessionResult.gameNumber || gameData.gameNumber
-            };
-            localStorage.setItem('currentGameSession', JSON.stringify(updatedGameData));
+            console.log(`🔄 Background sync attempt ${retryCount + 1}/${maxRetries}...`);
+            return await saveGameSession(gameData);
+          } catch (error) {
+            retryCount++;
+            if (retryCount < maxRetries) {
+              console.log(`⚠️ Save attempt ${retryCount} failed, retrying in ${retryCount * 2}s...`);
+              await new Promise(resolve => setTimeout(resolve, 2000 * retryCount)); // Longer exponential backoff
+              return attemptSave();
+            }
+            throw error;
           }
-        }
-      }).catch(error => {
-        console.error('❌ Background database save failed after retries:', error);
-        // Game continues with localStorage data - show warning to user
-        console.warn('⚠️ Game running in offline mode - will sync when connection is restored');
-      });
+        };
+        
+        // Start background sync (non-blocking)
+        attemptSave().then(async (gameSessionResult) => {
+          // Update IndexedDB with real game ID from database
+          if (gameSessionResult && gameSessionResult.gameId) {
+            try {
+              const { gameSessionDB } = await import('../utils/gameSessionDB');
+              await gameSessionDB.updateGameSession(gameData.gameId, {
+                gameId: gameSessionResult.gameId,
+                gameNumber: gameSessionResult.gameNumber || gameData.gameNumber
+              });
+              console.log('✅ Background sync complete! Game session updated with database ID:', gameSessionResult.gameId);
+            } catch (updateError) {
+              console.warn('⚠️ Failed to update IndexedDB, using localStorage fallback');
+              const updatedGameData = {
+                ...gameData,
+                gameId: gameSessionResult.gameId,
+                gameNumber: gameSessionResult.gameNumber || gameData.gameNumber
+              };
+              localStorage.setItem('currentGameSession', JSON.stringify(updatedGameData));
+            }
+          }
+        }).catch(error => {
+          console.error('❌ Background database save failed after retries:', error);
+          // Game continues with localStorage data - show warning to user
+          console.warn('⚠️ Game running in offline mode - will sync when connection is restored');
+        });
+      }, 500); // Wait 500ms before starting background sync
 
     } catch (error) {
       console.error('❌ Game start error:', error);
